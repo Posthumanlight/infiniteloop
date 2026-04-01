@@ -1,0 +1,9 @@
+[skills.slash]
+name = "Slash"
+target_type = "single_enemy"
+energy_cost = 0
+action_type = "action"
+damage_type = "slashing"
+hits = [
+  { formula = "physical_slash", base_power = 10 },
+]

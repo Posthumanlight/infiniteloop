@@ -1,0 +1,24 @@
+[effects.poison]
+name = "Poison"
+trigger = "on_turn_start"
+action = "damage"
+expr = "target.hp * 0.05"
+damage_type = "slashing"
+duration = 3
+stackable = false
+
+[effects.stun]
+name = "Stun"
+trigger = "on_turn_start"
+action = "debuff"
+expr = "1"
+duration = 1
+stackable = false
+
+[effects.fortify]
+name = "Fortify"
+trigger = "on_damage_calc"
+action = "buff"
+expr = "0.75"
+duration = 1
+stackable = false

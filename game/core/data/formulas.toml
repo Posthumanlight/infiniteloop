@@ -1,0 +1,5 @@
+[formulas.physical_slash]
+attack_scaling = 1.5
+mastery_scaling = 0.0
+resistance_scaling = 0.5
+variance = 0.1

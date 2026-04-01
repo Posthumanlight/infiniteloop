@@ -1,0 +1,7 @@
+[combat]
+turn_timer_seconds = 45
+max_party_size = 4
+min_party_size = 1
+initiative_dice = 20
+skip_turn_on_timeout = true
+min_damage = 0

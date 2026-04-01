@@ -6,7 +6,7 @@ Multiplayer turn-based RPG roguelike played in Telegram group chats. Players for
 
 - **Bot**: aiogram 3.x (Telegram bot + WebApp launcher)
 - **API**: FastAPI (game server, WebApp backend, REST endpoints for combat actions)
-- **Logic**: pure Python 3.12+ with Pydantic v2 models (no game engine, no framework)
+- **Logic**: pure Python 3.12+
 - **DB**: PostgreSQL via asyncpg
 - **Cache**: Redis (combat state, session tokens, turn timers)
 - **Migrations**: Alembic
@@ -28,7 +28,7 @@ project_root/
 │   └── schemas/          # Pydantic request/response schemas (API layer only)
 ├── game/                 # PURE game logic — NO I/O, NO db, NO network
 │   ├── combat/           # combat engine, turn manager, targeting, effects, skill resolution
-│   ├── characters/       # classes, stats, leveling, skill trees
+│   ├── character/        # base entity, player, enemy, stats, skill definitions
 │   ├── items/            # item models, inventory, equipment slots, loot tables
 │   ├── world/            # procedural generation, dungeon graph, room templates, encounters
 │   ├── events/           # random events, voting logic, outcome resolution
@@ -55,11 +55,11 @@ project_root/
 
 ## Critical Architecture Rules
 
-1. **`game/` is pure logic.** No imports from `storage/`, `server/`, `bot/`, or any async/IO library. All game functions take plain Pydantic models in and return plain Pydantic models out. This is the most important rule in the project. If `game/` needs data, the caller passes it in.
+1. **`game/` is pure logic.** No imports from `db/`, `server/`, `bot/`, or any async/IO library. All game functions take frozen dataclasses in and return frozen dataclasses out (via `dataclasses.replace()`). This is the most important rule in the project. If `game/` needs data, the caller passes it in.
 
 2. **Dependency direction is one-way:** `bot/` → `server/` → `game/` ← `storage/`. The `server/` layer orchestrates: it loads state from `storage/`, calls `game/` functions, persists results back. `game/` never knows about persistence.
 
-3. **Combat state lives in Redis** during active fights (fast reads for turn resolution). On combat end, final state flushes to PostgreSQL. Use `storage/cache/combat.py` for this.
+3. **Combat state lives in Redis** during active fights (fast reads for turn resolution). On combat end, final state flushes to PostgreSQL. Use `db/cache/combat.py` for this.
 
 4. **Every module exposes a public API via `__init__.py`.** Internal helpers are prefixed with `_`. Don't reach into submodules from outside.
 
@@ -82,15 +82,15 @@ pytest tests/ -x --tb=short                # Full suite
 
 # Lint / Type
 ruff check . --fix
-mypy game/ server/ bot/ storage/
+mypy game/ server/ bot/ db/
 ```
 
 ## Code Conventions
 
-- All Pydantic models use `model_config = ConfigDict(frozen=True)` in `game/` — game state is immutable; functions return new state.
+- All models in `game/` use `@dataclass(frozen=True)` — game state is immutable; functions return new state via `dataclasses.replace()`.
 - Use `Annotated` types for FastAPI dependencies, not bare `Depends()`.
 - SQLAlchemy models use `Mapped[]` type annotations (2.0 style), not `Column()`.
-- Repositories return Pydantic domain models, not ORM objects — conversion happens at the repo boundary.
+- Repositories return domain dataclasses, not ORM objects — conversion happens at the repo boundary.
 - Async everywhere in `bot/`, `server/`, `storage/`. Sync only in `game/`.
 - Type hints on every function signature. `Any` requires a comment explaining why.
 - Use `Enum` for all fixed sets (damage types, classes, item slots, room types, target types).
@@ -99,21 +99,16 @@ mypy game/ server/ bot/ storage/
 
 ### Combat (Menu-Based)
 - **No grid.** Combat is party vs. enemy group, JRPG-style.
-- On a player's turn, they pick an action via WebApp or inline keyboard: **Attack**, **Skill**, **Item**, **Defend**.
+- On a player's turn, they pick an action via WebApp or inline keyboard: **Action** (skill), or **Item**.
 - Skills have target types: `single_enemy`, `all_enemies`, `single_ally`, `all_allies`, `self`.
 - For `single_enemy` / `single_ally` targets, the player picks from a list (not a grid position).
 - Enemies are an ordered list with visible HP bars. Players select target by index/name.
 - Turn order, initiative, buffs/debuffs, and status effects are the tactical depth — not positioning.
 
-### Target Voting
-- When the party faces a group of enemies, players can **vote on a focus target** at the start of each round via inline keyboard.
-- Majority sets a "marked" target. Attacking the marked target grants a small damage bonus.
-- This keeps multiplayer coordination meaningful without grid complexity.
-
 ### Turn System
-- Initiative order based on SPD stat + d20 roll at combat start.
-- Each turn: one action (attack / skill / item / defend). No action points, no movement.
-- Turn timer: 45 seconds. Auto-defend on timeout.
+- Initiative order based on speed stat + configurable dice roll (see `constants.toml: initiative_dice`).
+- Each turn: one action (skill or item). No action points, no movement.
+- Turn timer: 45 seconds. Auto-skip on timeout.
 - All players and enemies act in initiative order (not simultaneous).
 
 ### Exploration (Room-Based)
@@ -123,8 +118,11 @@ mypy game/ server/ bot/ storage/
 - Fog of war: only adjacent rooms are visible. Revealed rooms stay on a simple map (WebApp shows a node graph).
 
 ### Character Classes
-- Define classes in `game/characters/classes/` as data (Pydantic models), not class hierarchies. A class is a stat template + skill list + equipment restrictions.
-- Stats: HP, MP, STR, DEX, INT, SPD, DEF, RES. Derived stats calculated by formulas in `game/core/formulas.py`.
+- Define classes in `game/core/data/classes.toml` as data, not class hierarchies. A class is a stat template + skill list + equipment restrictions.
+- **Two-tier stat system:**
+  - **MajorStats** (fixed fields): `attack`, `hp`, `speed`, `crit_chance`, `crit_dmg`, `resistance`, `energy`, `mastery`.
+  - **MinorStats** (per-damage-type %): `{type}_dmg_pct`, `{type}_def_pct` — stored as a flat dict, accessed via `get_dmg_pct(DamageType)` / `get_def_pct(DamageType)`.
+- All balance data (formulas, effects, skills, classes, enemies) lives in TOML files under `game/core/data/`.
 
 ### Procedural Generation
 - Use seeded RNG (`random.Random(seed)`) — every generated dungeon must be reproducible from its seed.
@@ -134,10 +132,9 @@ mypy game/ server/ bot/ storage/
 
 ### Multiplayer & Voting
 - A "session" = one Telegram group playing together. Session ID derived from chat_id.
-- **Target voting**: each combat round, players vote on focus target via inline keyboard.
 - **Event voting**: random events present 2-4 options. Each player votes. Majority wins; ties broken randomly.
 - **Exploration voting**: when paths branch, party votes on which direction to take.
-- Party size: 2-4 players. Cannot start a dungeon run solo.
+- Party size: 1-4 players (solo allowed).
 
 ## Data-Driven Design
 

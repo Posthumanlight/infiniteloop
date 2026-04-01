@@ -1,0 +1,17 @@
+[classes.warrior]
+name = "Warrior"
+description = "Frontline fighter"
+starting_skills = ["slash"]
+
+[classes.warrior.major_stats]
+attack = 15
+hp = 120
+speed = 10
+crit_chance = 0.05
+crit_dmg = 1.5
+resistance = 8
+energy = 100
+mastery = 5
+
+[classes.warrior.minor_stats]
+slashing_dmg_pct = 0.1
