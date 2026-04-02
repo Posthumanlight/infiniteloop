@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from game.combat.effects import is_stunned
+from game.combat.effects import is_skipped
 from game.combat.models import ActionRequest, ActionResult, CombatState
 from game.combat.skill_resolver import resolve_skill
 from game.combat.targeting import resolve_targets
@@ -15,7 +15,7 @@ def resolve_action(
     rng: SeededRNG,
     constants: dict,
 ) -> tuple[CombatState, ActionResult]:
-    if is_stunned(state, action.actor_id):
+    if is_skipped(state, action.actor_id):
         return state, ActionResult(
             actor_id=action.actor_id,
             action=action,

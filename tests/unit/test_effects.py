@@ -8,7 +8,7 @@ from game.combat.effects import (
     apply_effect,
     expire_effects,
     get_damage_multiplier,
-    is_stunned,
+    is_skipped,
     tick_effects,
 )
 from game.core.data_loader import clear_cache
@@ -90,12 +90,12 @@ def test_expire_effects_decrements():
     assert len(state.entities["e1"].active_effects) == 0
 
 
-def test_is_stunned():
+def test_is_skipped():
     state = make_combat_state()
-    assert is_stunned(state, "e1") is False
+    assert is_skipped(state, "e1") is False
 
     state = apply_effect(state, "e1", "stun", "p1")
-    assert is_stunned(state, "e1") is True
+    assert is_skipped(state, "e1") is True
 
 
 def test_fortify_reduces_damage_multiplier():

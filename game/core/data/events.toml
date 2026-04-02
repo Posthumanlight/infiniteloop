@@ -1,0 +1,161 @@
+[events.mysterious_fountain]
+name = "Mysterious Fountain"
+description = "You discover a shimmering fountain in a dark alcove. Its waters glow with an otherworldly light."
+event_type = "multiplayer"
+min_depth = 1
+max_depth = 10
+weight = 10
+
+[[events.mysterious_fountain.choices]]
+label = "Drink from the fountain"
+description = "The water looks refreshing..."
+outcomes = [
+    { action = "heal", target = "all", expr = "target.hp * 0.25" },
+]
+
+[[events.mysterious_fountain.choices]]
+label = "Toss a coin in"
+description = "Perhaps fortune favors the generous."
+outcomes = [
+    { action = "take_gold", target = "all", value = 10 },
+    { action = "give_xp", target = "all", value = 50 },
+]
+
+[[events.mysterious_fountain.choices]]
+label = "Smash the fountain"
+description = "Destroy it before it destroys you."
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["water_elemental"] },
+]
+
+[[events.mysterious_fountain.choices]]
+label = "Walk away"
+description = "Best not to meddle with the unknown."
+outcomes = []
+
+
+[events.trapped_chest]
+name = "Trapped Chest"
+description = "A locked chest sits in the corner. You hear a faint clicking sound from within."
+event_type = "solo"
+min_depth = 2
+max_depth = 8
+weight = 8
+requirements = { min_level = 2 }
+
+[[events.trapped_chest.choices]]
+label = "Force it open"
+description = "Brute strength might work."
+outcomes = [
+    { action = "damage", target = "voter", expr = "15" },
+    { action = "give_item", target = "voter", item_id = "health_potion" },
+]
+
+[[events.trapped_chest.choices]]
+label = "Carefully disarm the trap"
+description = "Steady hands and a keen eye."
+outcomes = [
+    { action = "give_item", target = "voter", item_id = "health_potion" },
+    { action = "give_gold", target = "voter", value = 25 },
+]
+
+[[events.trapped_chest.choices]]
+label = "Leave it alone"
+description = "Discretion is the better part of valor."
+outcomes = []
+
+
+[events.wandering_merchant]
+name = "Wandering Merchant"
+description = "A hooded figure blocks the path, rattling a sack of wares. 'Trade, friends?'"
+event_type = "multiplayer"
+min_depth = 1
+max_depth = 15
+weight = 7
+
+[[events.wandering_merchant.choices]]
+label = "Buy healing supplies"
+description = "Stock up while you can."
+outcomes = [
+    { action = "take_gold", target = "all", value = 15 },
+    { action = "heal", target = "all", expr = "target.hp * 0.5" },
+]
+
+[[events.wandering_merchant.choices]]
+label = "Buy a mysterious trinket"
+description = "Who knows what it does?"
+outcomes = [
+    { action = "take_gold", target = "all", value = 30 },
+    { action = "apply_effect", target = "random_one", effect_id = "fortify" },
+]
+
+[[events.wandering_merchant.choices]]
+label = "Rob the merchant"
+description = "He doesn't look that tough."
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["bandit_merchant"] },
+]
+
+[[events.wandering_merchant.choices]]
+label = "Decline and move on"
+description = "You have places to be."
+outcomes = []
+
+
+[events.ancient_inscription]
+name = "Ancient Inscription"
+description = "Strange glyphs cover the wall. They seem to pulse with energy as you approach."
+event_type = "solo"
+min_depth = 3
+max_depth = 12
+weight = 6
+
+[[events.ancient_inscription.choices]]
+label = "Touch the glyphs"
+description = "Knowledge is power."
+outcomes = [
+    { action = "give_xp", target = "voter", value = 75 },
+    { action = "drain_energy", target = "voter", value = 20 },
+]
+
+[[events.ancient_inscription.choices]]
+label = "Study from a distance"
+description = "Observe without interfering."
+outcomes = [
+    { action = "give_xp", target = "voter", value = 30 },
+]
+
+[[events.ancient_inscription.choices]]
+label = "Ignore it"
+description = "Some things are best left alone."
+outcomes = []
+
+
+[events.cursed_shrine]
+name = "Cursed Shrine"
+description = "A crumbling altar radiates dark energy. Bones are scattered at its base."
+event_type = "multiplayer"
+min_depth = 4
+max_depth = 15
+weight = 5
+
+[[events.cursed_shrine.choices]]
+label = "Pray at the shrine"
+description = "Risk the curse for its blessing."
+outcomes = [
+    { action = "damage", target = "all", expr = "target.hp * 0.1" },
+    { action = "restore_energy", target = "all", value = 30 },
+    { action = "apply_effect", target = "all", effect_id = "fortify" },
+]
+
+[[events.cursed_shrine.choices]]
+label = "Desecrate the shrine"
+description = "Destroy the source of evil."
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["shrine_guardian"] },
+]
+
+[[events.cursed_shrine.choices]]
+label = "Leave it undisturbed"
+description = "Not every fight needs to be fought."
+outcomes = []

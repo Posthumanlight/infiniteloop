@@ -158,7 +158,7 @@ def get_damage_multiplier(
     return multiplier
 
 
-def is_stunned(state: CombatState, entity_id: str) -> bool:
+def is_skipped(state: CombatState, entity_id: str) -> bool:
     entity = state.entities[entity_id]
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)

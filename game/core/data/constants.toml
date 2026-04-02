@@ -5,3 +5,8 @@ min_party_size = 1
 initiative_dice = 20
 skip_turn_on_timeout = true
 min_damage = 0
+
+[events]
+vote_timer_seconds = 30
+max_choices = 4
+min_choices = 2

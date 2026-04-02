@@ -137,6 +137,5 @@ def get_available_actions(state: CombatState, actor_id: str) -> list:
     skills = []
     for skill_id in entity.skills:
         skill_data = load_skill(skill_id)
-        if skill_data.energy_cost <= entity.current_energy:
-            skills.append(skill_data)
+        skills.append(skill_data)
     return skills

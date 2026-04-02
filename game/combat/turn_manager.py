@@ -1,6 +1,6 @@
 from dataclasses import replace
 
-from game.combat.effects import expire_effects, is_stunned, tick_effects
+from game.combat.effects import expire_effects, is_skipped, tick_effects
 from game.combat.models import CombatState, HitResult
 from game.combat.targeting import is_alive
 from game.core.dice import SeededRNG
@@ -33,7 +33,7 @@ def start_turn(
         state, current_id, TriggerType.ON_TURN_START, rng,
     )
 
-    skipped = is_stunned(state, current_id)
+    skipped = is_skipped(state, current_id)
     return state, skipped, tick_results
 
 

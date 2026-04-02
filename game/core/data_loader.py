@@ -7,8 +7,17 @@ from game.core.enums import (
     ActionType,
     DamageType,
     EffectAction,
+    EventType,
+    OutcomeAction,
+    OutcomeTarget,
     TargetType,
     TriggerType,
+)
+from game.events.models import (
+    ChoiceDef,
+    EventDef,
+    EventRequirements,
+    OutcomeDef,
 )
 
 _DATA_DIR = Path(__file__).parent / "data"
@@ -264,6 +273,74 @@ def load_enemy(enemy_id: str) -> EnemyData:
 
 def load_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["combat"]
+
+
+def load_event_constants() -> dict[str, Any]:
+    return _load_toml("constants.toml")["events"]
+
+
+# ---------------------------------------------------------------------------
+# Event definitions
+# ---------------------------------------------------------------------------
+
+def _parse_outcome(raw: dict[str, Any]) -> OutcomeDef:
+    enemy_group = tuple(raw.get("enemy_group", []))
+    return OutcomeDef(
+        action=OutcomeAction(raw["action"]),
+        target=OutcomeTarget(raw["target"]),
+        expr=raw.get("expr"),
+        value=raw.get("value"),
+        item_id=raw.get("item_id"),
+        effect_id=raw.get("effect_id"),
+        enemy_group=enemy_group,
+    )
+
+
+def _parse_choice(index: int, raw: dict[str, Any]) -> ChoiceDef:
+    outcomes = tuple(_parse_outcome(o) for o in raw.get("outcomes", []))
+    return ChoiceDef(
+        index=index,
+        label=raw["label"],
+        description=raw["description"],
+        outcomes=outcomes,
+    )
+
+
+def _parse_requirements(raw: dict[str, Any]) -> EventRequirements:
+    return EventRequirements(
+        min_level=raw.get("min_level", 0),
+        max_level=raw.get("max_level", 999),
+        required_classes=tuple(raw.get("required_classes", [])),
+    )
+
+
+def load_events() -> dict[str, EventDef]:
+    raw = _load_toml("events.toml")["events"]
+    result: dict[str, EventDef] = {}
+    for eid, edata in raw.items():
+        choices = tuple(
+            _parse_choice(i, c) for i, c in enumerate(edata.get("choices", []))
+        )
+        requirements = _parse_requirements(edata.get("requirements", {}))
+        result[eid] = EventDef(
+            event_id=eid,
+            name=edata["name"],
+            description=edata["description"],
+            event_type=EventType(edata["event_type"]),
+            choices=choices,
+            min_depth=edata.get("min_depth", 0),
+            max_depth=edata.get("max_depth", 999),
+            weight=edata.get("weight", 10),
+            requirements=requirements,
+        )
+    return result
+
+
+def load_event(event_id: str) -> EventDef:
+    events = load_events()
+    if event_id not in events:
+        raise KeyError(f"Unknown event: {event_id}")
+    return events[event_id]
 
 
 def clear_cache() -> None:

@@ -3,6 +3,12 @@ from enum import Enum
 
 class DamageType(Enum):
     SLASHING = "slashing"
+    PIERCING = "piercing"
+    ARCANE = "arcane"
+    FIRE = 'fire'
+    ICE = 'ice'
+    
+
 
 
 class TargetType(Enum):
@@ -42,3 +48,32 @@ class CombatPhase(Enum):
 class EntityType(Enum):
     PLAYER = "player"
     ENEMY = "enemy"
+
+
+class EventType(Enum):
+    SOLO = "solo"
+    MULTIPLAYER = "multiplayer"
+
+
+class EventPhase(Enum):
+    PRESENTING = "presenting"
+    RESOLVED = "resolved"
+
+
+class OutcomeAction(Enum):
+    HEAL = "heal"
+    DAMAGE = "damage"
+    RESTORE_ENERGY = "restore_energy"
+    DRAIN_ENERGY = "drain_energy"
+    GIVE_ITEM = "give_item"
+    GIVE_GOLD = "give_gold"
+    TAKE_GOLD = "take_gold"
+    APPLY_EFFECT = "apply_effect"
+    START_COMBAT = "start_combat"
+    GIVE_XP = "give_xp"
+
+
+class OutcomeTarget(Enum):
+    VOTER = "voter"
+    ALL = "all"
+    RANDOM_ONE = "random_one"
