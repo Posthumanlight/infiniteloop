@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     telegram_bot_token: str
     supabase_url: str
     supabase_secret_key: str
-    database_url: str
     telegram_webhook_url: str
     telegram_webhook_path: str
 
@@ -30,8 +29,7 @@ _required_env = [
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_WEBHOOK_URL",
     "SUPABASE_URL",
-    "SUPABASE_SECRET_KEY",
-    "DATABASE_URL",
+    "SUPABASE_SECRET_KEY"
 ]
 _env_presence = {k: (k in os.environ) for k in _required_env}
 
