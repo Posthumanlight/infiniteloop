@@ -2,6 +2,13 @@
 
 Multiplayer turn-based RPG roguelike played in Telegram group chats. Players form a party, explore procedurally generated dungeons room-by-room, and fight enemies in menu-driven turn-based combat. All input happens via Telegram inline keyboards (bot) and a WebApp (combat skill picker, inventory, character sheet).
 
+#Core Desing Principles
+This project is evaluated on 2 main principles:
+1. DRY
+2. SOLID
+Always evaluate your code against this principles.
+
+
 ## Tech Stack
 
 - **Bot**: aiogram 3.x (Telegram bot + WebApp launcher)

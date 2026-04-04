@@ -10,8 +10,11 @@ from aiogram.types import Update
 
 from settings.config import settings
 from db.core.pool import create_db_pool
+from server.services.game_service import GameService
 
 from bot.bot import router as bot_router, set_bot_commands, onboarding_router as bot_onboarding_router
+from bot.handlers.game import router as game_router
+from bot.handlers.combat import router as combat_router
 
 
 
@@ -23,6 +26,8 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 dp.include_router(bot_router)
 dp.include_router(bot_onboarding_router)
+dp.include_router(game_router)
+dp.include_router(combat_router)
 
 
 @asynccontextmanager
@@ -31,6 +36,9 @@ async def lifespan(app: FastAPI):
     db_pool = await create_db_pool()
     dp["db_pool"] = db_pool
     app.state.db_pool = db_pool
+    game_service = GameService()
+    dp["game_service"] = game_service
+    app.state.game_service = game_service
     await bot.delete_webhook()
     await bot.set_webhook(settings.telegram_webhook_url)
     await set_bot_commands(bot)

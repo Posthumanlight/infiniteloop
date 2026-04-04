@@ -21,6 +21,11 @@ router = Router()
 async def set_bot_commands(bot: Bot) -> None:
     commands = [
         BotCommand(command="start", description="Start the bot"),
+        BotCommand(command="newgame", description="Create a new game session"),
+        BotCommand(command="join", description="Join the current game session"),
+        BotCommand(command="fight", description="Start combat"),
+        BotCommand(command="status", description="Show combat status"),
+        BotCommand(command="flee", description="End the current session"),
     ]
     await bot.set_my_commands(commands)
 

@@ -2,6 +2,7 @@
 name = "Goblin"
 skills = ["slash"]
 xp_reward = 15
+tags = ["forest", "cave"]
 
 [enemies.goblin.major_stats]
 attack = 8
@@ -14,3 +15,81 @@ energy = 50
 mastery = 2
 
 [enemies.goblin.minor_stats]
+
+
+[enemies.skeleton]
+name = "Skeleton"
+skills = ["slash"]
+xp_reward = 18
+tags = ["undead", "cave", "ruins"]
+
+[enemies.skeleton.major_stats]
+attack = 10
+hp = 35
+speed = 8
+crit_chance = 0.05
+crit_dmg = 1.4
+resistance = 5
+energy = 40
+mastery = 3
+
+[enemies.skeleton.minor_stats]
+slashing_def_pct = 0.1
+
+
+[enemies.wolf]
+name = "Wolf"
+skills = ["slash"]
+xp_reward = 12
+tags = ["forest", "wild"]
+
+[enemies.wolf.major_stats]
+attack = 7
+hp = 30
+speed = 18
+crit_chance = 0.12
+crit_dmg = 1.3
+resistance = 2
+energy = 60
+mastery = 1
+
+[enemies.wolf.minor_stats]
+
+
+[enemies.fire_imp]
+name = "Fire Imp"
+skills = ["slash"]
+xp_reward = 20
+tags = ["fire", "cave"]
+
+[enemies.fire_imp.major_stats]
+attack = 12
+hp = 25
+speed = 16
+crit_chance = 0.10
+crit_dmg = 1.5
+resistance = 2
+energy = 70
+mastery = 6
+
+[enemies.fire_imp.minor_stats]
+fire_dmg_pct = 0.15
+
+
+[enemies.bandit]
+name = "Bandit"
+skills = ["slash"]
+xp_reward = 16
+tags = ["forest", "road", "ruins"]
+
+[enemies.bandit.major_stats]
+attack = 11
+hp = 45
+speed = 11
+crit_chance = 0.07
+crit_dmg = 1.4
+resistance = 4
+energy = 55
+mastery = 3
+
+[enemies.bandit.minor_stats]

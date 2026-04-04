@@ -8,6 +8,7 @@ from game.core.enums import (
     DamageType,
     EffectAction,
     EventType,
+    LocationType,
     OutcomeAction,
     OutcomeTarget,
     TargetType,
@@ -19,7 +20,6 @@ from game.events.models import (
     EventRequirements,
     OutcomeDef,
 )
-
 _DATA_DIR = Path(__file__).parent / "data"
 _cache: dict[str, Any] = {}
 
@@ -243,6 +243,7 @@ class EnemyData:
     minor_stats: dict[str, float]
     skills: tuple[str, ...]
     xp_reward: int
+    tags: tuple[str, ...] = ()
 
 
 def load_enemies() -> dict[str, EnemyData]:
@@ -255,6 +256,7 @@ def load_enemies() -> dict[str, EnemyData]:
             minor_stats=dict(edata.get("minor_stats", {})),
             skills=tuple(edata["skills"]),
             xp_reward=edata["xp_reward"],
+            tags=tuple(edata.get("tags", [])),
         )
         for eid, edata in raw.items()
     }
@@ -341,6 +343,110 @@ def load_event(event_id: str) -> EventDef:
     if event_id not in events:
         raise KeyError(f"Unknown event: {event_id}")
     return events[event_id]
+
+
+# ---------------------------------------------------------------------------
+# Location data definitions
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class LocationStatusDef:
+    """A modifier applied to a combat location (e.g. dim light, burning ground)."""
+
+    status_id: str
+    name: str
+    description: str
+    affects: str  # "players", "enemies", "all"
+    tags: tuple[str, ...]
+    stat_modifiers: dict[str, float]  # e.g. {"crit_chance": -0.03}
+
+
+@dataclass(frozen=True)
+class LocationOption:
+    """A single choosable destination in the exploration loop."""
+
+    location_id: str
+    name: str
+    location_type: LocationType
+    tags: tuple[str, ...]
+    # Combat fields (populated when location_type == COMBAT)
+    enemy_ids: tuple[str, ...] = ()
+    status_ids: tuple[str, ...] = ()
+    # Event fields (populated when location_type == EVENT)
+    event_id: str | None = None
+
+
+@dataclass(frozen=True)
+class LocationSetDef:
+    """A predetermined set of locations loaded from TOML."""
+
+    set_id: str
+    locations: tuple[LocationOption, ...]
+
+
+# ---------------------------------------------------------------------------
+# Location statuses
+# ---------------------------------------------------------------------------
+
+def load_location_statuses() -> dict[str, LocationStatusDef]:
+    raw = _load_toml("location_statuses.toml")["statuses"]
+    return {
+        sid: LocationStatusDef(
+            status_id=sid,
+            name=sdata["name"],
+            description=sdata["description"],
+            affects=sdata["affects"],
+            tags=tuple(sdata.get("tags", [])),
+            stat_modifiers=dict(sdata.get("stat_modifiers", {})),
+        )
+        for sid, sdata in raw.items()
+    }
+
+
+def load_location_status(status_id: str) -> LocationStatusDef:
+    statuses = load_location_statuses()
+    if status_id not in statuses:
+        raise KeyError(f"Unknown location status: {status_id}")
+    return statuses[status_id]
+
+
+# ---------------------------------------------------------------------------
+# Predetermined location sets
+# ---------------------------------------------------------------------------
+
+def _parse_location_option(index: int, raw: dict[str, Any]) -> LocationOption:
+    loc_type = LocationType(raw["type"])
+    return LocationOption(
+        location_id=f"preset_{index}",
+        name=raw.get("name", f"{loc_type.value.title()} {index + 1}"),
+        location_type=loc_type,
+        tags=tuple(raw.get("tags", [])),
+        enemy_ids=tuple(raw.get("enemies", [])),
+        status_ids=tuple(raw.get("statuses", [])),
+        event_id=raw.get("event_id"),
+    )
+
+
+def load_location_sets() -> dict[str, LocationSetDef]:
+    raw = _load_toml("location_sets.toml")["sets"]
+    result: dict[str, LocationSetDef] = {}
+    for set_id, sdata in raw.items():
+        locations = tuple(
+            _parse_location_option(i, loc)
+            for i, loc in enumerate(sdata.get("locations", []))
+        )
+        result[set_id] = LocationSetDef(
+            set_id=set_id,
+            locations=locations,
+        )
+    return result
+
+
+def load_location_set(set_id: str) -> LocationSetDef:
+    sets = load_location_sets()
+    if set_id not in sets:
+        raise KeyError(f"Unknown location set: {set_id}")
+    return sets[set_id]
 
 
 def clear_cache() -> None:

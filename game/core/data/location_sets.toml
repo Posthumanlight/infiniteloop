@@ -1,0 +1,21 @@
+[sets.dark_cave_intro]
+
+[[sets.dark_cave_intro.locations]]
+type = "combat"
+name = "Goblin Ambush"
+enemies = ["goblin", "goblin"]
+statuses = ["dim_light"]
+tags = ["cave", "dark"]
+
+[[sets.dark_cave_intro.locations]]
+type = "event"
+name = "Underground Fountain"
+event_id = "mysterious_fountain"
+tags = ["cave"]
+
+[[sets.dark_cave_intro.locations]]
+type = "combat"
+name = "Skeleton Guard"
+enemies = ["skeleton"]
+statuses = []
+tags = ["cave", "undead"]

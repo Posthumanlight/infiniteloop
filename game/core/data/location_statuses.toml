@@ -1,0 +1,17 @@
+[statuses.dim_light]
+name = "Dim Light"
+description = "Visibility is poor. Accuracy suffers."
+affects = "all"
+tags = ["dark", "cave"]
+
+[statuses.dim_light.stat_modifiers]
+crit_chance = -0.03
+
+[statuses.burning_ground]
+name = "Burning Ground"
+description = "The ground radiates searing heat."
+affects = "all"
+tags = ["fire"]
+
+[statuses.burning_ground.stat_modifiers]
+speed = -2

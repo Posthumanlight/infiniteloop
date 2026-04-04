@@ -77,3 +77,26 @@ class OutcomeTarget(Enum):
     VOTER = "voter"
     ALL = "all"
     RANDOM_ONE = "random_one"
+
+
+class LocationType(Enum):
+    COMBAT = "combat"
+    EVENT = "event"
+
+
+class ExplorationPhase(Enum):
+    CHOOSING = "choosing"
+    RESOLVING = "resolving"
+
+
+class SessionPhase(Enum):
+    EXPLORING = "exploring"
+    IN_COMBAT = "in_combat"
+    IN_EVENT = "in_event"
+    ENDED = "ended"
+
+
+class SessionEndReason(Enum):
+    PARTY_WIPED = "party_wiped"
+    RETREAT = "retreat"
+    MAX_DEPTH = "max_depth"

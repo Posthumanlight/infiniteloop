@@ -2,7 +2,6 @@ import random
 
 
 class SeededRNG:
-    """Seeded random number generator for reproducible combat outcomes."""
 
     def __init__(self, seed: int) -> None:
         self._rng = random.Random(seed)
