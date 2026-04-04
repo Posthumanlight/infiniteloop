@@ -19,6 +19,15 @@ dependencies = [
 ]
 
 
+[tool.poetry]
+packages = [
+    { include = "game" },
+    { include = "server" },
+    { include = "bot" },
+    { include = "db" },
+    { include = "settings" },
+]
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
