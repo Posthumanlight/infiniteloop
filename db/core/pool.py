@@ -4,7 +4,7 @@ from settings.config import settings
 
 async def create_db_pool() -> asyncpg.Pool:
     return await asyncpg.create_pool(
-        dsn=settings.database_url,
+        dsn=settings.supabase_url,
         min_size=2,
         max_size=10,
         command_timeout=30.0,
