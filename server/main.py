@@ -50,6 +50,13 @@ async def lifespan(app: FastAPI):
 
 #FastAPI app
 app = FastAPI(lifespan=lifespan)
-port = int(os.getenv("PORT", 10000))
+port = int(os.getenv("PORT", 8000))
 config = uvicorn.Config(app, host="0.0.0.0", port=port)
 server = uvicorn.Server(config)  
+
+@app.post(settings.telegram_webhook_path)
+async def telegram_webhook(request: Request):
+    update = Update.model_validate(await request.json())
+    task = asyncio.create_task(dp.feed_update(bot, update))
+    task.add_done_callback(lambda t: t.exception() and logging.error("Unhandled error in update task", exc_info=t.exception()))
+    return {"ok": True}
