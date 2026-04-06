@@ -8,7 +8,6 @@ from aiogram.fsm.context import FSMContext
 from bot.bot_state import GameStates
 from bot.tools.combat_renderer import (
     render_combat_start,
-    render_turn_prompt,
     render_status,
 )
 from bot.tools.exploration_renderer import (

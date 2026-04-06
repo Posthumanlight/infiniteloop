@@ -199,5 +199,5 @@ async def _render_batch_and_prompt(
         if whose_turn is not None and whose_turn in batch.entities:
             turn_snap = batch.entities[whose_turn]
             skills = game_service.get_available_skills(session_id, whose_turn)
-            prompt = render_turn_prompt(whose_turn, turn_snap)
+            prompt = render_turn_prompt(whose_turn, turn_snap, players)
             await callback.message.answer(prompt, reply_markup=skill_keyboard(skills))

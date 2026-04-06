@@ -121,9 +121,12 @@ def render_turn_batch(
 def render_turn_prompt(
     entity_id: str,
     snapshot: EntitySnapshot,
+    players: dict[str, PlayerInfo],
 ) -> str:
+    player = players.get(entity_id)
+    name = player.display_name if player else snapshot.name
     return (
-        f"\u2694\ufe0f {snapshot.name}'s turn!\n"
+        f"\u2694\ufe0f {name}'s turn!\n"
         f"\u2764\ufe0f {snapshot.current_hp}/{snapshot.max_hp}  "
         f"\u26a1 {snapshot.current_energy}/{snapshot.max_energy}"
     )

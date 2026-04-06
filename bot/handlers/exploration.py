@@ -128,7 +128,7 @@ async def _handle_phase_transition(
             if whose_turn is not None:
                 turn_snap = snapshot.entities[whose_turn]
                 skills = game_service.get_available_skills(session_id, whose_turn)
-                prompt = render_turn_prompt(whose_turn, turn_snap)
+                prompt = render_turn_prompt(whose_turn, turn_snap, players)
                 await callback.message.answer(prompt, reply_markup=skill_keyboard(skills))
             await state.set_state(GameStates.combat_idle)
 
