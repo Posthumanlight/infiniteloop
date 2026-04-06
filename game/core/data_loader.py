@@ -42,6 +42,7 @@ class FormulaConfig:
     attack_scaling: float
     mastery_scaling: float
     resistance_scaling: float
+    hp_scaling : float
     variance: float
 
 
@@ -52,6 +53,7 @@ def load_formulas() -> dict[str, FormulaConfig]:
             formula_id=fid,
             attack_scaling=fdata["attack_scaling"],
             mastery_scaling=fdata["mastery_scaling"],
+            hp_scaling=fdata["hp_scaling"],
             resistance_scaling=fdata["resistance_scaling"],
             variance=fdata["variance"],
         )

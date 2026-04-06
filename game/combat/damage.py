@@ -21,9 +21,10 @@ def resolve_damage(
         base_power
         + attacker.major_stats.attack * formula.attack_scaling
         + attacker.major_stats.mastery * formula.mastery_scaling
+        + attacker.major_stats.hp * formula.hp_scaling
     )
 
-    after_def = raw - defender.major_stats.resistance * formula.resistance_scaling
+    after_def = raw - defender.major_stats.resistance
 
     after_type = (
         after_def
