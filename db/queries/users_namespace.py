@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class UserData:
     def __init__(self, pool):
         self.pool = pool
-        self.schema = "prod"
+        self.schema = "public"
 
     async def get_user_by_id(self, user_id: int):
         
