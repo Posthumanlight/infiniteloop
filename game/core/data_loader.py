@@ -39,11 +39,11 @@ def _load_toml(filename: str) -> dict[str, Any]:
 @dataclass(frozen=True)
 class FormulaConfig:
     formula_id: str
-    attack_scaling: float
-    mastery_scaling: float
-    resistance_scaling: float
-    hp_scaling : float
-    variance: float
+    attack_scaling: float = 0.0
+    mastery_scaling: float = 0.0
+    resistance_scaling: float = 0.0
+    hp_scaling: float = 0.0
+    variance: float = 0.0
 
 
 def load_formulas() -> dict[str, FormulaConfig]:
@@ -51,11 +51,11 @@ def load_formulas() -> dict[str, FormulaConfig]:
     return {
         fid: FormulaConfig(
             formula_id=fid,
-            attack_scaling=fdata["attack_scaling"],
-            mastery_scaling=fdata["mastery_scaling"],
-            hp_scaling=fdata["hp_scaling"],
-            resistance_scaling=fdata["resistance_scaling"],
-            variance=fdata["variance"],
+            attack_scaling=fdata.get("attack_scaling", 0.0),
+            mastery_scaling=fdata.get("mastery_scaling", 0.0),
+            hp_scaling=fdata.get("hp_scaling", 0.0),
+            resistance_scaling=fdata.get("resistance_scaling", 0.0),
+            variance=fdata.get("variance", 0.0),
         )
         for fid, fdata in raw.items()
     }
@@ -449,6 +449,34 @@ def load_location_set(set_id: str) -> LocationSetDef:
     if set_id not in sets:
         raise KeyError(f"Unknown location set: {set_id}")
     return sets[set_id]
+
+
+# ---------------------------------------------------------------------------
+# Progression / level-up configuration
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class LevelScalingConfig:
+    class_id: str
+    stat_gains: dict[str, float]  # only stats that scale for this class
+
+
+@dataclass(frozen=True)
+class ProgressionConfig:
+    xp_thresholds: tuple[int, ...]  # cumulative XP needed per level
+    level_scaling: dict[str, LevelScalingConfig]  # keyed by class_id
+
+
+def load_progression() -> ProgressionConfig:
+    raw = _load_toml("progression.toml")
+    thresholds = tuple(raw["progression"]["xp_thresholds"])
+    scaling: dict[str, LevelScalingConfig] = {}
+    for class_id, gains in raw.get("level_scaling", {}).items():
+        scaling[class_id] = LevelScalingConfig(
+            class_id=class_id,
+            stat_gains=dict(gains),
+        )
+    return ProgressionConfig(xp_thresholds=thresholds, level_scaling=scaling)
 
 
 def clear_cache() -> None:

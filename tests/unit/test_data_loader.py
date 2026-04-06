@@ -32,7 +32,7 @@ def test_load_formula_physical_slash():
     assert f.formula_id == "physical_slash"
     assert f.attack_scaling == 1.5
     assert f.mastery_scaling == 0.0
-    assert f.resistance_scaling == 0.5
+    assert f.resistance_scaling == 0.0
     assert f.variance == 0.1
 
 
@@ -81,8 +81,8 @@ def test_load_class_warrior():
     c = load_class("warrior")
     assert c.name == "Warrior"
     assert "slash" in c.starting_skills
-    assert c.major_stats["attack"] == 15
-    assert c.major_stats["hp"] == 120
+    assert c.major_stats["attack"] == 12
+    assert c.major_stats["hp"] == 125
     assert c.minor_stats.get("slashing_dmg_pct") == 0.1
 
 

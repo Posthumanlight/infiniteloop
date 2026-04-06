@@ -31,6 +31,7 @@ def build_enemy(enemy_id: str) -> Enemy:
         current_hp=major.hp,
         current_energy=major.energy,
         skills=data.skills,
+        xp_reward=data.xp_reward,
     )
 
 

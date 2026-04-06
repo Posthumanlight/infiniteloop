@@ -1,7 +1,9 @@
 from dataclasses import replace
 
 from game.character.player_character import PlayerCharacter
+from game.character.stats import MajorStats
 from game.combat.models import ActionRequest
+from game.core.data_loader import load_classes, load_progression
 from game.core.dice import SeededRNG
 from game.core.enums import (
     LocationType,
@@ -15,6 +17,24 @@ from game.world.models import GenerationConfig
 from game.world.world_run import WorldManager
 
 
+def _build_base_stats_map() -> dict[str, MajorStats]:
+    """Build a map of class_id -> level-1 MajorStats from TOML class data."""
+    classes = load_classes()
+    result: dict[str, MajorStats] = {}
+    for cid, cls in classes.items():
+        result[cid] = MajorStats(
+            attack=int(cls.major_stats["attack"]),
+            hp=int(cls.major_stats["hp"]),
+            speed=int(cls.major_stats["speed"]),
+            crit_chance=cls.major_stats["crit_chance"],
+            crit_dmg=cls.major_stats["crit_dmg"],
+            resistance=int(cls.major_stats.get("resistance", 0)),
+            energy=int(cls.major_stats.get("energy", 50)),
+            mastery=int(cls.major_stats.get("mastery", 0)),
+        )
+    return result
+
+
 class SessionManager:
     """Orchestrates a single dungeon run.
 
@@ -25,8 +45,10 @@ class SessionManager:
     def __init__(self, seed: int, max_depth: int = 10):
         rng = SeededRNG(seed)
         world = WorldManager(seed)
+        progression = load_progression()
+        base_stats = _build_base_stats_map()
         self._location = LocationManager(world)
-        self._node = NodeManager(rng)
+        self._node = NodeManager(rng, progression, base_stats)
         self._max_depth = max_depth
 
     # ------------------------------------------------------------------
