@@ -13,7 +13,7 @@ class UserData:
 
     async def get_user_by_id(self, user_id: int):
         
-        filters = {"tg_id": str(user_id)}
+        filters = {"tg_id": user_id}
         results = await safe_get_db_data(
             pool=self.pool,
             schema=self.schema,
@@ -47,12 +47,12 @@ class UserSettingsDB:
             pool=self.pool,
             schema=self.schema,
             table='bot_users_settings',
-            filters={"tg_id": str(tg_id)}
+            filters={"tg_id": tg_id}
         )
         return result[0] if result else None
 
     async def upsert_settings(self, tg_id: int, data: dict) -> None:
-        all_data = {"tg_id": str(tg_id), **data}
+        all_data = {"tg_id": tg_id, **data}
         columns = list(all_data.keys())
         values = list(all_data.values())
         placeholders = ", ".join(f"${i + 1}" for i in range(len(columns)))
