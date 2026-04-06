@@ -1,5 +1,5 @@
 [progression]
-xp_thresholds = [0, 100, 250, 500, 850, 1300, 1900, 2700, 3800, 5200]
+xp_thresholds = [0, 100, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000]
 
 # Per-class level scaling — only stats that scale need to be listed.
 # Absent keys mean the stat does not scale for that class.

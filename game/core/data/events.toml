@@ -7,19 +7,12 @@ max_depth = 15
 weight = 5
 
 [[events.cursed_shrine.choices]]
-label = "Pray at the shrine"
-description = "Risk the curse for its blessing."
-outcomes = [
-    { action = "damage", target = "all", expr = "target.hp * 0.1" },
-    { action = "restore_energy", target = "all", value = 30 },
-    { action = "apply_effect", target = "all", effect_id = "fortify" },
-]
 
 [[events.cursed_shrine.choices]]
 label = "Desecrate the shrine"
 description = "Destroy the source of evil."
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["bandit"] },
+    { action = "start_combat", target = "all", enemy_group = ["fire_imp", "fire_imp", "fire_imp", "fire_imp", "fire_imp"]},
 ]
 
 [[events.cursed_shrine.choices]]
