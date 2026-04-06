@@ -3,6 +3,7 @@ from dataclasses import replace
 from game.character.player_character import PlayerCharacter
 from game.character.progression import apply_xp
 from game.character.stats import MajorStats
+from game.combat.effects import StatusEffectInstance
 from game.combat.engine import (
     get_available_actions,
     start_combat,
@@ -10,7 +11,7 @@ from game.combat.engine import (
     submit_action,
 )
 from game.combat.models import ActionRequest, CombatState
-from game.core.data_loader import ProgressionConfig, load_event
+from game.core.data_loader import ProgressionConfig, load_effect, load_event
 from game.core.dice import SeededRNG
 from game.core.enums import (
     CombatPhase,
@@ -296,9 +297,15 @@ class NodeManager:
 
                 case OutcomeAction.APPLY_EFFECT:
                     if outcome.effect_id is not None:
+                        effect_def = load_effect(outcome.effect_id)
+                        instance = StatusEffectInstance(
+                            effect_id=outcome.effect_id,
+                            source_id="event",
+                            remaining_duration=effect_def.duration,
+                        )
                         player = replace(
                             player,
-                            active_effects=player.active_effects + (outcome.effect_id,),
+                            active_effects=player.active_effects + (instance,),
                         )
 
                 case OutcomeAction.START_COMBAT:
