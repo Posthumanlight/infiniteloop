@@ -1,14 +1,14 @@
 [classes.warrior]
 name = "Warrior"
 description = "Frontline fighter"
-starting_skills = ["slash"]
+starting_skills = ["slash", "cleave"]
 
 [classes.warrior.major_stats]
 attack = 15
 hp = 120
 speed = 10
-crit_chance = 0.05
-crit_dmg = 1.5
+crit_chance = 0.10
+crit_dmg = 1.25
 resistance = 8
 energy = 100
 mastery = 5

@@ -7,3 +7,13 @@ damage_type = "slashing"
 hits = [
   { formula = "physical_slash", base_power = 10 },
 ]
+
+[skills.cleave]
+name = "Cleave"
+target_type = "all_enemies"
+energy_cost = 10
+action_type = "action"
+damage_type = "slashing"
+hits = [
+  { formula = "physical_slash", base_power = 10 },
+]
