@@ -110,10 +110,11 @@ class WorldGenerator:
                     event_counter, players, config.tags, depth,
                 )
 
-            if loc is not None:
-                locations.append(loc)
-            else:
-                raise Exception('Generation of random locations failed.')
+            if loc is None:
+                # Event generation failed (no eligible events) — fall back to combat
+                combat_counter += 1
+                loc = self._generate_combat_location(combat_counter, config.tags)
+            locations.append(loc)
 
         return tuple(locations)
     
