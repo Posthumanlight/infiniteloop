@@ -5,7 +5,7 @@ xp_reward = 15
 tags = ["forest", "cave"]
 
 [enemies.goblin.major_stats]
-attack = 8
+attack = 3
 hp = 40
 speed = 14
 crit_chance = 0.08
@@ -24,7 +24,7 @@ xp_reward = 18
 tags = ["undead", "cave", "ruins"]
 
 [enemies.skeleton.major_stats]
-attack = 10
+attack = 5
 hp = 35
 speed = 8
 crit_chance = 0.05
@@ -83,7 +83,7 @@ xp_reward = 16
 tags = ["forest", "road", "ruins"]
 
 [enemies.bandit.major_stats]
-attack = 11
+attack = 8
 hp = 45
 speed = 11
 crit_chance = 0.07

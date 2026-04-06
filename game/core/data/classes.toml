@@ -4,8 +4,8 @@ description = "Frontline fighter"
 starting_skills = ["slash", "cleave"]
 
 [classes.warrior.major_stats]
-attack = 15
-hp = 120
+attack = 12
+hp = 125
 speed = 10
 crit_chance = 0.10
 crit_dmg = 1.25
