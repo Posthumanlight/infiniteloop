@@ -40,7 +40,7 @@ class UserCreatorDB(UserData):
 class UserSettingsDB:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
-        self.schema = "prod"
+        self.schema = "public"
 
     async def get_settings(self, tg_id: int) -> dict | None:
         result = await safe_get_db_data(

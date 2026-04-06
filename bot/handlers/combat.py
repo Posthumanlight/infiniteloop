@@ -13,9 +13,13 @@ from bot.tools.combat_renderer import (
     render_turn_prompt,
     render_combat_end,
 )
-from bot.tools.keyboards import skill_keyboard, target_keyboard
+from bot.tools.exploration_renderer import (
+    render_exploration_choices,
+    render_run_summary,
+)
+from bot.tools.keyboards import location_keyboard, skill_keyboard, target_keyboard
 from game.combat.models import ActionRequest
-from game.core.enums import ActionType, TargetType
+from game.core.enums import ActionType, SessionPhase, TargetType
 from server.services.game_service import GameService
 
 router = Router(name="combat_router")
@@ -171,7 +175,24 @@ async def _render_batch_and_prompt(
         # Show combat end summary
         end_text = render_combat_end(batch, players)
         await callback.message.answer(end_text)
-        game_service.remove_session(session_id)
+
+        # Check what comes next in the exploration loop
+        phase = game_service.get_session_phase(session_id)
+        if phase == SessionPhase.EXPLORING:
+            game_service.continue_exploration(session_id)
+            options = game_service.get_exploration_choices(session_id)
+            await callback.message.answer(
+                render_exploration_choices(options, (), players),
+                reply_markup=location_keyboard(options),
+            )
+        elif phase == SessionPhase.ENDED:
+            stats = game_service.get_run_stats(session_id)
+            session = game_service._get_session(session_id)
+            victory = any(p.current_hp > 0 for p in session.state.players)
+            await callback.message.answer(render_run_summary(stats, victory))
+            game_service.remove_session(session_id)
+        else:
+            game_service.remove_session(session_id)
     else:
         # Prompt next player
         whose_turn = batch.whose_turn

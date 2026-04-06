@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from game.combat.models import ActionRequest, ActionResult
-from game.core.enums import ActionType, EntityType
+from game.core.data_loader import ClassData, load_classes
+from game.core.enums import ActionType, EntityType, SessionPhase
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
@@ -18,7 +19,7 @@ class _ActiveSession:
     session_id: str
     players: dict[str, PlayerInfo]  # entity_id -> PlayerInfo
     manager: SessionManager
-    state: SessionState
+    state: SessionState | None
 
 
 class GameService:
@@ -43,7 +44,7 @@ class GameService:
             session_id=session_id,
             players={creator.entity_id: creator},
             manager=manager,
-            state=None,  # type: ignore[arg-type] — set on start_combat
+            state=None,
         )
 
     def join_session(self, session_id: str, player: PlayerInfo) -> None:
@@ -61,41 +62,160 @@ class GameService:
 
     def is_in_combat(self, session_id: str) -> bool:
         session = self._sessions.get(session_id)
-        return session is not None and session.state is not None and session.state.combat is not None
+        return (
+            session is not None
+            and session.state is not None
+            and session.state.combat is not None
+        )
 
     def remove_session(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
 
     # ------------------------------------------------------------------
-    # Combat
+    # Class selection
     # ------------------------------------------------------------------
 
-    def start_combat(
-        self,
-        session_id: str,
-        enemy_ids: tuple[str, ...],
-    ) -> CombatSnapshot:
+    @staticmethod
+    def get_available_classes() -> dict[str, ClassData]:
+        return load_classes()
+
+    def select_class(
+        self, session_id: str, entity_id: str, class_id: str,
+    ) -> None:
+        session = self._get_session(session_id)
+        if entity_id not in session.players:
+            raise ValueError("Player not in session")
+
+        classes = load_classes()
+        if class_id not in classes:
+            raise ValueError(f"Unknown class: {class_id}")
+
+        old_info = session.players[entity_id]
+        session.players[entity_id] = replace(old_info, class_id=class_id)
+
+    def all_players_ready(self, session_id: str) -> bool:
+        session = self._get_session(session_id)
+        return all(p.class_id is not None for p in session.players.values())
+
+    # ------------------------------------------------------------------
+    # Exploration run
+    # ------------------------------------------------------------------
+
+    def start_exploration_run(self, session_id: str) -> None:
         session = self._get_session(session_id)
         if not session.players:
             raise ValueError("No players in session")
+        if not self.all_players_ready(session_id):
+            raise ValueError("Not all players have chosen a class")
 
-        # Build PlayerCharacter instances (default class: warrior)
         players = [
-            build_player("warrior", entity_id=pid)
-            for pid in session.players
+            build_player(info.class_id, entity_id=info.entity_id)
+            for info in session.players.values()
         ]
 
-        # Initialize run and directly enter combat (skip exploration)
         session.state = session.manager.start_run(session_id, players)
-        session.state = session.manager._node.enter_combat(
-            session.state, enemy_ids,
+        session.state = session.manager.generate_choices(session.state)
+
+    def get_exploration_choices(self, session_id: str) -> tuple:
+        session = self._get_session(session_id)
+        if session.state is None or session.state.exploration is None:
+            raise ValueError("Not in exploration")
+        return session.state.exploration.current_options
+
+    def submit_location_vote(
+        self, session_id: str, player_id: str, location_index: int,
+    ) -> None:
+        session = self._get_session(session_id)
+        session.state = session.manager.submit_location_vote(
+            session.state, player_id, location_index,
         )
 
-        # Auto-play any leading enemy turns
-        if self._current_entity_type(session) == EntityType.ENEMY:
+    def all_players_voted(self, session_id: str) -> bool:
+        session = self._get_session(session_id)
+        if session.state is None or session.state.exploration is None:
+            return False
+        exploration = session.state.exploration
+        return len(exploration.votes) >= len(exploration.player_ids)
+
+    def resolve_location_choice(self, session_id: str) -> SessionPhase:
+        """Resolve votes and enter the chosen location.
+
+        Returns the new SessionPhase (IN_COMBAT, IN_EVENT, or ENDED).
+        If combat starts with enemies first, auto-plays their turns.
+        """
+        session = self._get_session(session_id)
+        session.state = session.manager.resolve_location_choice(session.state)
+
+        if (
+            session.state.phase == SessionPhase.IN_COMBAT
+            and self._current_entity_type(session) == EntityType.ENEMY
+        ):
             self._auto_play_enemies(session)
 
-        return self._build_combat_snapshot(session)
+        return session.state.phase
+
+    def continue_exploration(self, session_id: str) -> None:
+        """After combat/event ends, generate new location choices."""
+        session = self._get_session(session_id)
+        session.state = session.manager.generate_choices(session.state)
+
+    def get_session_phase(self, session_id: str) -> SessionPhase | None:
+        session = self._sessions.get(session_id)
+        if session is None or session.state is None:
+            return None
+        return session.state.phase
+
+    def get_run_stats(self, session_id: str) -> object:
+        session = self._get_session(session_id)
+        if session.state is None:
+            raise ValueError("No active run")
+        return session.state.run_stats
+
+    # ------------------------------------------------------------------
+    # Event flow
+    # ------------------------------------------------------------------
+
+    def get_event_state(self, session_id: str):
+        session = self._get_session(session_id)
+        if session.state is None or session.state.event is None:
+            raise ValueError("Not in event")
+        return session.state.event
+
+    def submit_event_vote(
+        self, session_id: str, player_id: str, choice_index: int,
+    ) -> None:
+        session = self._get_session(session_id)
+        session.state = session.manager.submit_event_vote(
+            session.state, player_id, choice_index,
+        )
+
+    def all_event_votes_in(self, session_id: str) -> bool:
+        session = self._get_session(session_id)
+        if session.state is None or session.state.event is None:
+            return False
+        event = session.state.event
+        return len(event.votes) >= len(event.player_ids)
+
+    def resolve_event(self, session_id: str) -> SessionPhase:
+        """Resolve event votes, apply outcomes.
+
+        Returns new SessionPhase. May chain into IN_COMBAT if
+        a START_COMBAT outcome was triggered.
+        """
+        session = self._get_session(session_id)
+        session.state = session.manager.resolve_event(session.state)
+
+        if (
+            session.state.phase == SessionPhase.IN_COMBAT
+            and self._current_entity_type(session) == EntityType.ENEMY
+        ):
+            self._auto_play_enemies(session)
+
+        return session.state.phase
+
+    # ------------------------------------------------------------------
+    # Combat
+    # ------------------------------------------------------------------
 
     def submit_player_action(
         self,
@@ -106,10 +226,7 @@ class GameService:
         self._assert_in_combat(session)
         results: list[ActionResult] = []
 
-        # 1. Submit the player's action (capture result before potential finalize)
         self._submit_and_capture(session, action, results)
-
-        # 2. Auto-play enemy turns until next player or combat end
         self._auto_play_enemies(session, results)
 
         return self._build_turn_batch(session, tuple(results))
@@ -123,14 +240,12 @@ class GameService:
         self._assert_in_combat(session)
         results: list[ActionResult] = []
 
-        # Build a skip action and submit it
         action = ActionRequest(
             actor_id=actor_id,
             action_type=ActionType.ACTION,
             skill_id=None,
         )
         self._submit_and_capture(session, action, results, skip=True)
-
         self._auto_play_enemies(session, results)
 
         return self._build_turn_batch(session, tuple(results))
@@ -195,11 +310,8 @@ class GameService:
                 session.state, action,
             )
 
-        # If combat still active, grab new results from the log
         if session.state.combat is not None:
             results.extend(session.state.combat.action_log[log_len:])
-        # If combat ended, the log was lost during finalize.
-        # The TurnBatch.combat_ended flag tells the renderer what happened.
 
     def _auto_play_enemies(
         self,

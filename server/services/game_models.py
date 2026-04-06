@@ -11,6 +11,7 @@ class PlayerInfo:
     entity_id: str  # str(tg_user_id)
     tg_user_id: int
     display_name: str  # Telegram first_name
+    class_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -43,7 +43,7 @@ async def onboarding_set_reminders_yes(callback: CallbackQuery, state: FSMContex
     assert isinstance(callback.message, Message)
     await callback.answer()
     tg_id = callback.from_user.id  # pyright: ignore[reportOptionalMemberAccess]
-    await UserSettingsDB(db_pool).upsert_settings(tg_id, {"reminder_opt_in": 'True'})
+    await UserSettingsDB(db_pool).upsert_settings(tg_id, {"notifications": 'True'})
     logger.info(f"User {callback.from_user.id} finished registration")
     await callback.message.answer("Головне меню:", reply_markup= main_menu_keyboard())
     logger.info(f"User {callback.from_user.id} set reminders to True")
@@ -54,7 +54,7 @@ async def onboarding_set_reminders_no(callback: CallbackQuery, state: FSMContext
     await callback.answer()
     await state.set_state(GeneralStates.main_menu)
     await callback.message.answer("Зрозумів, якщо передумаєш - опція у налаштуваннях")
-    await UserCreatorDB(pool=db_pool).register_user({"tg_id": str(callback.from_user.id)})
+    await UserCreatorDB(pool=db_pool).register_user({"tg_id": callback.from_user.id})
     logger.info(f"User {callback.from_user.id} finished registration")
     await callback.message.answer("Головне меню:", reply_markup= main_menu_keyboard())
     logger.info(f"User {callback.from_user.id} set reminders to False")

@@ -23,7 +23,7 @@ async def set_bot_commands(bot: Bot) -> None:
         BotCommand(command="start", description="Start the bot"),
         BotCommand(command="newgame", description="Create a new game session"),
         BotCommand(command="join", description="Join the current game session"),
-        BotCommand(command="fight", description="Start combat"),
+        BotCommand(command="explore", description="Start the exploration run"),
         BotCommand(command="status", description="Show combat status"),
         BotCommand(command="flee", description="End the current session"),
     ]

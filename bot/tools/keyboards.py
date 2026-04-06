@@ -7,7 +7,8 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 from settings.config import settings
 
 if TYPE_CHECKING:
-    from game.core.data_loader import SkillData
+    from game.core.data_loader import ClassData, LocationOption, SkillData
+    from game.events.models import ChoiceDef
     from server.services.game_models import EntitySnapshot
 
 
@@ -48,7 +49,7 @@ def lobby_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="\u2694\ufe0f Join", callback_data="g:join"),
-                InlineKeyboardButton(text="\U0001f5e1\ufe0f Fight!", callback_data="g:fight"),
+                InlineKeyboardButton(text="\U0001f5e1\ufe0f Start Run", callback_data="g:start"),
             ],
         ]
     )
@@ -74,5 +75,40 @@ def target_keyboard(enemies: list[EntitySnapshot]) -> InlineKeyboardMarkup:
         )]
         for e in enemies
         if e.is_alive
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def class_select_keyboard(classes: dict[str, ClassData]) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(
+            text=f"{cls.name} — {cls.description}",
+            callback_data=f"g:class:{cls.class_id}",
+        )]
+        for cls in classes.values()
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def location_keyboard(options: tuple[LocationOption, ...]) -> InlineKeyboardMarkup:
+    from game.core.enums import LocationType
+    icons = {LocationType.COMBAT: "\u2694\ufe0f", LocationType.EVENT: "\U0001f4dc"}
+    rows = [
+        [InlineKeyboardButton(
+            text=f"{icons.get(opt.location_type, '\u2753')} {opt.name}",
+            callback_data=f"g:loc:{i}",
+        )]
+        for i, opt in enumerate(options)
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def event_choice_keyboard(choices: tuple[ChoiceDef, ...]) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(
+            text=choice.label,
+            callback_data=f"g:evt:{choice.index}",
+        )]
+        for choice in choices
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)

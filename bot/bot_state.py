@@ -10,6 +10,10 @@ class OnboardingStates(StatesGroup):
 
 class GameStates(StatesGroup):
     lobby = State()
+    class_select = State()
+    exploring = State()
     combat_idle = State()
     combat_skill = State()
     combat_target = State()
+    event_voting = State()
+    run_ended = State()
