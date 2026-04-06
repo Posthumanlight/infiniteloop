@@ -6,6 +6,12 @@ initiative_dice = 20
 skip_turn_on_timeout = true
 min_damage = 0
 
+[restoration]
+# Expression evaluated per alive player between nodes.
+# Available variables: max_hp, current_hp, level, attack, speed,
+#   crit_chance, crit_dmg, resistance, energy, mastery
+formula = "20 + max_hp * 0.20"
+
 [events]
 vote_timer_seconds = 30
 max_choices = 4

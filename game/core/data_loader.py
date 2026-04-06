@@ -283,6 +283,10 @@ def load_event_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["events"]
 
 
+def load_restoration_constants() -> dict[str, Any]:
+    return _load_toml("constants.toml")["restoration"]
+
+
 # ---------------------------------------------------------------------------
 # Event definitions
 # ---------------------------------------------------------------------------

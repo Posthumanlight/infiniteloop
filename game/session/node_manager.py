@@ -12,6 +12,7 @@ from game.combat.engine import (
 )
 from game.combat.models import ActionRequest, CombatState
 from game.core.data_loader import ProgressionConfig, load_effect, load_event
+from game.core.formula_eval import evaluate_expr
 from game.core.dice import SeededRNG
 from game.core.enums import (
     CombatPhase,
@@ -41,10 +42,12 @@ class NodeManager:
         rng: SeededRNG,
         progression: ProgressionConfig,
         base_stats: dict[str, MajorStats],
+        restoration_formula: str,
     ):
         self._rng = rng
         self._progression = progression
         self._base_stats = base_stats  # keyed by class_id
+        self._restoration_formula = restoration_formula
 
     def _next_seed(self) -> int:
         return self._rng.d(2**31 - 1)
@@ -105,6 +108,7 @@ class NodeManager:
     def finalize_combat(self, state: SessionState) -> SessionState:
         """Apply combat results to players, clear combat sub-state."""
         state = self._apply_combat_results(state)
+        state = self._restore_between_nodes(state, self._restoration_formula)
         return replace(
             state,
             combat=None,
@@ -181,11 +185,49 @@ class NodeManager:
         # Clear event sub-state
         state = replace(state, event=None)
 
+        # Restore HP between nodes (skip if chaining into combat)
+        if not combat_enemy_ids:
+            state = self._restore_between_nodes(state, self._restoration_formula)
+
         return state, tuple(combat_enemy_ids)
 
     # ------------------------------------------------------------------
     # Side-effect application
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _restore_between_nodes(
+        state: SessionState,
+        restoration_formula: str,
+    ) -> SessionState:
+        """Restore HP to alive players between nodes using a data-driven formula."""
+        updated: list[PlayerCharacter] = []
+        total_healing = 0
+        for player in state.players:
+            if player.current_hp <= 0:
+                updated.append(player)
+                continue
+            ctx: dict[str, object] = {
+                "max_hp": player.major_stats.hp,
+                "current_hp": player.current_hp,
+                "level": player.level,
+                "attack": player.major_stats.attack,
+                "speed": player.major_stats.speed,
+                "crit_chance": player.major_stats.crit_chance,
+                "crit_dmg": player.major_stats.crit_dmg,
+                "resistance": player.major_stats.resistance,
+                "energy": player.major_stats.energy,
+                "mastery": player.major_stats.mastery,
+            }
+            heal = max(0, int(evaluate_expr(restoration_formula, ctx)))
+            new_hp = min(player.current_hp + heal, player.major_stats.hp)
+            total_healing += new_hp - player.current_hp
+            updated.append(replace(player, current_hp=new_hp))
+        new_stats = replace(
+            state.run_stats,
+            total_healing=state.run_stats.total_healing + total_healing,
+        )
+        return replace(state, players=tuple(updated), run_stats=new_stats)
 
     def _apply_combat_results(self, state: SessionState) -> SessionState:
         """Merge HP/energy/effects from combat entities back to session players."""

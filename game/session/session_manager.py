@@ -3,7 +3,7 @@ from dataclasses import replace
 from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats
 from game.combat.models import ActionRequest
-from game.core.data_loader import load_classes, load_progression
+from game.core.data_loader import load_classes, load_progression, load_restoration_constants
 from game.core.dice import SeededRNG
 from game.core.enums import (
     LocationType,
@@ -47,8 +47,9 @@ class SessionManager:
         world = WorldManager(seed)
         progression = load_progression()
         base_stats = _build_base_stats_map()
+        restoration_formula = load_restoration_constants()["formula"]
         self._location = LocationManager(world)
-        self._node = NodeManager(rng, progression, base_stats)
+        self._node = NodeManager(rng, progression, base_stats, restoration_formula)
         self._max_depth = max_depth
 
     # ------------------------------------------------------------------

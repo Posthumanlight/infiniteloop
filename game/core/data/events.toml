@@ -2,8 +2,8 @@
 name = "Cursed Shrine"
 description = "A crumbling altar radiates dark energy. Bones are scattered at its base."
 event_type = "multiplayer"
-min_depth = 4
-max_depth = 15
+min_depth = 2
+max_depth = 10
 weight = 5
 
 [[events.cursed_shrine.choices]]
