@@ -37,7 +37,7 @@ def resolve_damage(
     for mod in modifiers:
         raw += evaluate_expr(mod.expr, ctx) * mod.stack_count
 
-    after_def = raw * (200 / (200 * defender.major_stats.resistance))
+    after_def = raw * (200 / (200 + defender.major_stats.resistance))
 
     # Type scaling — use effective minor stats if state is available
     if state is not None:
