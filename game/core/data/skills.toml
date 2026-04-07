@@ -1,5 +1,5 @@
 #generics
-[skill.generic_enemy_attack]
+[skills.generic_enemy_attack]
 name = "Attack"
 target_type = "single_enemy"
 energy_cost = 0
