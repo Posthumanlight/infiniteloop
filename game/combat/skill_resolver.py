@@ -1,10 +1,14 @@
 from dataclasses import replace
 
 from game.combat.damage import resolve_damage
-from game.combat.effects import apply_effect, get_damage_multiplier
+from game.combat.effects import apply_effect, build_expr_context, get_damage_multiplier
 from game.combat.models import CombatState, HitResult
+from game.combat.passives import check_passives
+from game.combat.skill_modifiers import apply_post_hit_modifiers, collect_modifiers
+from game.combat.targeting import get_allies
 from game.core.data_loader import SkillData
 from game.core.dice import SeededRNG
+from game.core.enums import ModifierPhase, TriggerType
 
 
 def resolve_skill(
@@ -16,6 +20,11 @@ def resolve_skill(
     constants: dict,
 ) -> tuple[CombatState, list[HitResult]]:
     all_hits: list[HitResult] = []
+
+    # Collect modifiers for this actor + skill
+    actor = state.entities[actor_id]
+    modifiers = collect_modifiers(actor, skill)
+    pre_hit_mods = tuple(m for m in modifiers if m.phase == ModifierPhase.PRE_HIT)
 
     for target_id in target_ids:
         for hit in skill.hits:
@@ -30,12 +39,14 @@ def resolve_skill(
             dmg_result = resolve_damage(
                 attacker=attacker,
                 defender=defender,
-                formula_id=hit.formula,
+                formula_expr=hit.formula,
                 base_power=hit.base_power,
                 damage_type=skill.damage_type,
                 rng=rng,
-                effect_multiplier=effect_mult,
                 constants=constants,
+                modifiers=pre_hit_mods,
+                variance=hit.variance,
+                effect_multiplier=effect_mult,
             )
 
             current_defender = state.entities[target_id]
@@ -45,6 +56,12 @@ def resolve_skill(
                 target_id: replace(current_defender, current_hp=new_hp),
             }
             state = replace(state, entities=new_entities)
+
+            # Post-hit modifiers (vampirism, etc.)
+            state, post_results = apply_post_hit_modifiers(
+                state, actor_id, target_id, dmg_result.amount, modifiers,
+            )
+            all_hits.extend(post_results)
 
             effects_applied: list[str] = []
             for on_hit in hit.on_hit_effects:
@@ -57,6 +74,26 @@ def resolve_skill(
                 damage=dmg_result,
                 effects_applied=tuple(effects_applied),
             ))
+
+            # Passive triggers: ON_TAKE_DAMAGE
+            state, _ = check_passives(
+                state, target_id, TriggerType.ON_TAKE_DAMAGE,
+                {"damage_taken": dmg_result.amount},
+            )
+
+            # Passive triggers: ON_KILL + ON_ALLY_DEATH
+            if new_hp <= 0:
+                state, kill_results = check_passives(
+                    state, actor_id, TriggerType.ON_KILL,
+                    {"killed": build_expr_context(defender)},
+                )
+                all_hits.extend(kill_results)
+
+                for ally_id in get_allies(state, target_id):
+                    if ally_id != target_id:
+                        state, _ = check_passives(
+                            state, ally_id, TriggerType.ON_ALLY_DEATH,
+                        )
 
     for self_effect in skill.self_effects:
         state = apply_effect(state, actor_id, self_effect.effect_id, actor_id)

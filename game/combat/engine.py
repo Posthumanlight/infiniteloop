@@ -7,6 +7,7 @@ from game.character.player_character import PlayerCharacter
 from game.combat.action_resolver import resolve_action
 from game.combat.initiative import build_turn_order
 from game.combat.models import ActionRequest, ActionResult, CombatState
+from game.combat.passives import check_passives
 from game.combat.turn_manager import (
     check_combat_end,
     end_turn,
@@ -15,7 +16,7 @@ from game.combat.turn_manager import (
 )
 from game.core.data_loader import load_constants, load_skill
 from game.core.dice import SeededRNG
-from game.core.enums import ActionType, CombatPhase
+from game.core.enums import ActionType, CombatPhase, TriggerType
 
 
 def start_combat(
@@ -45,6 +46,11 @@ def start_combat(
         phase=CombatPhase.ACTING,
         rng_state=rng.get_state(),
     )
+
+    # Fire ON_COMBAT_START passives for all entities
+    for eid in state.turn_order:
+        if state.entities[eid].current_hp > 0:
+            state, _ = check_passives(state, eid, TriggerType.ON_COMBAT_START)
 
     # Skip to first alive entity
     while state.current_turn_index < len(state.turn_order):

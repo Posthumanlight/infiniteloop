@@ -26,7 +26,7 @@ def test_damage_positive():
     result = resolve_damage(
         attacker=make_warrior(),
         defender=make_goblin(),
-        formula_id="physical_slash",
+        formula_expr="base_power + attacker.attack * 1.5 - target.resistance",
         base_power=10,
         damage_type=DamageType.SLASHING,
         rng=rng,
@@ -35,7 +35,7 @@ def test_damage_positive():
     )
     assert result.amount > 0
     assert result.damage_type == DamageType.SLASHING
-    assert result.formula_id == "physical_slash"
+    assert result.formula_id == "expr"
 
 
 def test_damage_deterministic():
@@ -43,7 +43,7 @@ def test_damage_deterministic():
     kwargs = dict(
         attacker=make_warrior(),
         defender=make_goblin(),
-        formula_id="physical_slash",
+        formula_expr="base_power + attacker.attack * 1.5 - target.resistance",
         base_power=10,
         damage_type=DamageType.SLASHING,
         effect_multiplier=1.0,
@@ -70,7 +70,7 @@ def test_damage_manual_calculation():
         result = resolve_damage(
             attacker=make_warrior(),
             defender=make_goblin(),
-            formula_id="physical_slash",
+            formula_expr="base_power + attacker.attack * 1.5 - target.resistance",
             base_power=10,
             damage_type=DamageType.SLASHING,
             rng=rng,
@@ -91,7 +91,7 @@ def test_damage_with_effect_multiplier():
     base = resolve_damage(
         attacker=make_warrior(),
         defender=make_goblin(),
-        formula_id="physical_slash",
+        formula_expr="base_power + attacker.attack * 1.5 - target.resistance",
         base_power=10,
         damage_type=DamageType.SLASHING,
         rng=rng1,
@@ -103,7 +103,7 @@ def test_damage_with_effect_multiplier():
     boosted = resolve_damage(
         attacker=make_warrior(),
         defender=make_goblin(),
-        formula_id="physical_slash",
+        formula_expr="base_power + attacker.attack * 1.5 - target.resistance",
         base_power=10,
         damage_type=DamageType.SLASHING,
         rng=rng2,
@@ -120,7 +120,7 @@ def test_damage_min_floor():
     result = resolve_damage(
         attacker=make_goblin(),
         defender=make_warrior(),
-        formula_id="physical_slash",
+        formula_expr="base_power + attacker.attack * 1.5 - target.resistance",
         base_power=0,
         damage_type=DamageType.SLASHING,
         rng=rng,

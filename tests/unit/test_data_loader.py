@@ -8,7 +8,6 @@ from game.core.data_loader import (
     load_constants,
     load_effect,
     load_enemy,
-    load_formula,
     load_skill,
 )
 from game.core.enums import (
@@ -25,20 +24,6 @@ def _fresh_cache():
     clear_cache()
     yield
     clear_cache()
-
-
-def test_load_formula_physical_slash():
-    f = load_formula("physical_slash")
-    assert f.formula_id == "physical_slash"
-    assert f.attack_scaling == 1.5
-    assert f.mastery_scaling == 0.0
-    assert f.resistance_scaling == 0.0
-    assert f.variance == 0.1
-
-
-def test_load_formula_unknown_raises():
-    with pytest.raises(KeyError, match="Unknown formula"):
-        load_formula("nonexistent")
 
 
 def test_load_effect_poison():
@@ -73,7 +58,7 @@ def test_load_skill_slash():
     assert s.action_type == ActionType.ACTION
     assert s.damage_type == DamageType.SLASHING
     assert len(s.hits) == 1
-    assert s.hits[0].formula == "physical_slash"
+    assert "attacker.attack" in s.hits[0].formula
     assert s.hits[0].base_power == 10
 
 

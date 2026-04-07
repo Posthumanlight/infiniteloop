@@ -32,6 +32,7 @@ def build_enemy(enemy_id: str) -> Enemy:
         current_energy=major.energy,
         skills=data.skills,
         xp_reward=data.xp_reward,
+        passive_skills=data.passives,
     )
 
 
@@ -64,5 +65,6 @@ def build_player(class_id: str, entity_id: str = "p1") -> PlayerCharacter:
         current_energy=major.energy,
         player_class=class_id,
         skills=cls.starting_skills,
+        passive_skills=cls.starting_passives,
         inventory=Inventory(),
     )

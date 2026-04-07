@@ -2,6 +2,7 @@
 name = "Warrior"
 description = "Frontline fighter"
 starting_skills = ["slash", "cleave"]
+starting_passives = []
 
 [classes.warrior.major_stats]
 attack = 12

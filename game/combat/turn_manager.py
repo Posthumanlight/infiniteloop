@@ -2,6 +2,7 @@ from dataclasses import replace
 
 from game.combat.effects import expire_effects, is_skipped, tick_effects
 from game.combat.models import CombatState, HitResult
+from game.combat.passives import check_passives
 from game.combat.targeting import is_alive
 from game.core.dice import SeededRNG
 from game.core.enums import CombatPhase, EntityType, TriggerType
@@ -19,6 +20,7 @@ def start_round(state: CombatState, rng: SeededRNG) -> CombatState:
         entity = state.entities[eid]
         if is_alive(entity):
             state, _ = tick_effects(state, eid, TriggerType.ON_ROUND_START, rng)
+            state, _ = check_passives(state, eid, TriggerType.ON_ROUND_START)
 
     return state
 
@@ -29,18 +31,26 @@ def start_turn(
 ) -> tuple[CombatState, bool, list[HitResult]]:
     current_id = state.turn_order[state.current_turn_index]
 
+    # Reset turn-scoped passive usage for this entity
+    tracker = state.passive_trackers.get(current_id)
+    if tracker is not None:
+        new_trackers = {**state.passive_trackers, current_id: tracker.reset_turn()}
+        state = replace(state, passive_trackers=new_trackers)
+
     state, tick_results = tick_effects(
         state, current_id, TriggerType.ON_TURN_START, rng,
     )
+    state, passive_results = check_passives(state, current_id, TriggerType.ON_TURN_START)
 
     skipped = is_skipped(state, current_id)
-    return state, skipped, tick_results
+    return state, skipped, tick_results + passive_results
 
 
 def end_turn(state: CombatState, rng: SeededRNG) -> CombatState:
     current_id = state.turn_order[state.current_turn_index]
 
     state, _ = tick_effects(state, current_id, TriggerType.ON_TURN_END, rng)
+    state, _ = check_passives(state, current_id, TriggerType.ON_TURN_END)
     state = expire_effects(state, current_id)
 
     next_index = state.current_turn_index + 1

@@ -1,0 +1,29 @@
+# Modifier definitions
+# Examples (commented out — not shipped as active content):
+#
+# Stackable: each stack adds +100 base damage to slash
+# [modifiers.slash_power]
+# name = "Slash Power"
+# phase = "pre_hit"
+# stackable = true
+# skill_filter = "slash"
+# expr = "100"
+# action = "bonus_damage"
+#
+# Unique: changes slash damage type to fire (only one instance)
+# [modifiers.fire_slash]
+# name = "Fire Slash"
+# phase = "pre_hit"
+# stackable = false
+# skill_filter = "slash"
+# expr = "0"
+# action = "change_type"
+# damage_type_override = "fire"
+#
+# Stackable: vampirism — heal for 15% of damage dealt per stack
+# [modifiers.vampiric]
+# name = "Vampiric"
+# phase = "post_hit"
+# stackable = true
+# expr = "damage_dealt * 0.15"
+# action = "vampirism"

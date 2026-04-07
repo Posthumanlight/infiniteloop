@@ -9,10 +9,13 @@ from game.core.enums import (
     EffectAction,
     EventType,
     LocationType,
+    ModifierPhase,
     OutcomeAction,
     OutcomeTarget,
+    PassiveAction,
     TargetType,
     TriggerType,
+    UsageLimit,
 )
 from game.events.models import (
     ChoiceDef,
@@ -30,42 +33,6 @@ def _load_toml(filename: str) -> dict[str, Any]:
         with open(path, "rb") as f:
             _cache[filename] = tomllib.load(f)
     return _cache[filename]
-
-
-# ---------------------------------------------------------------------------
-# Formula configs
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class FormulaConfig:
-    formula_id: str
-    attack_scaling: float = 0.0
-    mastery_scaling: float = 0.0
-    resistance_scaling: float = 0.0
-    hp_scaling: float = 0.0
-    variance: float = 0.0
-
-
-def load_formulas() -> dict[str, FormulaConfig]:
-    raw = _load_toml("formulas.toml")["formulas"]
-    return {
-        fid: FormulaConfig(
-            formula_id=fid,
-            attack_scaling=fdata.get("attack_scaling", 0.0),
-            mastery_scaling=fdata.get("mastery_scaling", 0.0),
-            hp_scaling=fdata.get("hp_scaling", 0.0),
-            resistance_scaling=fdata.get("resistance_scaling", 0.0),
-            variance=fdata.get("variance", 0.0),
-        )
-        for fid, fdata in raw.items()
-    }
-
-
-def load_formula(formula_id: str) -> FormulaConfig:
-    formulas = load_formulas()
-    if formula_id not in formulas:
-        raise KeyError(f"Unknown formula: {formula_id}")
-    return formulas[formula_id]
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +92,8 @@ class OnHitEffectData:
 class SkillHitData:
     formula: str
     base_power: int
-    on_hit_effects: tuple[OnHitEffectData, ...]
+    variance: float | None = None
+    on_hit_effects: tuple[OnHitEffectData, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -156,6 +124,7 @@ def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
     return SkillHitData(
         formula=hit_raw["formula"],
         base_power=hit_raw["base_power"],
+        variance=hit_raw.get("variance"),
         on_hit_effects=tuple(on_hits),
     )
 
@@ -209,6 +178,7 @@ class ClassData:
     major_stats: dict[str, float]
     minor_stats: dict[str, float]
     starting_skills: tuple[str, ...]
+    starting_passives: tuple[str, ...] = ()
 
 
 def load_classes() -> dict[str, ClassData]:
@@ -221,6 +191,7 @@ def load_classes() -> dict[str, ClassData]:
             major_stats=dict(cdata["major_stats"]),
             minor_stats=dict(cdata.get("minor_stats", {})),
             starting_skills=tuple(cdata["starting_skills"]),
+            starting_passives=tuple(cdata.get("starting_passives", [])),
         )
         for cid, cdata in raw.items()
     }
@@ -246,6 +217,7 @@ class EnemyData:
     skills: tuple[str, ...]
     xp_reward: int
     tags: tuple[str, ...] = ()
+    passives: tuple[str, ...] = ()
 
 
 def load_enemies() -> dict[str, EnemyData]:
@@ -259,6 +231,7 @@ def load_enemies() -> dict[str, EnemyData]:
             skills=tuple(edata["skills"]),
             xp_reward=edata["xp_reward"],
             tags=tuple(edata.get("tags", [])),
+            passives=tuple(edata.get("passives", [])),
         )
         for eid, edata in raw.items()
     }
@@ -349,6 +322,92 @@ def load_event(event_id: str) -> EventDef:
     if event_id not in events:
         raise KeyError(f"Unknown event: {event_id}")
     return events[event_id]
+
+
+# ---------------------------------------------------------------------------
+# Passive skill definitions
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class PassiveSkillData:
+    skill_id: str
+    name: str
+    trigger: TriggerType
+    condition: str
+    action: PassiveAction
+    expr: str
+    usage_limit: UsageLimit
+    max_uses: int | None = None
+    effect_id: str | None = None
+    target_type: TargetType = TargetType.SELF
+
+
+def load_passives() -> dict[str, PassiveSkillData]:
+    raw = _load_toml("passives.toml").get("passives", {})
+    return {
+        pid: PassiveSkillData(
+            skill_id=pid,
+            name=pdata["name"],
+            trigger=TriggerType(pdata["trigger"]),
+            condition=pdata.get("condition", ""),
+            action=PassiveAction(pdata["action"]),
+            expr=pdata.get("expr", "0"),
+            usage_limit=UsageLimit(pdata["usage_limit"]),
+            max_uses=pdata.get("max_uses"),
+            effect_id=pdata.get("effect_id"),
+            target_type=TargetType(pdata.get("target_type", "self")),
+        )
+        for pid, pdata in raw.items()
+    }
+
+
+def load_passive(passive_id: str) -> PassiveSkillData:
+    passives = load_passives()
+    if passive_id not in passives:
+        raise KeyError(f"Unknown passive: {passive_id}")
+    return passives[passive_id]
+
+
+# ---------------------------------------------------------------------------
+# Skill modifier definitions
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SkillModifierData:
+    modifier_id: str
+    name: str
+    phase: ModifierPhase
+    stackable: bool
+    expr: str
+    action: str
+    skill_filter: str | None = None
+    damage_type_filter: str | None = None
+    damage_type_override: str | None = None
+
+
+def load_modifiers() -> dict[str, SkillModifierData]:
+    raw = _load_toml("modifiers.toml").get("modifiers", {})
+    return {
+        mid: SkillModifierData(
+            modifier_id=mid,
+            name=mdata["name"],
+            phase=ModifierPhase(mdata["phase"]),
+            stackable=mdata.get("stackable", False),
+            expr=mdata.get("expr", "0"),
+            action=mdata["action"],
+            skill_filter=mdata.get("skill_filter"),
+            damage_type_filter=mdata.get("damage_type_filter"),
+            damage_type_override=mdata.get("damage_type_override"),
+        )
+        for mid, mdata in raw.items()
+    }
+
+
+def load_modifier(modifier_id: str) -> SkillModifierData:
+    modifiers = load_modifiers()
+    if modifier_id not in modifiers:
+        raise KeyError(f"Unknown modifier: {modifier_id}")
+    return modifiers[modifier_id]
 
 
 # ---------------------------------------------------------------------------

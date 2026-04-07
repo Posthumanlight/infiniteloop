@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from game.core.enums import ActionType, CombatPhase, DamageType
+
+if TYPE_CHECKING:
+    from game.combat.passives import PassiveTracker
 
 
 @dataclass(frozen=True)
@@ -47,4 +53,9 @@ class CombatState:
     entities: dict[str, object]  # str -> BaseEntity (avoid circular import)
     phase: CombatPhase
     action_log: tuple[ActionResult, ...] = ()
+    passive_trackers: dict[str, PassiveTracker] = ()  # type: ignore[assignment]
     rng_state: tuple | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.passive_trackers, tuple):
+            object.__setattr__(self, "passive_trackers", {})

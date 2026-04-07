@@ -31,6 +31,12 @@ _CMP_OPS: dict[type, Any] = {
     ast.NotEq: operator.ne,
 }
 
+_BUILTINS: dict[str, Any] = {
+    "min": min,
+    "max": max,
+    "abs": abs,
+}
+
 
 @dataclass(frozen=True)
 class ExprContext:
@@ -141,12 +147,32 @@ def _eval_node(node: ast.expr, ctx: dict[str, Any]) -> float:
                 else _eval_node(orelse, ctx)
             )
 
+        case ast.Call(func=ast.Name(id=func_name), args=args, keywords=kw):
+            if kw:
+                raise ExprError("Keyword arguments are not allowed")
+            return _eval_builtin(func_name, args, ctx)
+
         case _:
             raise ExprError(
                 f"Unsupported expression node: {type(node).__name__}. "
-                "Only literals, variables, arithmetic, comparisons, and "
-                "conditionals are allowed."
+                "Only literals, variables, arithmetic, comparisons, "
+                "conditionals, and builtin functions are allowed."
             )
+
+
+def _eval_builtin(
+    name: str, args: list[ast.expr], ctx: dict[str, Any],
+) -> float:
+    """Evaluate a safe builtin function call (min, max, abs, clamp)."""
+    if name == "clamp":
+        if len(args) != 3:
+            raise ExprError("clamp() requires exactly 3 arguments: value, low, high")
+        val, lo, hi = (_eval_node(a, ctx) for a in args)
+        return float(max(lo, min(hi, val)))
+    if name not in _BUILTINS:
+        raise ExprError(f"Unknown function: {name}")
+    evaluated = [_eval_node(a, ctx) for a in args]
+    return float(_BUILTINS[name](*evaluated))
 
 
 def _resolve_object(node: ast.expr, ctx: dict[str, Any]) -> Any:

@@ -5,6 +5,7 @@ min_party_size = 1
 initiative_dice = 20
 skip_turn_on_timeout = true
 min_damage = 0
+default_variance = 0.1
 
 [restoration]
 # Expression evaluated per alive player between nodes.

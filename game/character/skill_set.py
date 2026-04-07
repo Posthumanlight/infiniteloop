@@ -13,6 +13,7 @@ class OnHitEffect:
 class SkillHit:
     formula: str
     base_power: int
+    variance: float | None = None
     on_hit_effects: tuple[OnHitEffect, ...] = ()
 
 

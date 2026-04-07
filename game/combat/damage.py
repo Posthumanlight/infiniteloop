@@ -1,30 +1,42 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from game.character.base_entity import BaseEntity
+from game.combat.effects import build_expr_context
 from game.combat.models import DamageResult
-from game.core.data_loader import load_formula
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType
+from game.core.formula_eval import evaluate_expr
+
+if TYPE_CHECKING:
+    from game.combat.skill_modifiers import ResolvedModifier
 
 
 def resolve_damage(
     attacker: BaseEntity,
     defender: BaseEntity,
-    formula_id: str,
+    formula_expr: str,
     base_power: int,
     damage_type: DamageType,
     rng: SeededRNG,
-    effect_multiplier: float,
     constants: dict,
+    modifiers: tuple[ResolvedModifier, ...] = (),
+    variance: float | None = None,
+    effect_multiplier: float = 1.0,
 ) -> DamageResult:
-    formula = load_formula(formula_id)
+    ctx: dict[str, object] = {
+        "base_power": base_power,
+        "attacker": build_expr_context(attacker),
+        "target": build_expr_context(defender),
+    }
 
-    raw = (
-        base_power
-        + attacker.major_stats.attack * formula.attack_scaling
-        + attacker.major_stats.mastery * formula.mastery_scaling
-        + attacker.major_stats.hp * formula.hp_scaling
-    )
+    raw = evaluate_expr(formula_expr, ctx)
 
-    after_def = raw - defender.major_stats.resistance
+    for mod in modifiers:
+        raw += evaluate_expr(mod.expr, ctx) * mod.stack_count
+
+    after_def = raw
 
     after_type = (
         after_def
@@ -36,8 +48,8 @@ def resolve_damage(
     if is_crit:
         after_type *= attacker.major_stats.crit_dmg
 
-    variance = formula.variance
-    after_var = after_type * rng.uniform(1.0 - variance, 1.0 + variance)
+    var = variance if variance is not None else constants.get("default_variance", 0.1)
+    after_var = after_type * rng.uniform(1.0 - var, 1.0 + var)
 
     after_effects = after_var * effect_multiplier
 
@@ -48,5 +60,5 @@ def resolve_damage(
         amount=final,
         damage_type=damage_type,
         is_crit=is_crit,
-        formula_id=formula_id,
+        formula_id="expr",
     )
