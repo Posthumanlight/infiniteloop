@@ -9,9 +9,9 @@ usage_limit = "once_per_combat"
 target_type = "self"
 
 [passives.arcane_prowess]
-name = arcane_prowess
+name = "Arcane Prowess"
 trigger = "on_hit"
-condition = "damage_type = arcane"
+condition = "damage_type == ARCANE"
 action = "apply_effect"
 effect_id = "empowered_arcane"
 expr = "1"
