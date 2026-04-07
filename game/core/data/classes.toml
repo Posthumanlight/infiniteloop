@@ -9,7 +9,7 @@ hp = 125
 speed = 10
 crit_chance = 0.10
 crit_dmg = 1.25
-resistance = 100
+resistance = 9
 energy = 100
 mastery = 5
 

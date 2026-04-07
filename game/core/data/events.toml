@@ -7,8 +7,6 @@ max_depth = 10
 weight = 5
 
 [[events.cursed_shrine.choices]]
-
-[[events.cursed_shrine.choices]]
 label = "Desecrate the shrine"
 description = "Destroy the source of evil."
 outcomes = [

@@ -6,6 +6,5 @@ xp_thresholds = [0, 100, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000
 
 [level_scaling.warrior]
 attack = 3
-hp = 15
-resistance = 2
+hp = 25
 speed = 1
