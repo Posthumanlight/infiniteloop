@@ -6,7 +6,7 @@ energy_cost = 0
 action_type = "action"
 damage_type = "slashing"
 hits = [
-  { formula = "attacker.attack", variance = 0.25 },
+  { formula = "attacker.attack+base_power",   base_power = 0, variance = 0.25 },
 ]
 #warrior
 [skills.slash]
