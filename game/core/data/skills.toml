@@ -1,3 +1,14 @@
+#generics
+[skill.generic_enemy_attack]
+name = "Attack"
+target_type = "single_enemy"
+energy_cost = 0
+action_type = "action"
+damage_type = "slashing"
+hits = [
+  { formula = "attacker.attack", variance = 0.25 },
+]
+#warrior
 [skills.slash]
 name = "Slash"
 target_type = "single_enemy"
@@ -18,6 +29,7 @@ hits = [
   { formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.1 },
 ]
 
+#mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"
 target_type = "single_enemy"
@@ -26,4 +38,6 @@ action_type = "action"
 damage_type = "arcane"
 hits = [
   { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
+  { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
+
 ]

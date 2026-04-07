@@ -1,6 +1,6 @@
 [enemies.goblin]
 name = "Goblin"
-skills = ["slash"]
+skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 15
 tags = ["forest", "cave"]
@@ -20,7 +20,7 @@ mastery = 2
 
 [enemies.skeleton]
 name = "Skeleton"
-skills = ["slash"]
+skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 18
 tags = ["undead", "cave", "ruins"]
@@ -41,7 +41,7 @@ slashing_def_pct = 0.1
 
 [enemies.wolf]
 name = "Wolf"
-skills = ["slash"]
+skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 12
 tags = ["forest", "wild"]
@@ -61,7 +61,7 @@ mastery = 1
 
 [enemies.fire_imp]
 name = "Fire Imp"
-skills = ["slash"]
+skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 20
 tags = ["fire", "cave"]
@@ -82,7 +82,7 @@ fire_dmg_pct = 0.15
 
 [enemies.bandit]
 name = "Bandit"
-skills = ["slash"]
+skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 16
 tags = ["forest", "road", "ruins"]
