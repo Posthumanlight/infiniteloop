@@ -5,7 +5,7 @@ condition = "attacker.current_hp < attacker.hp * 0.25"
 action = "apply_effect"
 effect_id = "fortify"
 expr = "1"
-usage_limit = "once_per_combat"
+usage_limit = "unlimited"
 target_type = "self"
 
 [passives.arcane_prowess]
