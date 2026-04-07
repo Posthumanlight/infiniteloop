@@ -1,24 +1,35 @@
 [effects.poison]
 name = "Poison"
 trigger = "on_turn_start"
-action = "damage"
-expr = "target.hp * 0.05"
-damage_type = "slashing"
 duration = 3
-stackable = false
+stackable = true
+actions = [
+  { type = "damage", expr = "target.hp * 0.05", damage_type = "slashing" },
+]
 
 [effects.stun]
 name = "Stun"
 trigger = "on_turn_start"
-action = "debuff"
-expr = "1"
 duration = 1
 stackable = false
+actions = [
+  { type = "skip_turn" },
+]
 
 [effects.fortify]
 name = "Fortify"
 trigger = "on_damage_calc"
-action = "buff"
-expr = "0.75"
 duration = 1
 stackable = false
+actions = [
+  { type = "damage_taken_mult", expr = "0.75" },
+]
+
+[effects.empowered_arcane]
+name = "Empowered Arcane"
+trigger = "on_damage_calc"
+duration = 10
+stackable = true
+actions = [
+  { type = "stat_modify", stat = "arcane_dmg_pct", expr = "0.1", scales_with_stacks = true },
+]

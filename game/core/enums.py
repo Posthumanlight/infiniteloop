@@ -27,6 +27,7 @@ class ActionType(Enum):
 class TriggerType(Enum):
     ON_TURN_START = "on_turn_start"
     ON_TURN_END = "on_turn_end"
+    ON_CAST = "on_cast"
     ON_HIT = "on_hit"
     ON_DAMAGE_CALC = "on_damage_calc"
     ON_ROUND_START = "on_round_start"
@@ -36,11 +37,14 @@ class TriggerType(Enum):
     ON_ALLY_DEATH = "on_ally_death"
 
 
-class EffectAction(Enum):
+class EffectActionType(Enum):
     DAMAGE = "damage"
     HEAL = "heal"
-    BUFF = "buff"
-    DEBUFF = "debuff"
+    SKIP_TURN = "skip_turn"
+    DAMAGE_DEALT_MULT = "damage_dealt_mult"
+    DAMAGE_TAKEN_MULT = "damage_taken_mult"
+    STAT_MODIFY = "stat_modify"
+    GRANT_ENERGY = "grant_energy"
 
 
 class CombatPhase(Enum):
@@ -108,9 +112,7 @@ class SessionEndReason(Enum):
 
 class UsageLimit(Enum):
     UNLIMITED = "unlimited"
-    ONCE_PER_TURN = "once_per_turn"
-    ONCE_PER_COMBAT = "once_per_combat"
-    TWICE_PER_COMBAT = "twice_per_combat"
+    N_PER_TURN = "n_per_turn"
     N_PER_COMBAT = "n_per_combat"
 
 
@@ -119,7 +121,6 @@ class PassiveAction(Enum):
     DAMAGE = "damage"
     HEAL = "heal"
     MODIFY_STAT = "modify_stat"
-    BONUS_DAMAGE = "bonus_damage"
 
 
 class ModifierPhase(Enum):

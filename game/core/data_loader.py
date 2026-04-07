@@ -6,7 +6,7 @@ from typing import Any
 from game.core.enums import (
     ActionType,
     DamageType,
-    EffectAction,
+    EffectActionType,
     EventType,
     LocationType,
     ModifierPhase,
@@ -40,33 +40,53 @@ def _load_toml(filename: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
+class EffectActionDef:
+    action_type: EffectActionType
+    expr: str = "0"
+    scales_with_stacks: bool = True
+    damage_type: DamageType | None = None   # for "damage" — what type of damage
+    stat: str | None = None                  # for "stat_modify" — which stat
+
+
+@dataclass(frozen=True)
 class EffectDef:
     effect_id: str
     name: str
     trigger: TriggerType
-    action: EffectAction
-    expr: str
     duration: int
     stackable: bool
-    damage_type: DamageType | None = None
+    actions: tuple[EffectActionDef, ...]
+    apply_condition: str | None = None       # checked once on apply
+    tick_condition: str | None = None         # checked each tick/on-demand
+
+
+def _parse_effect_action(raw: dict[str, Any]) -> EffectActionDef:
+    dmg_type = None
+    if "damage_type" in raw:
+        dmg_type = DamageType(raw["damage_type"])
+    return EffectActionDef(
+        action_type=EffectActionType(raw["type"]),
+        expr=raw.get("expr", "0"),
+        scales_with_stacks=raw.get("scales_with_stacks", True),
+        damage_type=dmg_type,
+        stat=raw.get("stat"),
+    )
 
 
 def load_effects() -> dict[str, EffectDef]:
     raw = _load_toml("effects.toml")["effects"]
     result: dict[str, EffectDef] = {}
     for eid, edata in raw.items():
-        dmg_type = None
-        if "damage_type" in edata:
-            dmg_type = DamageType(edata["damage_type"])
+        actions = tuple(_parse_effect_action(a) for a in edata.get("actions", []))
         result[eid] = EffectDef(
             effect_id=eid,
             name=edata["name"],
             trigger=TriggerType(edata["trigger"]),
-            action=EffectAction(edata["action"]),
-            expr=edata["expr"],
             duration=edata["duration"],
             stackable=edata["stackable"],
-            damage_type=dmg_type,
+            actions=actions,
+            apply_condition=edata.get("apply_condition"),
+            tick_condition=edata.get("tick_condition"),
         )
     return result
 

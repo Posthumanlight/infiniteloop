@@ -34,7 +34,7 @@ def resolve_skill(
             if defender.current_hp <= 0:
                 break
 
-            effect_mult = get_damage_multiplier(state, actor_id, target_id)
+            effect_mult = get_damage_multiplier(state, actor_id, target_id, skill.damage_type)
 
             dmg_result = resolve_damage(
                 attacker=attacker,
@@ -47,6 +47,7 @@ def resolve_skill(
                 modifiers=pre_hit_mods,
                 variance=hit.variance,
                 effect_multiplier=effect_mult,
+                state=state,
             )
 
             current_defender = state.entities[target_id]

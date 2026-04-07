@@ -13,7 +13,7 @@ from game.core.data_loader import (
 from game.core.enums import (
     ActionType,
     DamageType,
-    EffectAction,
+    EffectActionType,
     TargetType,
     TriggerType,
 )
@@ -30,23 +30,26 @@ def test_load_effect_poison():
     e = load_effect("poison")
     assert e.effect_id == "poison"
     assert e.trigger == TriggerType.ON_TURN_START
-    assert e.action == EffectAction.DAMAGE
+    assert len(e.actions) == 1
+    assert e.actions[0].action_type == EffectActionType.DAMAGE
+    assert e.actions[0].damage_type == DamageType.SLASHING
     assert e.duration == 3
-    assert e.stackable is False
-    assert e.damage_type == DamageType.SLASHING
+    assert e.stackable is True
 
 
 def test_load_effect_stun():
     e = load_effect("stun")
-    assert e.action == EffectAction.DEBUFF
+    assert len(e.actions) == 1
+    assert e.actions[0].action_type == EffectActionType.SKIP_TURN
     assert e.duration == 1
 
 
 def test_load_effect_fortify():
     e = load_effect("fortify")
     assert e.trigger == TriggerType.ON_DAMAGE_CALC
-    assert e.action == EffectAction.BUFF
-    assert e.expr == "0.75"
+    assert len(e.actions) == 1
+    assert e.actions[0].action_type == EffectActionType.DAMAGE_TAKEN_MULT
+    assert e.actions[0].expr == "0.75"
 
 
 def test_load_skill_slash():

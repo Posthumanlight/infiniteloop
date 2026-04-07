@@ -27,8 +27,6 @@ class PassiveTracker:
                 return turn_count < 1
             case UsageLimit.ONCE_PER_COMBAT:
                 return combat_count < 1
-            case UsageLimit.TWICE_PER_COMBAT:
-                return combat_count < 2
             case UsageLimit.N_PER_COMBAT:
                 return combat_count < (passive.max_uses or 0)
 

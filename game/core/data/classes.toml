@@ -16,3 +16,24 @@ mastery = 5
 
 [classes.warrior.minor_stats]
 slashing_dmg_pct = 0.1
+
+[classes.mage]
+name = "Mage"
+description = "Spellcaster"
+starting_skills = ["arcane_bolt"]
+starting_passives = ["arcane_prowess"]
+
+[classes.mage.major_stats]
+attack = 15
+hp = 75
+speed = 8
+crit_chance = 0.20
+crit_dmg = 1.35
+resistance = 6
+energy = 150
+mastery = 2
+
+[classes.mage.minor_stats]
+fire_dmg_pct = 0.1
+arcane_dmg_pct = 0.1
+ice_dmg_pct = 0.1

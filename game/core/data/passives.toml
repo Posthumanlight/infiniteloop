@@ -7,3 +7,12 @@ effect_id = "fortify"
 expr = "1"
 usage_limit = "once_per_combat"
 target_type = "self"
+
+[passives.arcane_prowess]
+name = arcane_prowess
+trigger = "on_hit"
+condition = "damage_type = arcane"
+action = "apply_effect"
+effect_id = "empowered_arcane"
+expr = "1"
+usage_limit = "unlimited"
