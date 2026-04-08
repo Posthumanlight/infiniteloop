@@ -1,5 +1,3 @@
-"""Session lifecycle handlers: /newgame, /join, /explore, /status, /flee, class selection."""
-
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
@@ -43,7 +41,7 @@ def _player_info(user) -> PlayerInfo:
 # /newgame
 # ------------------------------------------------------------------
 
-@router.message(Command("newgame"))
+@router.message(Command("run"))
 async def cmd_newgame(
     message: Message,
     game_service: GameService,
@@ -222,15 +220,6 @@ async def _start_run(
     await state.set_state(GameStates.exploring)
 
 
-@router.message(Command("explore"))
-async def cmd_explore(
-    message: Message,
-    game_service: GameService,
-    state: FSMContext,
-) -> None:
-    await _start_run(message, game_service, state)
-
-
 @router.callback_query(F.data == "g:start")
 async def cb_start(
     callback: CallbackQuery,
@@ -245,7 +234,7 @@ async def cb_start(
 # /status
 # ------------------------------------------------------------------
 
-@router.message(Command("status"))
+@router.message(Command("combat"))
 async def cmd_status(
     message: Message,
     game_service: GameService,
@@ -264,7 +253,7 @@ async def cmd_status(
 # /flee
 # ------------------------------------------------------------------
 
-@router.message(Command("flee"))
+@router.message(Command("leave"))
 async def cmd_flee(
     message: Message,
     game_service: GameService,
