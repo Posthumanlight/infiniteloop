@@ -14,6 +14,7 @@ from server.services.game_service import GameService
 
 from bot.bot import router as bot_router, set_bot_commands, onboarding_router as bot_onboarding_router
 from bot.handlers.game import router as game_router
+from bot.handlers.character import router as character_router
 from bot.handlers.combat import router as combat_router
 from bot.handlers.exploration import router as exploration_router
 
@@ -28,6 +29,7 @@ dp = Dispatcher()
 dp.include_router(bot_router)
 dp.include_router(bot_onboarding_router)
 dp.include_router(game_router)
+dp.include_router(character_router)
 dp.include_router(combat_router)
 dp.include_router(exploration_router)
 

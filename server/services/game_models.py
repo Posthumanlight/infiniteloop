@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from game.combat.models import ActionResult
-from game.core.enums import EntityType
+from game.core.enums import EntityType, TargetType
 
 
 @dataclass(frozen=True)
@@ -51,3 +51,72 @@ class CombatSnapshot:
     turn_order: tuple[str, ...]
     whose_turn: str
     round_number: int
+
+
+# ------------------------------------------------------------------
+# Character sheet DTOs
+# ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SkillInfo:
+    """Display-ready skill data."""
+
+    skill_id: str
+    name: str
+    energy_cost: int
+    target_type: TargetType
+    damage_type: str | None
+
+
+@dataclass(frozen=True)
+class PassiveInfo:
+    """Display-ready passive skill data."""
+
+    skill_id: str
+    name: str
+    trigger: str
+    action: str
+
+
+@dataclass(frozen=True)
+class ModifierInfo:
+    """Display-ready skill modifier data."""
+
+    modifier_id: str
+    name: str
+    stack_count: int
+
+
+@dataclass(frozen=True)
+class EffectInfo:
+    """Display-ready status effect data."""
+
+    effect_id: str
+    name: str
+    remaining_duration: int
+    stack_count: int
+    is_buff: bool
+
+
+@dataclass(frozen=True)
+class CharacterSheet:
+    """Full character state for display."""
+
+    entity_id: str
+    display_name: str
+    class_id: str
+    class_name: str
+    level: int
+    xp: int
+    current_hp: int
+    max_hp: int
+    current_energy: int
+    max_energy: int
+    major_stats: dict[str, float]
+    minor_stats: dict[str, float]
+    skills: tuple[SkillInfo, ...]
+    passives: tuple[PassiveInfo, ...]
+    modifiers: tuple[ModifierInfo, ...]
+    active_effects: tuple[EffectInfo, ...]
+    in_combat: bool

@@ -1,15 +1,29 @@
 from dataclasses import dataclass, replace
 
+from game.combat.effects import get_effective_major_stat, get_effective_minor_stat
 from game.combat.models import ActionRequest, ActionResult
-from game.core.data_loader import ClassData, load_classes
-from game.core.enums import ActionType, EntityType, SessionPhase
+from game.core.data_loader import (
+    ClassData,
+    load_class,
+    load_classes,
+    load_effect,
+    load_modifier,
+    load_passive,
+    load_skill,
+)
+from game.core.enums import ActionType, EffectActionType, EntityType, SessionPhase
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
 from server.services.game_models import (
+    CharacterSheet,
     CombatSnapshot,
+    EffectInfo,
     EntitySnapshot,
+    ModifierInfo,
+    PassiveInfo,
     PlayerInfo,
+    SkillInfo,
     TurnBatch,
 )
 
@@ -274,6 +288,198 @@ class GameService:
         if session is None or session.state is None or session.state.combat is None:
             return None
         return self._current_turn_id(session)
+
+    # ------------------------------------------------------------------
+    # Character sheet
+    # ------------------------------------------------------------------
+
+    def get_character_sheet(
+        self, session_id: str, entity_id: str,
+    ) -> CharacterSheet:
+        session = self._get_session(session_id)
+        if entity_id not in session.players:
+            raise ValueError("You are not in this game")
+
+        player_info = session.players[entity_id]
+        if player_info.class_id is None:
+            raise ValueError("Choose a class first")
+
+        class_data = load_class(player_info.class_id)
+        in_combat = (
+            session.state is not None
+            and session.state.combat is not None
+        )
+
+        # Resolve the entity with current HP/effects
+        if session.state is None:
+            # Lobby phase — use class template
+            return self._sheet_from_class_template(
+                player_info, class_data,
+            )
+
+        player = next(
+            (p for p in session.state.players if p.entity_id == entity_id),
+            None,
+        )
+        if player is None:
+            raise ValueError("You are not in this game")
+
+        if in_combat:
+            entity = session.state.combat.entities.get(entity_id, player)
+            combat_state = session.state.combat
+        else:
+            entity = player
+            combat_state = None
+
+        # Major stats — effective if in combat, raw otherwise
+        major_stats: dict[str, float] = {}
+        for stat_name in (
+            "attack", "hp", "speed", "crit_chance", "crit_dmg",
+            "resistance", "energy", "mastery",
+        ):
+            if combat_state is not None:
+                major_stats[stat_name] = get_effective_major_stat(
+                    combat_state, entity_id, stat_name,
+                )
+            else:
+                major_stats[stat_name] = float(
+                    getattr(entity.major_stats, stat_name),
+                )
+
+        # Minor stats — effective if in combat, raw otherwise
+        minor_stats: dict[str, float] = {}
+        for key, val in entity.minor_stats.values.items():
+            if combat_state is not None:
+                minor_stats[key] = get_effective_minor_stat(
+                    combat_state, entity_id, key,
+                )
+            else:
+                minor_stats[key] = val
+
+        # Skills
+        skill_ids = player.skills
+        skills = tuple(
+            self._build_skill_info(sid) for sid in skill_ids
+        )
+
+        # Passives
+        passives = tuple(
+            self._build_passive_info(pid) for pid in entity.passive_skills
+        )
+
+        # Modifiers
+        modifiers = tuple(
+            self._build_modifier_info(mod)
+            for mod in entity.skill_modifiers
+        )
+
+        # Active effects
+        active_effects = tuple(
+            self._build_effect_info(eff)
+            for eff in entity.active_effects
+        )
+
+        return CharacterSheet(
+            entity_id=entity_id,
+            display_name=player_info.display_name,
+            class_id=player_info.class_id,
+            class_name=class_data.name,
+            level=player.level,
+            xp=player.xp,
+            current_hp=entity.current_hp,
+            max_hp=entity.major_stats.hp,
+            current_energy=entity.current_energy,
+            max_energy=entity.major_stats.energy,
+            major_stats=major_stats,
+            minor_stats=minor_stats,
+            skills=skills,
+            passives=passives,
+            modifiers=modifiers,
+            active_effects=active_effects,
+            in_combat=in_combat,
+        )
+
+    def _sheet_from_class_template(
+        self,
+        player_info: PlayerInfo,
+        class_data: ClassData,
+    ) -> CharacterSheet:
+        """Build a character sheet from class template (lobby phase)."""
+        major = class_data.major_stats
+        skills = tuple(
+            self._build_skill_info(sid) for sid in class_data.starting_skills
+        )
+        passives = tuple(
+            self._build_passive_info(pid)
+            for pid in class_data.starting_passives
+        )
+        return CharacterSheet(
+            entity_id=player_info.entity_id,
+            display_name=player_info.display_name,
+            class_id=class_data.class_id,
+            class_name=class_data.name,
+            level=1,
+            xp=0,
+            current_hp=int(major.get("hp", 0)),
+            max_hp=int(major.get("hp", 0)),
+            current_energy=int(major.get("energy", 0)),
+            max_energy=int(major.get("energy", 0)),
+            major_stats={k: float(v) for k, v in major.items()},
+            minor_stats={k: float(v) for k, v in class_data.minor_stats.items()},
+            skills=skills,
+            passives=passives,
+            modifiers=(),
+            active_effects=(),
+            in_combat=False,
+        )
+
+    @staticmethod
+    def _build_skill_info(skill_id: str) -> SkillInfo:
+        data = load_skill(skill_id)
+        return SkillInfo(
+            skill_id=data.skill_id,
+            name=data.name,
+            energy_cost=data.energy_cost,
+            target_type=data.target_type,
+            damage_type=data.damage_type.value if data.damage_type else None,
+        )
+
+    @staticmethod
+    def _build_passive_info(passive_id: str) -> PassiveInfo:
+        data = load_passive(passive_id)
+        return PassiveInfo(
+            skill_id=data.skill_id,
+            name=data.name,
+            trigger=data.trigger.value,
+            action=data.action.value,
+        )
+
+    @staticmethod
+    def _build_modifier_info(mod) -> ModifierInfo:
+        data = load_modifier(mod.modifier_id)
+        return ModifierInfo(
+            modifier_id=mod.modifier_id,
+            name=data.name,
+            stack_count=mod.stack_count,
+        )
+
+    @staticmethod
+    def _build_effect_info(eff) -> EffectInfo:
+        data = load_effect(eff.effect_id)
+        _BUFF_ACTIONS = frozenset({
+            EffectActionType.HEAL,
+            EffectActionType.STAT_MODIFY,
+            EffectActionType.GRANT_ENERGY,
+            EffectActionType.DAMAGE_DEALT_MULT,
+        })
+        is_buff = all(a.action_type in _BUFF_ACTIONS for a in data.actions)
+        return EffectInfo(
+            effect_id=eff.effect_id,
+            name=data.name,
+            remaining_duration=eff.remaining_duration,
+            stack_count=eff.stack_count,
+            is_buff=is_buff,
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
