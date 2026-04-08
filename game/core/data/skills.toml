@@ -37,7 +37,7 @@ energy_cost = 0
 action_type = "action"
 damage_type = "arcane"
 hits = [
-  { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
-  { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
+  { formula = "base_power + attacker.attack * 0.8", base_power = 1, variance = 0 },
+  { formula = "base_power + attacker.attack * 0.8", base_power = 1, variance = 0 },
 
 ]
