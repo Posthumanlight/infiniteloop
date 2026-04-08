@@ -6,7 +6,7 @@ from typing import Any
 from game.combat.effects import apply_effect, build_expr_context
 from game.combat.models import CombatState, DamageResult, HitResult
 from game.core.data_loader import PassiveSkillData, load_passive
-from game.core.enums import PassiveAction, TriggerType, UsageLimit
+from game.core.enums import DamageType, PassiveAction, TriggerType, UsageLimit
 from game.core.formula_eval import evaluate_expr
 
 
@@ -23,10 +23,8 @@ class PassiveTracker:
         match passive.usage_limit:
             case UsageLimit.UNLIMITED:
                 return True
-            case UsageLimit.ONCE_PER_TURN:
-                return turn_count < 1
-            case UsageLimit.ONCE_PER_COMBAT:
-                return combat_count < 1
+            case UsageLimit.N_PER_TURN:
+                return turn_count < (passive.max_uses or 0)
             case UsageLimit.N_PER_COMBAT:
                 return combat_count < (passive.max_uses or 0)
 
@@ -47,6 +45,38 @@ class PassiveTracker:
 
 def _empty_tracker() -> PassiveTracker:
     return PassiveTracker(usage_counts={}, turn_usage={})
+
+
+_DAMAGE_TYPE_NUMERIC: dict[DamageType, int] = {
+    DamageType.SLASHING: 1,
+    DamageType.PIERCING: 2,
+    DamageType.ARCANE: 3,
+    DamageType.FIRE: 4,
+    DamageType.ICE: 5,
+}
+
+
+def _damage_type_to_numeric(value: DamageType | None) -> int:
+    if value is None:
+        return 0
+    return _DAMAGE_TYPE_NUMERIC[value]
+
+
+def _normalize_damage_type(value: Any) -> int:
+    if isinstance(value, DamageType) or value is None:
+        return _damage_type_to_numeric(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return _damage_type_to_numeric(DamageType(value))
+        except ValueError:
+            return 0
+    return 0
+
+
+def _build_damage_type_constants() -> dict[str, int]:
+    return {dt.name: _damage_type_to_numeric(dt) for dt in DamageType}
 
 
 def _update_entity(state: CombatState, entity_id: str, **kwargs: object) -> CombatState:
@@ -110,7 +140,9 @@ def check_passives(
         return state, []
 
     results: list[HitResult] = []
-    ctx_extra = trigger_context or {}
+    ctx_extra = dict(trigger_context or {})
+    if "damage_type" in ctx_extra:
+        ctx_extra["damage_type"] = _normalize_damage_type(ctx_extra["damage_type"])
 
     for passive_id in entity.passive_skills:
         passive = load_passive(passive_id)
@@ -123,6 +155,7 @@ def check_passives(
 
         ctx: dict[str, Any] = {
             "attacker": build_expr_context(entity),
+            **_build_damage_type_constants(),
             **ctx_extra,
         }
         if passive.condition and not evaluate_expr(passive.condition, ctx):

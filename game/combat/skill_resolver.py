@@ -76,6 +76,12 @@ def resolve_skill(
                 effects_applied=tuple(effects_applied),
             ))
 
+            # Passive triggers: ON_HIT
+            state, _ = check_passives(
+                state, actor_id, TriggerType.ON_HIT,
+                {"damage_type": skill.damage_type},
+            )
+
             # Passive triggers: ON_TAKE_DAMAGE
             state, _ = check_passives(
                 state, target_id, TriggerType.ON_TAKE_DAMAGE,
