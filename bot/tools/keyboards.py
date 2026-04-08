@@ -9,7 +9,7 @@ from settings.config import settings
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
     from game.events.models import ChoiceDef
-    from server.services.game_models import EntitySnapshot
+    from server.services.game_models import EntitySnapshot, ModifierOfferInfo
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -110,5 +110,18 @@ def event_choice_keyboard(choices: tuple[ChoiceDef, ...]) -> InlineKeyboardMarku
             callback_data=f"g:evt:{choice.index}",
         )]
         for choice in choices
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def modifier_choice_keyboard(
+    offers: tuple[ModifierOfferInfo, ...],
+) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(
+            text=offer.name,
+            callback_data=f"g:mod:{offer.modifier_id}",
+        )]
+        for offer in offers
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)

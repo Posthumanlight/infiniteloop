@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState
@@ -6,6 +6,17 @@ from game.core.enums import SessionEndReason, SessionPhase
 from game.events.models import EventState
 from game.world.models import ExplorationState
 
+
+@dataclass(frozen=True)
+class PendingModifierChoice:
+    pending_count: int = 0
+    current_offer: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ModifierRewardNotice:
+    player_id: str
+    skipped_count: int = 1
 
 
 @dataclass(frozen=True)
@@ -27,6 +38,8 @@ class SessionState:
     exploration: ExplorationState | None = None
     combat: CombatState | None = None
     event: EventState | None = None
+    pending_modifier_choices: dict[str, PendingModifierChoice] = field(default_factory=dict)
+    modifier_reward_notices: tuple[ModifierRewardNotice, ...] = ()
     run_stats: RunStats = RunStats()
     end_reason: SessionEndReason | None = None
     max_depth: int = 10

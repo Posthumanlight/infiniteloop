@@ -1,29 +1,51 @@
-# Modifier definitions
-# Examples (commented out — not shipped as active content):
-#
-# Stackable: each stack adds +100 base damage to slash
-# [modifiers.slash_power]
-# name = "Slash Power"
-# phase = "pre_hit"
-# stackable = true
-# skill_filter = "slash"
-# expr = "100"
-# action = "bonus_damage"
-#
-# Unique: changes slash damage type to fire (only one instance)
-# [modifiers.fire_slash]
-# name = "Fire Slash"
-# phase = "pre_hit"
-# stackable = false
-# skill_filter = "slash"
-# expr = "0"
-# action = "change_type"
-# damage_type_override = "fire"
-#
-# Stackable: vampirism — heal for 15% of damage dealt per stack
-# [modifiers.vampiric]
-# name = "Vampiric"
-# phase = "post_hit"
-# stackable = true
-# expr = "damage_dealt * 0.15"
-# action = "vampirism"
+# Stackable: each stack adds +10 base damage to slash
+[modifiers.slash_power]
+name = "Slash Power"
+phase = "pre_hit"
+stackable = true
+skill_filter = "slash"
+class_tags = ["warrior"]
+expr = "10"
+action = "bonus_damage"
+#Stackable: vampirism — heal for 7% of damage dealt per stack
+[modifiers.vampiric]
+name = "Vampiric"
+phase = "post_hit"
+stackable = true
+expr = "damage_dealt * 0.07"
+action = "vampirism"
+class_tags=["warrior", "mage"]
+
+[modifiers.arcane_bolt_power]
+name = "Arcane Bolt Damage"
+phase = "pre_hit"
+stackable = true
+skill_filter = "arcane_bolt"
+class_tags = ["mage"]
+expr = "10"
+action = "bonus_damage"
+
+[modifiers.warrior_training]
+name = "Warrior Training"
+phase = "pre_hit"
+stackable = true
+class_tags = ["warrior"]
+expr = "5"
+action = "bonus_damage"
+
+[modifiers.battle_hardened]
+name = "Battle Hardened"
+phase = "pre_hit"
+stackable = true
+expr = "3"
+action = "bonus_damage"
+
+[modifiers.fire_brand]
+name = "Fire Brand"
+phase = "pre_hit"
+stackable = false
+skill_filter = "slash"
+class_tags = ["warrior"]
+expr = "0"
+action = "change_type"
+damage_type_override = "fire"

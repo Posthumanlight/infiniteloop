@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from game.events.models import EventState
     from game.session.models import RunStats, SessionState
     from game.world.models import LocationVote
-    from server.services.game_models import PlayerInfo
+    from server.services.game_models import ModifierOfferInfo, PlayerInfo
 
 
 def render_class_prompt(
@@ -94,6 +94,30 @@ def render_event(
         lines.append(f"\nWaiting for: {', '.join(waiting)}")
 
     return "\n".join(lines)
+
+
+def render_modifier_choices(
+    player_name: str,
+    pending_count: int,
+    offers: tuple[ModifierOfferInfo, ...],
+) -> str:
+    """Show level-up modifier choices for a single player."""
+    lines = [
+        f"\u2b50 Level-up reward for {player_name}",
+        f"Pick 1 modifier ({pending_count} pick(s) remaining):",
+        "",
+    ]
+    for i, offer in enumerate(offers, start=1):
+        lines.append(f"  {i}. {offer.name}")
+    return "\n".join(lines)
+
+
+def render_modifier_notice(player_name: str, skipped_count: int) -> str:
+    suffix = "pick" if skipped_count == 1 else "picks"
+    return (
+        f"\u2139\ufe0f {player_name}: {skipped_count} level-up {suffix} "
+        "had no eligible modifiers and was skipped."
+    )
 
 
 def render_run_summary(

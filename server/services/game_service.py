@@ -20,7 +20,10 @@ from server.services.game_models import (
     CombatSnapshot,
     EffectInfo,
     EntitySnapshot,
+    ModifierChoiceNoticeInfo,
     ModifierInfo,
+    ModifierOfferInfo,
+    PendingModifierChoiceInfo,
     PassiveInfo,
     PlayerInfo,
     SkillInfo,
@@ -172,6 +175,57 @@ class GameService:
         """After combat/event ends, generate new location choices."""
         session = self._get_session(session_id)
         session.state = session.manager.generate_choices(session.state)
+
+    def get_pending_modifier_choices(
+        self,
+        session_id: str,
+    ) -> tuple[PendingModifierChoiceInfo, ...]:
+        session = self._get_session(session_id)
+        if session.state is None:
+            raise ValueError("No active run")
+
+        pending = session.manager.get_pending_modifier_choices(session.state)
+        result: list[PendingModifierChoiceInfo] = []
+        for player_id, choice in sorted(pending.items(), key=lambda item: item[0]):
+            if not choice.current_offer:
+                continue
+            offers = tuple(
+                self._build_modifier_offer_info(modifier_id)
+                for modifier_id in choice.current_offer
+            )
+            result.append(PendingModifierChoiceInfo(
+                player_id=player_id,
+                pending_count=choice.pending_count,
+                offers=offers,
+            ))
+        return tuple(result)
+
+    def submit_modifier_choice(
+        self,
+        session_id: str,
+        player_id: str,
+        modifier_id: str,
+    ) -> None:
+        session = self._get_session(session_id)
+        session.state = session.manager.submit_modifier_choice(
+            session.state, player_id, modifier_id,
+        )
+
+    def consume_modifier_choice_notices(
+        self,
+        session_id: str,
+    ) -> tuple[ModifierChoiceNoticeInfo, ...]:
+        session = self._get_session(session_id)
+        if session.state is None:
+            return ()
+        session.state, notices = session.manager.consume_modifier_notices(session.state)
+        return tuple(
+            ModifierChoiceNoticeInfo(
+                player_id=notice.player_id,
+                skipped_count=notice.skipped_count,
+            )
+            for notice in notices
+        )
 
     def get_session_phase(self, session_id: str) -> SessionPhase | None:
         session = self._sessions.get(session_id)
@@ -461,6 +515,14 @@ class GameService:
             modifier_id=mod.modifier_id,
             name=data.name,
             stack_count=mod.stack_count,
+        )
+
+    @staticmethod
+    def _build_modifier_offer_info(modifier_id: str) -> ModifierOfferInfo:
+        data = load_modifier(modifier_id)
+        return ModifierOfferInfo(
+            modifier_id=modifier_id,
+            name=data.name,
         )
 
     @staticmethod

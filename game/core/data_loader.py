@@ -401,6 +401,7 @@ class SkillModifierData:
     expr: str
     action: str
     skill_filter: str | None = None
+    class_tags: tuple[str, ...] = ()
     damage_type_filter: str | None = None
     damage_type_override: str | None = None
 
@@ -416,6 +417,7 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             expr=mdata.get("expr", "0"),
             action=mdata["action"],
             skill_filter=mdata.get("skill_filter"),
+            class_tags=tuple(mdata.get("class_tags", [])),
             damage_type_filter=mdata.get("damage_type_filter"),
             damage_type_override=mdata.get("damage_type_override"),
         )

@@ -89,6 +89,31 @@ class ModifierInfo:
 
 
 @dataclass(frozen=True)
+class ModifierOfferInfo:
+    """One selectable modifier reward option."""
+
+    modifier_id: str
+    name: str
+
+
+@dataclass(frozen=True)
+class PendingModifierChoiceInfo:
+    """Current pending modifier offer for a player."""
+
+    player_id: str
+    pending_count: int
+    offers: tuple[ModifierOfferInfo, ...]
+
+
+@dataclass(frozen=True)
+class ModifierChoiceNoticeInfo:
+    """Informational message about skipped pending picks."""
+
+    player_id: str
+    skipped_count: int
+
+
+@dataclass(frozen=True)
 class EffectInfo:
     """Display-ready status effect data."""
 

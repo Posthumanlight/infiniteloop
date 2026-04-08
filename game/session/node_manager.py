@@ -4,6 +4,7 @@ from game.character.player_character import PlayerCharacter
 from game.character.progression import apply_xp
 from game.character.stats import MajorStats
 from game.combat.effects import StatusEffectInstance
+from game.combat.skill_modifiers import add_modifier
 from game.combat.engine import (
     get_available_actions,
     start_combat,
@@ -11,7 +12,7 @@ from game.combat.engine import (
     submit_action,
 )
 from game.combat.models import ActionRequest, CombatState
-from game.core.data_loader import ProgressionConfig, load_effect, load_event
+from game.core.data_loader import ProgressionConfig, load_effect, load_event, load_modifiers
 from game.core.formula_eval import evaluate_expr
 from game.core.dice import SeededRNG
 from game.core.enums import (
@@ -27,7 +28,7 @@ from game.events.engine import (
 )
 from game.events.models import OutcomeResult
 from game.session.factories import build_enemies
-from game.session.models import SessionState
+from game.session.models import ModifierRewardNotice, PendingModifierChoice, SessionState
 
 
 class NodeManager:
@@ -192,6 +193,164 @@ class NodeManager:
         return state, tuple(combat_enemy_ids)
 
     # ------------------------------------------------------------------
+    # Modifier rewards
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def has_pending_modifier_choice(state: SessionState, player_id: str) -> bool:
+        pending = state.pending_modifier_choices.get(player_id)
+        return pending is not None and pending.pending_count > 0
+
+    @staticmethod
+    def clear_modifier_notices(state: SessionState) -> SessionState:
+        return replace(state, modifier_reward_notices=())
+
+    def prepare_modifier_choices(self, state: SessionState) -> SessionState:
+        """Roll offers for players with pending picks and no current offer."""
+        pending_map = dict(state.pending_modifier_choices)
+        notices = list(state.modifier_reward_notices)
+        players = {p.entity_id: p for p in state.players}
+
+        for player_id, pending in list(pending_map.items()):
+            player = players.get(player_id)
+            if player is None:
+                pending_map.pop(player_id, None)
+                continue
+
+            rolled, skipped = self._roll_offer_for_player(player, pending)
+            if skipped > 0:
+                notices.append(
+                    ModifierRewardNotice(player_id=player_id, skipped_count=skipped),
+                )
+
+            if rolled.pending_count <= 0 and not rolled.current_offer:
+                pending_map.pop(player_id, None)
+            else:
+                pending_map[player_id] = rolled
+
+        return replace(
+            state,
+            pending_modifier_choices=pending_map,
+            modifier_reward_notices=tuple(notices),
+        )
+
+    def apply_modifier_choice(
+        self,
+        state: SessionState,
+        player_id: str,
+        modifier_id: str,
+    ) -> SessionState:
+        pending = state.pending_modifier_choices.get(player_id)
+        if pending is None or pending.pending_count <= 0:
+            raise ValueError("No pending modifier choice for this player.")
+        if not pending.current_offer:
+            raise ValueError("No modifier offer available for this player.")
+        if modifier_id not in pending.current_offer:
+            raise ValueError("Modifier is not part of the current offer.")
+
+        updated_players: list[PlayerCharacter] = []
+        found = False
+        for player in state.players:
+            if player.entity_id == player_id:
+                updated_players.append(add_modifier(player, modifier_id))
+                found = True
+            else:
+                updated_players.append(player)
+
+        if not found:
+            raise ValueError("Player is not part of this run.")
+
+        pending_map = dict(state.pending_modifier_choices)
+        next_pending = PendingModifierChoice(
+            pending_count=pending.pending_count - 1,
+            current_offer=(),
+        )
+        if next_pending.pending_count <= 0:
+            pending_map.pop(player_id, None)
+        else:
+            pending_map[player_id] = next_pending
+
+        state = replace(
+            state,
+            players=tuple(updated_players),
+            pending_modifier_choices=pending_map,
+        )
+        return self.prepare_modifier_choices(state)
+
+    @staticmethod
+    def _enqueue_modifier_rewards(
+        state: SessionState,
+        level_ups: dict[str, int],
+    ) -> SessionState:
+        pending_map = dict(state.pending_modifier_choices)
+        for player_id, gained in level_ups.items():
+            if gained <= 0:
+                continue
+            current = pending_map.get(player_id, PendingModifierChoice())
+            pending_map[player_id] = PendingModifierChoice(
+                pending_count=current.pending_count + gained,
+                current_offer=current.current_offer,
+            )
+        return replace(state, pending_modifier_choices=pending_map)
+
+    def _eligible_modifier_ids(self, player: PlayerCharacter) -> list[str]:
+        all_mods = load_modifiers()
+        owned = {inst.modifier_id for inst in player.skill_modifiers}
+        eligible: list[str] = []
+
+        for modifier_id, modifier in all_mods.items():
+            has_skill_filter = bool(modifier.skill_filter)
+            has_class_tags = bool(modifier.class_tags)
+            if has_skill_filter or has_class_tags:
+                skill_match = (
+                    modifier.skill_filter is not None
+                    and modifier.skill_filter in player.skills
+                )
+                class_match = player.player_class in modifier.class_tags
+                if not (skill_match or class_match):
+                    continue
+
+            if modifier_id in owned and not modifier.stackable:
+                continue
+
+            eligible.append(modifier_id)
+
+        return eligible
+
+    def _sample_modifier_ids(self, modifier_ids: list[str], count: int) -> tuple[str, ...]:
+        remaining = list(modifier_ids)
+        selected: list[str] = []
+        for _ in range(min(count, len(remaining))):
+            idx = self._rng.d(len(remaining)) - 1
+            selected.append(remaining.pop(idx))
+        return tuple(selected)
+
+    def _roll_offer_for_player(
+        self,
+        player: PlayerCharacter,
+        pending: PendingModifierChoice,
+    ) -> tuple[PendingModifierChoice, int]:
+        if pending.current_offer:
+            return pending, 0
+
+        pending_count = pending.pending_count
+        skipped = 0
+        current_offer: tuple[str, ...] = ()
+
+        while pending_count > 0 and not current_offer:
+            eligible = self._eligible_modifier_ids(player)
+            if not eligible:
+                pending_count -= 1
+                skipped += 1
+                continue
+            current_offer = self._sample_modifier_ids(eligible, 2)
+
+        return PendingModifierChoice(
+            pending_count=pending_count,
+            current_offer=current_offer,
+        ), skipped
+
+    # ------------------------------------------------------------------
     # Side-effect application
     # ------------------------------------------------------------------
 
@@ -233,6 +392,7 @@ class NodeManager:
         """Merge HP/energy/effects from combat entities back to session players."""
         combat_state = state.combat
         updated_players: list[PlayerCharacter] = []
+        level_ups: dict[str, int] = {}
         enemies_defeated = 0
         total_damage_dealt = 0
         total_damage_taken = 0
@@ -269,9 +429,15 @@ class NodeManager:
             if total_xp > 0:
                 base = self._base_stats.get(updated.player_class)
                 if base is not None:
+                    old_level = updated.level
                     updated = apply_xp(
                         updated, total_xp, self._progression, base,
                     )
+                    gained = updated.level - old_level
+                    if gained > 0:
+                        level_ups[updated.entity_id] = (
+                            level_ups.get(updated.entity_id, 0) + gained
+                        )
 
             updated_players.append(updated)
 
@@ -282,7 +448,8 @@ class NodeManager:
             total_damage_taken=state.run_stats.total_damage_taken + total_damage_taken,
             total_xp_gained=state.run_stats.total_xp_gained + total_xp,
         )
-        return replace(state, players=tuple(updated_players), run_stats=new_stats)
+        state = replace(state, players=tuple(updated_players), run_stats=new_stats)
+        return self._enqueue_modifier_rewards(state, level_ups)
 
     def _apply_event_outcomes(
         self,
@@ -293,6 +460,7 @@ class NodeManager:
         player_map: dict[str, PlayerCharacter] = {
             p.entity_id: p for p in state.players
         }
+        level_ups: dict[str, int] = {}
         total_healing = 0
         total_damage = 0
         total_xp = 0
@@ -331,9 +499,15 @@ class NodeManager:
                     total_xp += outcome.amount
                     base = self._base_stats.get(player.player_class)
                     if base is not None:
+                        old_level = player.level
                         player = apply_xp(
                             player, outcome.amount, self._progression, base,
                         )
+                        gained = player.level - old_level
+                        if gained > 0:
+                            level_ups[player.entity_id] = (
+                                level_ups.get(player.entity_id, 0) + gained
+                            )
                     else:
                         player = replace(player, xp=player.xp + outcome.amount)
 
@@ -369,4 +543,5 @@ class NodeManager:
             total_damage_taken=state.run_stats.total_damage_taken + total_damage,
             total_xp_gained=state.run_stats.total_xp_gained + total_xp,
         )
-        return replace(state, players=updated_players, run_stats=new_stats)
+        state = replace(state, players=updated_players, run_stats=new_stats)
+        return self._enqueue_modifier_rewards(state, level_ups)
