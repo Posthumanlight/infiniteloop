@@ -31,7 +31,7 @@ crit_chance = 0.20
 crit_dmg = 1.35
 resistance = 15
 energy = 150
-mastery = 2O
+mastery = 2
 
 [classes.mage.minor_stats]
 fire_dmg_pct = 0.1
