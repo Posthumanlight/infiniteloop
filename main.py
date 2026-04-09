@@ -37,7 +37,7 @@ dp.include_router(exploration_router)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    db_pool = await create_db_pool()
+    db_pool = await create_db_pool(settings.supabase_url)
     dp["db_pool"] = db_pool
     app.state.db_pool = db_pool
     game_service = GameService()
