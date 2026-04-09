@@ -123,7 +123,9 @@ def test_get_available_actions():
 
     skills = get_available_actions(state, "p1")
     assert len(skills) == 1
-    assert skills[0].skill_id == "slash"
+    skill, cd = skills[0]
+    assert skill.skill_id == "slash"
+    assert cd == 0
 
 
 def test_full_combat_to_end():

@@ -103,7 +103,9 @@ class NodeManager:
         return state
 
     @staticmethod
-    def get_combat_actions(state: SessionState, actor_id: str) -> list:
+    def get_combat_actions(
+        state: SessionState, actor_id: str,
+    ) -> list[tuple]:
         return get_available_actions(state.combat, actor_id)
 
     def finalize_combat(self, state: SessionState) -> SessionState:

@@ -134,6 +134,7 @@ class SkillData:
     damage_type: DamageType | None
     hits: tuple[SkillHitData, ...]
     self_effects: tuple[SelfEffectData, ...]
+    cooldown: int = 0
 
 
 def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
@@ -177,6 +178,7 @@ def load_skills() -> dict[str, SkillData]:
             damage_type=dmg_type,
             hits=hits,
             self_effects=tuple(self_effects),
+            cooldown=sdata.get("cooldown", 0),
         )
     return result
 
@@ -364,6 +366,7 @@ class PassiveSkillData:
     cast_skill_id: str | None = None
     consume_effect_id: str | None = None
     target_type: TargetType = TargetType.SELF
+    cooldown: int = 0
 
 
 def load_passives() -> dict[str, PassiveSkillData]:
@@ -382,6 +385,7 @@ def load_passives() -> dict[str, PassiveSkillData]:
             cast_skill_id=pdata.get("cast_skill_id"),
             consume_effect_id=pdata.get("consume_effect_id"),
             target_type=TargetType(pdata.get("target_type", "self")),
+            cooldown=pdata.get("cooldown", 0),
         )
         for pid, pdata in raw.items()
     }

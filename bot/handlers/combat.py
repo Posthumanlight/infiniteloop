@@ -58,9 +58,14 @@ async def cb_skill(
 
     # Get skill info to determine target type
     skills = game_service.get_available_skills(sid, actor_id)
-    skill = next((s for s in skills if s.skill_id == skill_id), None)
-    if skill is None:
+    skill_match = next(((s, cd) for s, cd in skills if s.skill_id == skill_id), None)
+    if skill_match is None:
         await callback.answer("Unknown skill.", show_alert=True)
+        return
+    skill, cd = skill_match
+
+    if cd > 0:
+        await callback.answer(f"Skill on cooldown ({cd} turns)!", show_alert=True)
         return
 
     match skill.target_type:

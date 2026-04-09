@@ -323,7 +323,9 @@ class GameService:
         self._assert_in_combat(session)
         return self._build_combat_snapshot(session)
 
-    def get_available_skills(self, session_id: str, actor_id: str) -> list:
+    def get_available_skills(
+        self, session_id: str, actor_id: str,
+    ) -> list[tuple]:
         session = self._get_session(session_id)
         self._assert_in_combat(session)
         return session.manager.get_combat_actions(session.state, actor_id)

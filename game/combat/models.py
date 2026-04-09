@@ -54,8 +54,11 @@ class CombatState:
     phase: CombatPhase
     action_log: tuple[ActionResult, ...] = ()
     passive_trackers: dict[str, PassiveTracker] = ()  # type: ignore[assignment]
+    cooldowns: dict[str, dict[str, int]] = ()  # type: ignore[assignment]
     rng_state: tuple | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.passive_trackers, tuple):
             object.__setattr__(self, "passive_trackers", {})
+        if isinstance(self.cooldowns, tuple):
+            object.__setattr__(self, "cooldowns", {})

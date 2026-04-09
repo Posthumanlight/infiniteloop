@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from game.combat.cooldowns import is_on_cooldown, put_on_cooldown
 from game.combat.effects import is_skipped
 from game.combat.models import ActionRequest, ActionResult, CombatState
 from game.combat.passives import check_passives
@@ -42,6 +43,11 @@ def _resolve_skill_action(
     skill = load_skill(action.skill_id)
     actor = state.entities[action.actor_id]
 
+    if is_on_cooldown(state, action.actor_id, action.skill_id):
+        raise ValueError(
+            f"Skill '{action.skill_id}' is on cooldown"
+        )
+
     if actor.current_energy < skill.energy_cost:
         raise ValueError(
             f"Not enough energy: have {actor.current_energy}, "
@@ -61,6 +67,8 @@ def _resolve_skill_action(
     )
 
     state, hits = resolve_skill(state, action.actor_id, skill, target_ids, rng, constants)
+
+    state = put_on_cooldown(state, action.actor_id, action.skill_id, skill.cooldown)
 
     # Fire ON_CAST passives (e.g. arcane_rupture consuming stacks)
     state, cast_hits = check_passives(

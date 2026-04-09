@@ -153,15 +153,20 @@ def player_turn(state, actor_id):
     ]
 
     print(f"  Your skills:")
-    for i, s in enumerate(skills):
-        cost = f" (energy: {s.energy_cost})" if s.energy_cost > 0 else ""
-        print(f"    [{i + 1}] {s.name}{cost}")
+    for i, (s, cd) in enumerate(skills):
+        if cd > 0:
+            label = f" (CD: {cd})"
+        elif s.energy_cost > 0:
+            label = f" (energy: {s.energy_cost})"
+        else:
+            label = ""
+        print(f"    [{i + 1}] {s.name}{label}")
 
     while True:
         try:
             choice = input("  Pick skill [1]: ").strip()
             idx = int(choice) - 1 if choice else 0
-            skill = skills[idx]
+            skill, _ = skills[idx]
             break
         except (ValueError, IndexError):
             print("  Invalid choice, try again.")

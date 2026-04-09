@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Any
 
+from game.combat.cooldowns import is_on_cooldown, put_on_cooldown
 from game.combat.effects import apply_effect, build_expr_context, reset_effect_stacks
 from game.combat.models import CombatState, DamageResult, HitResult
 from game.combat.targeting import get_enemies
@@ -182,6 +183,9 @@ def check_passives(
         if not tracker.can_use(passive):
             continue
 
+        if is_on_cooldown(state, entity_id, passive_id):
+            continue
+
         ctx: dict[str, Any] = {
             "attacker": build_expr_context(entity),
             **_build_damage_type_constants(),
@@ -199,6 +203,8 @@ def check_passives(
         # Consume effect stacks if specified
         if passive.consume_effect_id:
             state = reset_effect_stacks(state, entity_id, passive.consume_effect_id)
+
+        state = put_on_cooldown(state, entity_id, passive_id, passive.cooldown)
 
         tracker = tracker.record_use(passive_id)
         new_trackers = {**state.passive_trackers, entity_id: tracker}
