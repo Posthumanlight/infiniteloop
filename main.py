@@ -8,7 +8,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 
-from settings.config import settings
+from config import settings
 from db.core.pool import create_db_pool
 from server.services.game_service import GameService
 

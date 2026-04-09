@@ -1,4 +1,4 @@
-from settings.config import settings
+from config import settings
 import asyncpg
 from aiogram import Router, Bot
 from aiogram.filters import Command

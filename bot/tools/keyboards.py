@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
-from settings.config import settings
+from config import settings
 
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
