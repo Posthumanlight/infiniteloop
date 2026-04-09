@@ -2,11 +2,12 @@ from dataclasses import replace
 
 from game.combat.effects import is_skipped
 from game.combat.models import ActionRequest, ActionResult, CombatState
+from game.combat.passives import check_passives
 from game.combat.skill_resolver import resolve_skill
 from game.combat.targeting import resolve_targets
 from game.core.data_loader import load_skill
 from game.core.dice import SeededRNG
-from game.core.enums import ActionType
+from game.core.enums import ActionType, TriggerType
 
 
 def resolve_action(
@@ -60,6 +61,14 @@ def _resolve_skill_action(
     )
 
     state, hits = resolve_skill(state, action.actor_id, skill, target_ids, rng, constants)
+
+    # Fire ON_CAST passives (e.g. arcane_rupture consuming stacks)
+    state, cast_hits = check_passives(
+        state, action.actor_id, TriggerType.ON_CAST,
+        trigger_context={"skill_id": action.skill_id},
+        rng=rng, constants=constants,
+    )
+    hits.extend(cast_hits)
 
     self_effects: list[str] = [se.effect_id for se in skill.self_effects]
 

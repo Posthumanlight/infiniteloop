@@ -361,6 +361,8 @@ class PassiveSkillData:
     usage_limit: UsageLimit
     max_uses: int | None = None
     effect_id: str | None = None
+    cast_skill_id: str | None = None
+    consume_effect_id: str | None = None
     target_type: TargetType = TargetType.SELF
 
 
@@ -377,6 +379,8 @@ def load_passives() -> dict[str, PassiveSkillData]:
             usage_limit=UsageLimit(pdata["usage_limit"]),
             max_uses=pdata.get("max_uses"),
             effect_id=pdata.get("effect_id"),
+            cast_skill_id=pdata.get("cast_skill_id"),
+            consume_effect_id=pdata.get("consume_effect_id"),
             target_type=TargetType(pdata.get("target_type", "self")),
         )
         for pid, pdata in raw.items()
