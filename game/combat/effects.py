@@ -128,9 +128,14 @@ def apply_effect(
     for i, inst in enumerate(existing):
         if inst.effect_id == effect_id:
             if effect_def.stackable:
+                at_max = (
+                    effect_def.max_stacks is not None
+                    and inst.stack_count >= effect_def.max_stacks
+                )
+                new_stacks = inst.stack_count if at_max else inst.stack_count + 1
                 existing[i] = replace(
                     inst,
-                    stack_count=inst.stack_count + 1,
+                    stack_count=new_stacks,
                     remaining_duration=effect_def.duration,
                 )
             else:
@@ -222,6 +227,13 @@ def tick_effects(
 # ---------------------------------------------------------------------------
 # expire_effects
 # ---------------------------------------------------------------------------
+
+def reset_effect_stacks(state: CombatState, entity_id: str, effect_id: str) -> CombatState:
+    """Remove all stacks of an effect (consume it entirely)."""
+    entity = state.entities[entity_id]
+    new_effects = tuple(inst for inst in entity.active_effects if inst.effect_id != effect_id)
+    return _update_entity(state, entity_id, active_effects=new_effects)
+
 
 def expire_effects(state: CombatState, entity_id: str) -> CombatState:
     entity = state.entities[entity_id]

@@ -16,3 +16,13 @@ action = "apply_effect"
 effect_id = "empowered_arcane"
 expr = "1"
 usage_limit = "unlimited"
+
+[passives.arcane_rupture]
+name = "Arcane Rupture"
+trigger = "on_cast"
+condition = "empowered_arcane_stacks >= 10"
+action = "cast_skill"
+cast_skill_id = "arcane_rupture"
+consume_effect_id = "empowered_arcane"
+expr = "0"
+usage_limit = "unlimited"

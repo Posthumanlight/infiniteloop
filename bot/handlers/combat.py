@@ -3,6 +3,7 @@
 Handles skill selection (g:sk:*), target selection (g:tg:*), and skip (g:skip).
 """
 
+import asyncpg
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -15,12 +16,20 @@ from bot.tools.combat_renderer import (
 )
 from bot.tools.exploration_renderer import (
     render_exploration_choices,
+    render_modifier_choices,
+    render_modifier_notice,
     render_run_summary,
 )
-from bot.tools.keyboards import location_keyboard, skill_keyboard, target_keyboard
+from bot.tools.keyboards import (
+    location_keyboard,
+    modifier_choice_keyboard,
+    skill_keyboard,
+    target_keyboard,
+)
+from db.queries.users_namespace import UserСharactersData
 from game.combat.models import ActionRequest
 from game.core.enums import ActionType, SessionPhase, TargetType
-from server.services.game_service import GameService
+from game_service import GameService
 
 router = Router(name="combat_router")
 
@@ -51,9 +60,14 @@ async def cb_skill(
 
     # Get skill info to determine target type
     skills = game_service.get_available_skills(sid, actor_id)
-    skill = next((s for s in skills if s.skill_id == skill_id), None)
-    if skill is None:
+    skill_match = next(((s, cd) for s, cd in skills if s.skill_id == skill_id), None)
+    if skill_match is None:
         await callback.answer("Unknown skill.", show_alert=True)
+        return
+    skill, cd = skill_match
+
+    if cd > 0:
+        await callback.answer(f"Skill on cooldown ({cd} turns)!", show_alert=True)
         return
 
     match skill.target_type:
@@ -143,6 +157,48 @@ async def cb_skip(
 # Shared helpers
 # ------------------------------------------------------------------
 
+async def _persist_characters(
+    game_service: GameService, session_id: str, db_pool: asyncpg.Pool,
+) -> None:
+    """Save all session players to game_characters after a run ends."""
+    if not game_service.has_session(session_id):
+        return
+    chars_db = UserСharactersData(pool=db_pool)
+    for player in game_service.get_session_players(session_id):
+        await chars_db.add_user_character(
+            tg_id=player.tg_user_id, character_id=player.entity_id,
+        )
+
+
+async def _send_modifier_prompts(
+    callback: CallbackQuery,
+    game_service: GameService,
+    session_id: str,
+) -> None:
+    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+
+    for notice in game_service.consume_modifier_choice_notices(session_id):
+        player_name = (
+            players[notice.player_id].display_name
+            if notice.player_id in players
+            else notice.player_id
+        )
+        await callback.message.answer(
+            render_modifier_notice(player_name, notice.skipped_count),
+        )
+
+    for pending in game_service.get_pending_modifier_choices(session_id):
+        player_name = (
+            players[pending.player_id].display_name
+            if pending.player_id in players
+            else pending.player_id
+        )
+        await callback.message.answer(
+            render_modifier_choices(player_name, pending.pending_count, pending.offers),
+            reply_markup=modifier_choice_keyboard(pending.offers),
+        )
+
+
 async def _submit_action(
     callback: CallbackQuery,
     game_service: GameService,
@@ -185,6 +241,7 @@ async def _render_batch_and_prompt(
                 render_exploration_choices(options, (), players),
                 reply_markup=location_keyboard(options),
             )
+            await _send_modifier_prompts(callback, game_service, session_id)
         elif phase == SessionPhase.ENDED:
             stats = game_service.get_run_stats(session_id)
             session = game_service._get_session(session_id)

@@ -1,5 +1,5 @@
 import asyncpg
-from settings.config import settings
+from config import settings
 
 
 async def create_db_pool() -> asyncpg.Pool:

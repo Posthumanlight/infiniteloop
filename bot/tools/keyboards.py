@@ -4,12 +4,12 @@ from typing import TYPE_CHECKING
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, WebAppInfo
 
-from settings.config import settings
+from config import settings
 
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
     from game.events.models import ChoiceDef
-    from server.services.game_models import EntitySnapshot
+    from game.core.game_models import EntitySnapshot, ModifierOfferInfo
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -55,14 +55,19 @@ def lobby_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def skill_keyboard(skills: list[SkillData]) -> InlineKeyboardMarkup:
-    rows = [
-        [InlineKeyboardButton(
-            text=f"{skill.name} (\u26a1{skill.energy_cost})" if skill.energy_cost > 0 else skill.name,
+def skill_keyboard(skills: list[tuple[SkillData, int]]) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for skill, cd in skills:
+        if cd > 0:
+            text = f"{skill.name} (CD: {cd})"
+        elif skill.energy_cost > 0:
+            text = f"{skill.name} (\u26a1{skill.energy_cost})"
+        else:
+            text = skill.name
+        rows.append([InlineKeyboardButton(
+            text=text,
             callback_data=f"g:sk:{skill.skill_id}",
-        )]
-        for skill in skills
-    ]
+        )])
     rows.append([InlineKeyboardButton(text="\u23ed\ufe0f Skip", callback_data="g:skip")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -110,5 +115,18 @@ def event_choice_keyboard(choices: tuple[ChoiceDef, ...]) -> InlineKeyboardMarku
             callback_data=f"g:evt:{choice.index}",
         )]
         for choice in choices
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def modifier_choice_keyboard(
+    offers: tuple[ModifierOfferInfo, ...],
+) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(
+            text=offer.name,
+            callback_data=f"g:mod:{offer.modifier_id}",
+        )]
+        for offer in offers
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)

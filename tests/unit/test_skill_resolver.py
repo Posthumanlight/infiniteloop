@@ -5,8 +5,9 @@ import pytest
 from game.combat.skill_resolver import resolve_skill
 from game.core.data_loader import clear_cache, load_skill
 from game.core.dice import SeededRNG
+from game.session.factories import build_player
 
-from tests.unit.conftest import make_combat_state
+from tests.unit.conftest import make_combat_state, make_goblin
 
 
 @pytest.fixture(autouse=True)
@@ -60,3 +61,24 @@ def test_skill_skips_dead_target():
 
     state, hits = resolve_skill(state, "p1", skill, ["e1"], rng, CONSTANTS)
     assert state.entities["e1"].current_hp == 0
+
+
+def test_arcane_prowess_applies_empowered_arcane_on_hit():
+    mage = build_player("mage", entity_id="p1")
+    goblin = make_goblin("e1")
+    state = make_combat_state(
+        players=[mage],
+        enemies=[goblin],
+        turn_order=("p1", "e1"),
+    )
+    skill = load_skill("arcane_bolt")
+    rng = SeededRNG(42)
+
+    state, _ = resolve_skill(state, "p1", skill, ["e1"], rng, CONSTANTS)
+
+    empowered = [
+        eff for eff in state.entities["p1"].active_effects
+        if eff.effect_id == "empowered_arcane"
+    ]
+    assert len(empowered) == 1
+    assert empowered[0].stack_count == 2

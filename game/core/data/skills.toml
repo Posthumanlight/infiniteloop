@@ -16,7 +16,7 @@ energy_cost = 0
 action_type = "action"
 damage_type = "slashing"
 hits = [
-  { formula = "base_power + attacker.attack * 1.5", base_power = 10, variance = 0.1 },
+  { formula = "base_power + attacker.attack * 1.5", base_power = 10, variance = 0.0 },
 ]
 
 [skills.cleave]
@@ -26,7 +26,7 @@ energy_cost = 10
 action_type = "action"
 damage_type = "slashing"
 hits = [
-  { formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.1 },
+  { formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.0 },
 ]
 
 #mage
@@ -37,7 +37,14 @@ energy_cost = 0
 action_type = "action"
 damage_type = "arcane"
 hits = [
-  { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
-  { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
-
+  { formula = "base_power + attacker.attack * 0.7", base_power = 1, variance = 0.0 },
+  { formula = "base_power + attacker.attack * 0.7", base_power = 1, variance = 0.0 },
 ]
+
+[skills.arcane_rupture]
+name = "Arcane Rupture"
+target_type = "all_enemies"
+energy_cost = 0
+action_type = "action"
+damage_type = "arcane"
+hits = [{ formula = "base_power + attacker.attack * 0.05", base_power = 1, variance = 0.0 }]

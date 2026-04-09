@@ -1,4 +1,4 @@
-from settings.config import settings
+from config import settings
 import asyncpg
 from aiogram import Router, Bot
 from aiogram.filters import Command
@@ -21,11 +21,11 @@ router = Router()
 async def set_bot_commands(bot: Bot) -> None:
     commands = [
         BotCommand(command="start", description="Start the bot"),
-        BotCommand(command="newgame", description="Create a new game session"),
+        BotCommand(command="run", description="Create a new game session"),
         BotCommand(command="join", description="Join the current game session"),
-        BotCommand(command="explore", description="Start the exploration run"),
-        BotCommand(command="status", description="Show combat status"),
-        BotCommand(command="flee", description="End the current session"),
+        BotCommand(command="char", description="View your character"),
+        BotCommand(command="combat", description="Show combat status"),
+        BotCommand(command="leave", description="End the current session"),
     ]
     await bot.set_my_commands(commands)
 

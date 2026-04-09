@@ -1,8 +1,10 @@
 """Exploration and event callback handlers.
 
-Handles location voting (g:loc:*) and event choice voting (g:evt:*).
+Handles location voting (g:loc:*), event choice voting (g:evt:*),
+and level-up modifier picks (g:mod:*).
 """
 
+import asyncpg
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -12,15 +14,19 @@ from bot.tools.combat_renderer import render_combat_start, render_turn_prompt
 from bot.tools.exploration_renderer import (
     render_event,
     render_exploration_choices,
+    render_modifier_choices,
+    render_modifier_notice,
     render_run_summary,
 )
 from bot.tools.keyboards import (
     event_choice_keyboard,
     location_keyboard,
+    modifier_choice_keyboard,
     skill_keyboard,
 )
+from db.queries.users_namespace import UserСharactersData
 from game.core.enums import SessionPhase
-from server.services.game_service import GameService
+from game_service import GameService
 
 router = Router(name="exploration_router")
 
@@ -38,6 +44,7 @@ async def cb_location_vote(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     player_id = str(callback.from_user.id)
@@ -64,7 +71,7 @@ async def cb_location_vote(
 
     # All votes in — resolve
     phase = game_service.resolve_location_choice(sid)
-    await _handle_phase_transition(callback, game_service, sid, phase, state)
+    await _handle_phase_transition(callback, game_service, sid, phase, state, db_pool)
 
 
 # ------------------------------------------------------------------
@@ -76,6 +83,7 @@ async def cb_event_vote(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     player_id = str(callback.from_user.id)
@@ -101,12 +109,100 @@ async def cb_event_vote(
 
     # All votes in — resolve event
     phase = game_service.resolve_event(sid)
-    await _handle_phase_transition(callback, game_service, sid, phase, state)
+    await _handle_phase_transition(callback, game_service, sid, phase, state, db_pool)
+
+
+@router.callback_query(F.data.startswith("g:mod:"))
+async def cb_modifier_choice(
+    callback: CallbackQuery,
+    game_service: GameService,
+) -> None:
+    sid = _session_id(callback.message.chat.id)
+    player_id = str(callback.from_user.id)
+    modifier_id = callback.data[6:]  # strip "g:mod:"
+
+    try:
+        game_service.submit_modifier_choice(sid, player_id, modifier_id)
+    except ValueError as e:
+        await callback.answer(str(e), show_alert=True)
+        return
+
+    await callback.answer("Modifier selected!")
+
+    players = {p.entity_id: p for p in game_service.get_session_players(sid)}
+    for notice in game_service.consume_modifier_choice_notices(sid):
+        player_name = (
+            players[notice.player_id].display_name
+            if notice.player_id in players
+            else notice.player_id
+        )
+        await callback.message.answer(
+            render_modifier_notice(player_name, notice.skipped_count),
+        )
+
+    pending_choices = {
+        choice.player_id: choice
+        for choice in game_service.get_pending_modifier_choices(sid)
+    }
+    pending = pending_choices.get(player_id)
+    if pending is None:
+        await callback.message.edit_text("Modifier selected.")
+        return
+
+    player_name = (
+        players[player_id].display_name if player_id in players else player_id
+    )
+    await callback.message.edit_text(
+        render_modifier_choices(player_name, pending.pending_count, pending.offers),
+        reply_markup=modifier_choice_keyboard(pending.offers),
+    )
+
+
+async def _send_modifier_prompts(
+    callback: CallbackQuery,
+    game_service: GameService,
+    session_id: str,
+) -> None:
+    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+
+    for notice in game_service.consume_modifier_choice_notices(session_id):
+        player_name = (
+            players[notice.player_id].display_name
+            if notice.player_id in players
+            else notice.player_id
+        )
+        await callback.message.answer(
+            render_modifier_notice(player_name, notice.skipped_count),
+        )
+
+    for pending in game_service.get_pending_modifier_choices(session_id):
+        player_name = (
+            players[pending.player_id].display_name
+            if pending.player_id in players
+            else pending.player_id
+        )
+        await callback.message.answer(
+            render_modifier_choices(player_name, pending.pending_count, pending.offers),
+            reply_markup=modifier_choice_keyboard(pending.offers),
+        )
 
 
 # ------------------------------------------------------------------
 # Shared phase transition handler
 # ------------------------------------------------------------------
+
+async def _persist_characters(
+    game_service: GameService, session_id: str, db_pool: asyncpg.Pool,
+) -> None:
+    """Save all session players to game_characters after a run ends."""
+    if not game_service.has_session(session_id):
+        return
+    chars_db = UserСharactersData(pool=db_pool)
+    for player in game_service.get_session_players(session_id):
+        await chars_db.add_user_character(
+            tg_id=player.tg_user_id, character_id=player.entity_id,
+        )
+
 
 async def _handle_phase_transition(
     callback: CallbackQuery,
@@ -114,6 +210,7 @@ async def _handle_phase_transition(
     session_id: str,
     phase: SessionPhase,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     """Route to the correct UI based on the new session phase."""
     players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
@@ -147,6 +244,7 @@ async def _handle_phase_transition(
                 render_exploration_choices(options, (), players),
                 reply_markup=location_keyboard(options),
             )
+            await _send_modifier_prompts(callback, game_service, session_id)
             await state.set_state(GameStates.exploring)
 
         case SessionPhase.ENDED:
@@ -158,5 +256,6 @@ async def _handle_phase_transition(
             session = game_service._get_session(session_id)
             victory = any(p.current_hp > 0 for p in session.state.players)
             await callback.message.answer(render_run_summary(stats, victory))
+            await _persist_characters(game_service, session_id, db_pool)
             game_service.remove_session(session_id)
             await state.set_state(GameStates.run_ended)

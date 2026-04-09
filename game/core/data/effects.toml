@@ -30,6 +30,7 @@ name = "Empowered Arcane"
 trigger = "on_damage_calc"
 duration = 10
 stackable = true
+max_stacks = 10
 actions = [
   { type = "stat_modify", stat = "arcane_dmg_pct", expr = "0.1", scales_with_stacks = true },
 ]

@@ -33,20 +33,23 @@ class ResolvedModifier:
 
 
 def add_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
-    """Add a modifier. Stackable mods increment count; unique mods are no-op if present."""
     mod_data = load_modifier(modifier_id)
     existing = list(entity.skill_modifiers)
     for i, inst in enumerate(existing):
         if inst.modifier_id == modifier_id:
             if mod_data.stackable:
-                existing[i] = replace(inst, stack_count=inst.stack_count + 1)
+                at_max = (
+                    mod_data.max_stacks is not None
+                    and inst.stack_count >= mod_data.max_stacks
+                )
+                if not at_max:
+                    existing[i] = replace(inst, stack_count=inst.stack_count + 1)
             return replace(entity, skill_modifiers=tuple(existing))
     existing.append(ModifierInstance(modifier_id=modifier_id))
     return replace(entity, skill_modifiers=tuple(existing))
 
 
 def remove_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
-    """Remove one stack of a modifier. If last stack, remove entirely."""
     existing = list(entity.skill_modifiers)
     for i, inst in enumerate(existing):
         if inst.modifier_id == modifier_id:
