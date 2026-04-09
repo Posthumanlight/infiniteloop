@@ -1,3 +1,4 @@
+import asyncpg
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
@@ -19,6 +20,7 @@ from bot.tools.keyboards import (
     location_keyboard,
     skill_keyboard,
 )
+from db.queries.users_namespace import UserСharactersData
 from game.core.game_models import PlayerInfo
 from game_service import GameService
 
@@ -29,12 +31,34 @@ def _session_id(chat_id: int) -> str:
     return str(chat_id)
 
 
-def _player_info(user) -> PlayerInfo:
+async def _player_info(user, db_pool: asyncpg.Pool) -> PlayerInfo:
+    tg_id = user.id
+    chars_db = UserСharactersData(pool=db_pool)
+    last_char = await chars_db.get_last_user_character(tg_id)
+
+    if last_char is None:
+        entity_id = str(tg_id) + "000"
+    else:
+        entity_id = str(int(last_char["character_id"]) + 1)
+
     return PlayerInfo(
-        entity_id=str(user.id),
-        tg_user_id=user.id,
+        entity_id=entity_id,
+        tg_user_id=tg_id,
         display_name=user.first_name or "Player",
     )
+
+
+async def _persist_characters(
+    game_service: GameService, session_id: str, db_pool: asyncpg.Pool,
+) -> None:
+    """Save all session players to game_characters after a run ends."""
+    if not game_service.has_session(session_id):
+        return
+    chars_db = UserСharactersData(pool=db_pool)
+    for player in game_service.get_session_players(session_id):
+        await chars_db.add_user_character(
+            tg_id=player.tg_user_id, character_id=player.entity_id,
+        )
 
 
 @router.message(Command("run"))
@@ -42,6 +66,7 @@ async def cmd_newgame(
     message: Message,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(message.chat.id)
 
@@ -49,7 +74,7 @@ async def cmd_newgame(
         await message.answer("A game session already exists in this chat.")
         return
 
-    creator = _player_info(message.from_user)
+    creator = await _player_info(message.from_user, db_pool)
     game_service.create_session(sid, creator)
 
     players = game_service.get_session_players(sid)
@@ -77,6 +102,7 @@ async def cmd_join(
     message: Message,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(message.chat.id)
     if not game_service.has_session(sid):
@@ -86,7 +112,7 @@ async def cmd_join(
         await message.answer("Combat is already in progress. Can't join now.")
         return
 
-    player = _player_info(message.from_user)
+    player = await _player_info(message.from_user, db_pool)
     try:
         game_service.join_session(sid, player)
     except ValueError as e:
@@ -110,6 +136,7 @@ async def cb_join(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     if not game_service.has_session(sid):
@@ -119,7 +146,7 @@ async def cb_join(
         await callback.answer("Combat already in progress.", show_alert=True)
         return
 
-    player = _player_info(callback.from_user)
+    player = await _player_info(callback.from_user, db_pool)
     try:
         game_service.join_session(sid, player)
     except ValueError:
@@ -158,8 +185,17 @@ async def cb_class_select(
         await callback.answer("No active game.", show_alert=True)
         return
 
-    entity_id = str(callback.from_user.id)
+    tg_id = callback.from_user.id
     class_id = callback.data[8:]  # strip "g:class:"
+
+    session_players = game_service.get_session_players(sid)
+    entity_id = next(
+        (p.entity_id for p in session_players if p.tg_user_id == tg_id),
+        None,
+    )
+    if entity_id is None:
+        await callback.answer("Join the game first!", show_alert=True)
+        return
 
     try:
         game_service.select_class(sid, entity_id, class_id)
@@ -253,6 +289,7 @@ async def cmd_status(
 async def cmd_flee(
     message: Message,
     game_service: GameService,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(message.chat.id)
     if not game_service.has_session(sid):
@@ -260,6 +297,7 @@ async def cmd_flee(
         return
 
     stats = game_service.get_run_stats(sid) if game_service.get_session_phase(sid) is not None else None
+    await _persist_characters(game_service, sid, db_pool)
     game_service.remove_session(sid)
 
     if stats is not None:

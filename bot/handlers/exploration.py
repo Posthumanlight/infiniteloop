@@ -4,6 +4,7 @@ Handles location voting (g:loc:*), event choice voting (g:evt:*),
 and level-up modifier picks (g:mod:*).
 """
 
+import asyncpg
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -23,6 +24,7 @@ from bot.tools.keyboards import (
     modifier_choice_keyboard,
     skill_keyboard,
 )
+from db.queries.users_namespace import UserСharactersData
 from game.core.enums import SessionPhase
 from game_service import GameService
 
@@ -42,6 +44,7 @@ async def cb_location_vote(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     player_id = str(callback.from_user.id)
@@ -68,7 +71,7 @@ async def cb_location_vote(
 
     # All votes in — resolve
     phase = game_service.resolve_location_choice(sid)
-    await _handle_phase_transition(callback, game_service, sid, phase, state)
+    await _handle_phase_transition(callback, game_service, sid, phase, state, db_pool)
 
 
 # ------------------------------------------------------------------
@@ -80,6 +83,7 @@ async def cb_event_vote(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     player_id = str(callback.from_user.id)
@@ -105,7 +109,7 @@ async def cb_event_vote(
 
     # All votes in — resolve event
     phase = game_service.resolve_event(sid)
-    await _handle_phase_transition(callback, game_service, sid, phase, state)
+    await _handle_phase_transition(callback, game_service, sid, phase, state, db_pool)
 
 
 @router.callback_query(F.data.startswith("g:mod:"))
@@ -187,12 +191,26 @@ async def _send_modifier_prompts(
 # Shared phase transition handler
 # ------------------------------------------------------------------
 
+async def _persist_characters(
+    game_service: GameService, session_id: str, db_pool: asyncpg.Pool,
+) -> None:
+    """Save all session players to game_characters after a run ends."""
+    if not game_service.has_session(session_id):
+        return
+    chars_db = UserСharactersData(pool=db_pool)
+    for player in game_service.get_session_players(session_id):
+        await chars_db.add_user_character(
+            tg_id=player.tg_user_id, character_id=player.entity_id,
+        )
+
+
 async def _handle_phase_transition(
     callback: CallbackQuery,
     game_service: GameService,
     session_id: str,
     phase: SessionPhase,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     """Route to the correct UI based on the new session phase."""
     players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
@@ -238,5 +256,6 @@ async def _handle_phase_transition(
             session = game_service._get_session(session_id)
             victory = any(p.current_hp > 0 for p in session.state.players)
             await callback.message.answer(render_run_summary(stats, victory))
+            await _persist_characters(game_service, session_id, db_pool)
             game_service.remove_session(session_id)
             await state.set_state(GameStates.run_ended)

@@ -3,6 +3,7 @@
 Handles skill selection (g:sk:*), target selection (g:tg:*), and skip (g:skip).
 """
 
+import asyncpg
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -25,6 +26,7 @@ from bot.tools.keyboards import (
     skill_keyboard,
     target_keyboard,
 )
+from db.queries.users_namespace import UserСharactersData
 from game.combat.models import ActionRequest
 from game.core.enums import ActionType, SessionPhase, TargetType
 from game_service import GameService
@@ -154,6 +156,19 @@ async def cb_skip(
 # ------------------------------------------------------------------
 # Shared helpers
 # ------------------------------------------------------------------
+
+async def _persist_characters(
+    game_service: GameService, session_id: str, db_pool: asyncpg.Pool,
+) -> None:
+    """Save all session players to game_characters after a run ends."""
+    if not game_service.has_session(session_id):
+        return
+    chars_db = UserСharactersData(pool=db_pool)
+    for player in game_service.get_session_players(session_id):
+        await chars_db.add_user_character(
+            tg_id=player.tg_user_id, character_id=player.entity_id,
+        )
+
 
 async def _send_modifier_prompts(
     callback: CallbackQuery,

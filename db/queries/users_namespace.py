@@ -69,3 +69,36 @@ class UserSettingsDB:
                 await conn.execute(sql, *values)
         except Exception as e:
             logger.error(f"DB error in upsert_settings for tg_id={tg_id}: {e}")
+
+class UserСharactersData(UserData):
+    def __init__(self, pool):
+        super().__init__(pool)
+
+    async def get_user_characters(self, tg_id: int) -> dict | None:
+        result = await safe_get_db_data(
+            pool=self.pool,
+            schema=self.schema,
+            table='game_characters',
+            filters={"tg_id": tg_id}
+        )
+        return result[0] if result else None
+
+    async def add_user_character(self, tg_id: int, character_id: str) -> None:
+                await safe_execute(
+            pool=self.pool,
+            schema=self.schema,
+            table='game_characters',
+            data={'tg_id': tg_id, 'character_id' : character_id},
+            operation=SupabaseOperation.INSERT
+        )
+
+    async def get_last_user_character(self, tg_id: int) -> dict | None:
+        result = await safe_get_db_data(
+            pool=self.pool,
+            schema=self.schema,
+            table='game_characters',
+            filters={"tg_id": tg_id},
+            additional='ORDER BY created_at DESC LIMIT 1'
+        )
+       
+        return result[0] if result else None
