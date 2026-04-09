@@ -128,9 +128,14 @@ def apply_effect(
     for i, inst in enumerate(existing):
         if inst.effect_id == effect_id:
             if effect_def.stackable:
+                at_max = (
+                    effect_def.max_stacks is not None
+                    and inst.stack_count >= effect_def.max_stacks
+                )
+                new_stacks = inst.stack_count if at_max else inst.stack_count + 1
                 existing[i] = replace(
                     inst,
-                    stack_count=inst.stack_count + 1,
+                    stack_count=new_stacks,
                     remaining_duration=effect_def.duration,
                 )
             else:

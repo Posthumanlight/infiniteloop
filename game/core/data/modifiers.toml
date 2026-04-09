@@ -7,6 +7,7 @@ skill_filter = "slash"
 class_tags = ["warrior"]
 expr = "10"
 action = "bonus_damage"
+
 #Stackable: vampirism — heal for 7% of damage dealt per stack
 [modifiers.vampiric]
 name = "Vampiric"
@@ -23,21 +24,6 @@ stackable = true
 skill_filter = "arcane_bolt"
 class_tags = ["mage"]
 expr = "10"
-action = "bonus_damage"
-
-[modifiers.warrior_training]
-name = "Warrior Training"
-phase = "pre_hit"
-stackable = true
-class_tags = ["warrior"]
-expr = "5"
-action = "bonus_damage"
-
-[modifiers.battle_hardened]
-name = "Battle Hardened"
-phase = "pre_hit"
-stackable = true
-expr = "3"
 action = "bonus_damage"
 
 [modifiers.fire_brand]

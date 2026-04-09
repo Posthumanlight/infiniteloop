@@ -56,6 +56,7 @@ class EffectDef:
     duration: int
     stackable: bool
     actions: tuple[EffectActionDef, ...]
+    max_stacks: int | None = None            # None = unlimited
     apply_condition: str | None = None       # checked once on apply
     tick_condition: str | None = None         # checked each tick/on-demand
 
@@ -85,6 +86,7 @@ def load_effects() -> dict[str, EffectDef]:
             duration=edata["duration"],
             stackable=edata["stackable"],
             actions=actions,
+            max_stacks=edata.get("max_stacks"),
             apply_condition=edata.get("apply_condition"),
             tick_condition=edata.get("tick_condition"),
         )
@@ -400,6 +402,7 @@ class SkillModifierData:
     stackable: bool
     expr: str
     action: str
+    max_stacks: int | None = None            # None = unlimited
     skill_filter: str | None = None
     class_tags: tuple[str, ...] = ()
     damage_type_filter: str | None = None
@@ -416,6 +419,7 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             stackable=mdata.get("stackable", False),
             expr=mdata.get("expr", "0"),
             action=mdata["action"],
+            max_stacks=mdata.get("max_stacks"),
             skill_filter=mdata.get("skill_filter"),
             class_tags=tuple(mdata.get("class_tags", [])),
             damage_type_filter=mdata.get("damage_type_filter"),
