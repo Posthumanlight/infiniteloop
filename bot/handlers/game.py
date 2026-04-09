@@ -19,7 +19,7 @@ from bot.tools.keyboards import (
     location_keyboard,
     skill_keyboard,
 )
-from server.services.game_models import PlayerInfo
+from game.core.game_models import PlayerInfo
 from server.services.game_service import GameService
 
 router = Router(name="game_router")
@@ -36,10 +36,6 @@ def _player_info(user) -> PlayerInfo:
         display_name=user.first_name or "Player",
     )
 
-
-# ------------------------------------------------------------------
-# /newgame
-# ------------------------------------------------------------------
 
 @router.message(Command("run"))
 async def cmd_newgame(

@@ -1,4 +1,4 @@
-from server.services.game_models import (
+from game.core.game_models import (
     CharacterSheet,
     CombatSnapshot,
     EffectInfo,

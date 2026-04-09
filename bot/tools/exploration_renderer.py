@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from game.events.models import EventState
     from game.session.models import RunStats, SessionState
     from game.world.models import LocationVote
-    from server.services.game_models import ModifierOfferInfo, PlayerInfo
+    from game.core.game_models import ModifierOfferInfo, PlayerInfo
 
 
 def render_class_prompt(

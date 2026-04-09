@@ -3,7 +3,7 @@
 Pure functions — no aiogram imports. Takes service-layer DTOs, returns strings.
 """
 
-from server.services.game_models import CharacterSheet, EffectInfo
+from game.core.game_models import CharacterSheet, EffectInfo
 
 
 def _format_minor_stat_key(key: str) -> str:

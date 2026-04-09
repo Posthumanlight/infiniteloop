@@ -5,7 +5,7 @@ Pure functions — no aiogram imports. Takes service-layer DTOs, returns strings
 
 from game.combat.models import ActionResult
 from game.core.enums import EntityType
-from server.services.game_models import (
+from game.core.game_models import (
     CombatSnapshot,
     EntitySnapshot,
     PlayerInfo,

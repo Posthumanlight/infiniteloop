@@ -15,7 +15,7 @@ from game.core.enums import ActionType, EffectActionType, EntityType, SessionPha
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
-from server.services.game_models import (
+from game.core.game_models import (
     CharacterSheet,
     CombatSnapshot,
     EffectInfo,

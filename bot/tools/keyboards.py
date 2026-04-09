@@ -9,7 +9,7 @@ from settings.config import settings
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
     from game.events.models import ChoiceDef
-    from server.services.game_models import EntitySnapshot, ModifierOfferInfo
+    from game.core.game_models import EntitySnapshot, ModifierOfferInfo
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
