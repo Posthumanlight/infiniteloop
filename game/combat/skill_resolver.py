@@ -74,6 +74,7 @@ def resolve_skill(
                 target_id=target_id,
                 damage=dmg_result,
                 effects_applied=tuple(effects_applied),
+                skill_id=skill.skill_id,
             ))
 
             # Passive triggers: ON_HIT

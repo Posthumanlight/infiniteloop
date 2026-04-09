@@ -32,6 +32,7 @@ class HitResult:
     damage: DamageResult | None = None
     heal_amount: int = 0
     effects_applied: tuple[str, ...] = ()
+    skill_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -79,11 +79,12 @@ def render_action_result(
         return f"\u23ed\ufe0f {actor_name} skips their turn."
 
     lines: list[str] = []
-    skill_name = result.action.skill_id or "attack"
+    default_skill = result.action.skill_id or "attack"
 
     for hit in result.hits:
         target = entities.get(hit.target_id)
         target_name = target.name if target else hit.target_id
+        skill_name = hit.skill_id or default_skill
 
         if hit.damage is not None:
             crit_mark = " \U0001f4a5CRIT" if hit.damage.is_crit else ""
