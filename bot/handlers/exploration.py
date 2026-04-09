@@ -24,7 +24,7 @@ from bot.tools.keyboards import (
     skill_keyboard,
 )
 from game.core.enums import SessionPhase
-from server.services.game_service import GameService
+from game_service import GameService
 
 router = Router(name="exploration_router")
 

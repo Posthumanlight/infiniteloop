@@ -20,7 +20,7 @@ from bot.tools.keyboards import (
     skill_keyboard,
 )
 from game.core.game_models import PlayerInfo
-from server.services.game_service import GameService
+from game_service import GameService
 
 router = Router(name="game_router")
 

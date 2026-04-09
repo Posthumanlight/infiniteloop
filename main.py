@@ -10,7 +10,7 @@ from aiogram.types import Update
 
 from config import settings
 from db.core.pool import create_db_pool
-from server.services.game_service import GameService
+from game_service import GameService
 
 from bot.bot import router as bot_router, set_bot_commands, onboarding_router as bot_onboarding_router
 from bot.handlers.game import router as game_router

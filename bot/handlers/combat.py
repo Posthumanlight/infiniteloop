@@ -27,7 +27,7 @@ from bot.tools.keyboards import (
 )
 from game.combat.models import ActionRequest
 from game.core.enums import ActionType, SessionPhase, TargetType
-from server.services.game_service import GameService
+from game_service import GameService
 
 router = Router(name="combat_router")
 

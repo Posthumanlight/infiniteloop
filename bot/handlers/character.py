@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from bot.tools.character_renderer import render_character_sheet
-from server.services.game_service import GameService
+from game_service import GameService
 
 router = Router(name="character_router")
 
