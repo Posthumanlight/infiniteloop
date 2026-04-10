@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from bot.tools.character_renderer import render_character_sheet
+from bot.tools.session_lookup import entity_id_for_tg_user
 from game_service import GameService
 
 router = Router(name="character_router")
@@ -25,12 +26,7 @@ async def cmd_char(
         await message.answer("No active game. Use /newgame to start one.")
         return
 
-    tg_id = message.from_user.id
-    session_players = game_service.get_session_players(sid)
-    entity_id = next(
-        (p.entity_id for p in session_players if p.tg_user_id == tg_id),
-        None,
-    )
+    entity_id = entity_id_for_tg_user(game_service, sid, message.from_user.id)
     if entity_id is None:
         await message.answer("You are not in the current game.")
         return

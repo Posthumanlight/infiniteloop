@@ -20,6 +20,7 @@ from bot.tools.keyboards import (
     location_keyboard,
     skill_keyboard,
 )
+from bot.tools.session_lookup import entity_id_for_tg_user
 from db.queries.users_namespace import UserСharactersData
 from game.core.game_models import PlayerInfo
 from game_service import GameService
@@ -185,14 +186,9 @@ async def cb_class_select(
         await callback.answer("No active game.", show_alert=True)
         return
 
-    tg_id = callback.from_user.id
     class_id = callback.data[8:]  # strip "g:class:"
 
-    session_players = game_service.get_session_players(sid)
-    entity_id = next(
-        (p.entity_id for p in session_players if p.tg_user_id == tg_id),
-        None,
-    )
+    entity_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
     if entity_id is None:
         await callback.answer("Join the game first!", show_alert=True)
         return

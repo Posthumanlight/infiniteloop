@@ -24,6 +24,7 @@ from bot.tools.keyboards import (
     modifier_choice_keyboard,
     skill_keyboard,
 )
+from bot.tools.session_lookup import entity_id_for_tg_user
 from db.queries.users_namespace import UserСharactersData
 from game.core.enums import SessionPhase
 from game_service import GameService
@@ -47,7 +48,10 @@ async def cb_location_vote(
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    player_id = str(callback.from_user.id)
+    player_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if player_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
     location_index = int(callback.data[6:])  # strip "g:loc:"
 
     try:
@@ -86,7 +90,10 @@ async def cb_event_vote(
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    player_id = str(callback.from_user.id)
+    player_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if player_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
     choice_index = int(callback.data[6:])  # strip "g:evt:"
 
     try:
@@ -118,7 +125,10 @@ async def cb_modifier_choice(
     game_service: GameService,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    player_id = str(callback.from_user.id)
+    player_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if player_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
     modifier_id = callback.data[6:]  # strip "g:mod:"
 
     try:

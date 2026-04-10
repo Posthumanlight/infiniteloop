@@ -26,6 +26,7 @@ from bot.tools.keyboards import (
     skill_keyboard,
     target_keyboard,
 )
+from bot.tools.session_lookup import entity_id_for_tg_user
 from db.queries.users_namespace import UserСharactersData
 from game.combat.models import ActionRequest
 from game.core.enums import ActionType, SessionPhase, TargetType
@@ -49,7 +50,10 @@ async def cb_skill(
     state: FSMContext,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = str(callback.from_user.id)
+    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if actor_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
     skill_id = callback.data[5:]  # strip "g:sk:"
 
     # Validate it's this player's turn
@@ -104,7 +108,10 @@ async def cb_target(
     state: FSMContext,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = str(callback.from_user.id)
+    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if actor_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
     target_id = callback.data[5:]  # strip "g:tg:"
 
     # Validate turn
@@ -140,7 +147,10 @@ async def cb_skip(
     game_service: GameService,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = str(callback.from_user.id)
+    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if actor_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
 
     whose_turn = game_service.get_whose_turn(sid)
     if whose_turn != actor_id:
