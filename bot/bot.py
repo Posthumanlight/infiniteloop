@@ -1,4 +1,3 @@
-from config import settings
 import asyncpg
 from aiogram import Router, Bot
 from aiogram.filters import Command
@@ -14,7 +13,6 @@ from db.queries.users_namespace import UserCreatorDB, UserData
 from bot.handlers.onboarding import onboarding_language_keyboard, router as onboarding_router
 from bot.tools.keyboards import main_menu_keyboard
 
-BOT_TOKEN = settings.telegram_bot_token
 logger, buffer_handler = setup_telegram_logging()
 router = Router()
 
