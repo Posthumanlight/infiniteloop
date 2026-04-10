@@ -121,6 +121,8 @@ class PassiveAction(Enum):
     DAMAGE = "damage"
     HEAL = "heal"
     MODIFY_STAT = "modify_stat"
+    CAST_SKILL = "cast_skill"
+    CONSUME_EFFECT = "consume_effect"
 
 
 class ModifierPhase(Enum):

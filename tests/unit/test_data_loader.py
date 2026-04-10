@@ -8,6 +8,7 @@ from game.core.data_loader import (
     load_constants,
     load_effect,
     load_enemy,
+    load_modifier,
     load_skill,
 )
 from game.core.enums import (
@@ -77,8 +78,8 @@ def test_load_class_warrior():
 def test_load_enemy_goblin():
     e = load_enemy("goblin")
     assert e.name == "Goblin"
-    assert "slash" in e.skills
-    assert e.major_stats["attack"] == 8
+    assert "generic_enemy_attack" in e.skills
+    assert e.major_stats["attack"] == 3
     assert e.major_stats["hp"] == 40
 
 
@@ -89,3 +90,10 @@ def test_load_constants():
     assert c["min_party_size"] == 1
     assert c["max_party_size"] == 4
     assert c["turn_timer_seconds"] == 45
+
+
+def test_load_modifier_with_class_tags():
+    m = load_modifier("slash_power")
+    assert m.modifier_id == "slash_power"
+    assert m.skill_filter == "slash"
+    assert "warrior" in m.class_tags

@@ -35,7 +35,7 @@ async def onboarding_set_language(callback: CallbackQuery, state: FSMContext, db
     await state.set_state(OnboardingStates.set_reminders)
     assert isinstance(callback.message, Message)
     logger.info(f"User {tg_id} set language to {lang}")
-    await callback.message.answer("Чудово! Давай увімкнемо нагадування для твоїх цілей? \n Жодного спаму, лише завдання.", reply_markup=confirm_keyboard('settings_reminders_yes', 'settings_reminders_no'))
+    await callback.message.answer("Чудово! Цікавлять сповіщення про нові патчі, апдейти та івенти?", reply_markup=confirm_keyboard('settings_reminders_yes', 'settings_reminders_no'))
     await state.set_state(OnboardingStates.set_reminders)
 
 @router.callback_query(OnboardingStates.set_reminders, F.data == 'settings_reminders_yes')

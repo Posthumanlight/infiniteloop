@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from game.combat.cooldowns import tick_cooldowns
 from game.combat.effects import expire_effects, is_skipped, tick_effects
 from game.combat.models import CombatState, HitResult
 from game.combat.passives import check_passives
@@ -30,6 +31,9 @@ def start_turn(
     rng: SeededRNG,
 ) -> tuple[CombatState, bool, list[HitResult]]:
     current_id = state.turn_order[state.current_turn_index]
+
+    # Tick cooldowns for this entity
+    state = tick_cooldowns(state, current_id)
 
     # Reset turn-scoped passive usage for this entity
     tracker = state.passive_trackers.get(current_id)

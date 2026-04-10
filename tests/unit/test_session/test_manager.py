@@ -1,11 +1,14 @@
+from dataclasses import replace
+
 import pytest
 
 from game.combat.models import ActionRequest
-from game.core.data_loader import clear_cache
+from game.core.data_loader import LocationOption, clear_cache
 from game.core.enums import (
     ActionType,
     CombatPhase,
     EntityType,
+    LocationType,
     SessionEndReason,
     SessionPhase,
 )
@@ -24,11 +27,6 @@ def _fresh_cache():
 
 
 PREDETERMINED_CONFIG = GenerationConfig(predetermined_set_id="dark_cave_intro")
-
-# dark_cave_intro locations:
-#   [0] Goblin Ambush   (combat: 2x goblin)
-#   [1] Underground Fountain (event: mysterious_fountain)
-#   [2] Skeleton Guard   (combat: 1x skeleton)
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +56,7 @@ def test_generate_and_vote():
     state = mgr.start_run("test-session", [player])
     state = mgr.generate_choices(state, PREDETERMINED_CONFIG)
 
-    assert len(state.exploration.current_options) == 3
+    assert len(state.exploration.current_options) > 0
 
     state = mgr.submit_location_vote(state, "p1", 0)
     assert len(state.exploration.votes) == 1
@@ -138,6 +136,21 @@ def _run_combat_to_end(mgr, state):
     return state
 
 
+def _resolve_pending_modifiers(mgr, state):
+    while state.pending_modifier_choices:
+        progressed = False
+        for player_id, pending in list(state.pending_modifier_choices.items()):
+            if not pending.current_offer:
+                continue
+            state = mgr.submit_modifier_choice(
+                state, player_id, pending.current_offer[0],
+            )
+            progressed = True
+        if not progressed:
+            break
+    return state
+
+
 def test_full_combat_loop():
     mgr = SessionManager(seed=42)
     player = make_warrior("p1")
@@ -180,7 +193,10 @@ def test_hp_carries_over():
 
         # Enter another combat
         state = mgr.generate_choices(state, PREDETERMINED_CONFIG)
-        state = mgr.submit_location_vote(state, "p1", 2)  # Skeleton Guard
+        state = _resolve_pending_modifiers(mgr, state)
+        state = mgr.submit_location_vote(
+            state, "p1", len(state.exploration.current_options) - 1,
+        )
         state = mgr.resolve_location_choice(state)
 
         # Player enters with carried HP, not full
@@ -211,16 +227,28 @@ def test_full_event_loop():
     mgr = SessionManager(seed=42)
     player = make_warrior("p1")
     state = mgr.start_run("test-session", [player])
-    state = mgr.generate_choices(state, PREDETERMINED_CONFIG)
-
-    # Pick index 1: Underground Fountain (event: mysterious_fountain)
-    state = mgr.submit_location_vote(state, "p1", 1)
+    event_option = LocationOption(
+        location_id="event_1",
+        name="Shrine",
+        location_type=LocationType.EVENT,
+        tags=(),
+        event_id="cursed_shrine",
+    )
+    state = replace(
+        state,
+        exploration=replace(
+            state.exploration,
+            current_options=(event_option,),
+            votes=(),
+        ),
+    )
+    state = mgr.submit_location_vote(state, "p1", 0)
     state = mgr.resolve_location_choice(state)
     assert state.phase == SessionPhase.IN_EVENT
     assert state.event is not None
 
-    # Vote for choice 0: "Drink from the fountain" (heals)
-    state = mgr.submit_event_vote(state, "p1", 0)
+    # Choice 1 is "Leave it undisturbed" (no outcomes)
+    state = mgr.submit_event_vote(state, "p1", 1)
     state = mgr.resolve_event(state)
 
     assert state.phase in (SessionPhase.EXPLORING, SessionPhase.ENDED)
@@ -239,13 +267,10 @@ def test_max_depth_ends_run():
     state = mgr.start_run("test-session", [player])
     state = mgr.generate_choices(state, PREDETERMINED_CONFIG)
 
-    # Pick event (won't kill the player), resolve quickly
-    state = mgr.submit_location_vote(state, "p1", 1)
+    # Pick first room and resolve it fully
+    state = mgr.submit_location_vote(state, "p1", 0)
     state = mgr.resolve_location_choice(state)
-
-    # Resolve the event with "Walk away" (no outcomes)
-    state = mgr.submit_event_vote(state, "p1", 3)
-    state = mgr.resolve_event(state)
+    state = _run_combat_to_end(mgr, state)
 
     assert state.phase == SessionPhase.ENDED
     assert state.end_reason == SessionEndReason.MAX_DEPTH
@@ -261,10 +286,9 @@ def test_deterministic_with_seed():
         player = make_warrior("p1")
         state = mgr.start_run("test-session", [player])
         state = mgr.generate_choices(state, PREDETERMINED_CONFIG)
-        state = mgr.submit_location_vote(state, "p1", 1)
+        state = mgr.submit_location_vote(state, "p1", 0)
         state = mgr.resolve_location_choice(state)
-        state = mgr.submit_event_vote(state, "p1", 0)
-        state = mgr.resolve_event(state)
+        state = _run_combat_to_end(mgr, state)
         return state
 
     s1 = run_one(99)

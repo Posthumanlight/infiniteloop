@@ -14,7 +14,8 @@ from game.combat.turn_manager import (
     start_round,
     start_turn,
 )
-from game.core.data_loader import load_constants, load_skill
+from game.combat.cooldowns import get_remaining_cooldown
+from game.core.data_loader import SkillData, load_constants, load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import ActionType, CombatPhase, TriggerType
 
@@ -138,10 +139,13 @@ def skip_turn(
     return state, result
 
 
-def get_available_actions(state: CombatState, actor_id: str) -> list:
+def get_available_actions(
+    state: CombatState, actor_id: str,
+) -> list[tuple[SkillData, int]]:
     entity = state.entities[actor_id]
-    skills = []
+    result: list[tuple[SkillData, int]] = []
     for skill_id in entity.skills:
         skill_data = load_skill(skill_id)
-        skills.append(skill_data)
-    return skills
+        cd = get_remaining_cooldown(state, actor_id, skill_id)
+        result.append((skill_data, cd))
+    return result

@@ -5,7 +5,7 @@ from game.combat.effects import apply_effect, build_expr_context, get_damage_mul
 from game.combat.models import CombatState, HitResult
 from game.combat.passives import check_passives
 from game.combat.skill_modifiers import apply_post_hit_modifiers, collect_modifiers
-from game.combat.targeting import get_allies
+from game.combat.targeting import get_allies, resolve_targets
 from game.core.data_loader import SkillData
 from game.core.dice import SeededRNG
 from game.core.enums import ModifierPhase, TriggerType
@@ -15,33 +15,51 @@ def resolve_skill(
     state: CombatState,
     actor_id: str,
     skill: SkillData,
-    target_ids: list[str],
+    selected_targets: dict[int, str],
     rng: SeededRNG,
     constants: dict,
 ) -> tuple[CombatState, list[HitResult]]:
     all_hits: list[HitResult] = []
 
-    # Collect modifiers for this actor + skill
+    # Collect modifiers for this actor + skill (damage_type filter re-checked per hit)
     actor = state.entities[actor_id]
     modifiers = collect_modifiers(actor, skill)
-    pre_hit_mods = tuple(m for m in modifiers if m.phase == ModifierPhase.PRE_HIT)
 
-    for target_id in target_ids:
-        for hit in skill.hits:
+    # Cache of resolved target lists by hit index for share_with reuse.
+    hit_target_cache: dict[int, list[str]] = {}
+
+    for hit_index, hit in enumerate(skill.hits):
+        if hit.share_with is not None:
+            target_ids = hit_target_cache.get(hit.share_with, [])
+        else:
+            target_ids = resolve_targets(
+                state, actor_id, hit.target_type, selected_targets.get(hit_index),
+            )
+        hit_target_cache[hit_index] = list(target_ids)
+
+        pre_hit_mods = tuple(
+            m for m in modifiers
+            if m.phase == ModifierPhase.PRE_HIT
+            and (m.damage_type_filter is None or (
+                hit.damage_type is not None and hit.damage_type.value == m.damage_type_filter
+            ))
+        )
+
+        for target_id in target_ids:
             attacker = state.entities[actor_id]
             defender = state.entities[target_id]
 
             if defender.current_hp <= 0:
-                break
+                continue
 
-            effect_mult = get_damage_multiplier(state, actor_id, target_id, skill.damage_type)
+            effect_mult = get_damage_multiplier(state, actor_id, target_id, hit.damage_type)
 
             dmg_result = resolve_damage(
                 attacker=attacker,
                 defender=defender,
                 formula_expr=hit.formula,
                 base_power=hit.base_power,
-                damage_type=skill.damage_type,
+                damage_type=hit.damage_type,
                 rng=rng,
                 constants=constants,
                 modifiers=pre_hit_mods,
@@ -74,7 +92,14 @@ def resolve_skill(
                 target_id=target_id,
                 damage=dmg_result,
                 effects_applied=tuple(effects_applied),
+                skill_id=skill.skill_id,
             ))
+
+            # Passive triggers: ON_HIT
+            state, _ = check_passives(
+                state, actor_id, TriggerType.ON_HIT,
+                {"damage_type": hit.damage_type},
+            )
 
             # Passive triggers: ON_TAKE_DAMAGE
             state, _ = check_passives(

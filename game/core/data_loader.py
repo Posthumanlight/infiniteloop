@@ -56,6 +56,7 @@ class EffectDef:
     duration: int
     stackable: bool
     actions: tuple[EffectActionDef, ...]
+    max_stacks: int | None = None            # None = unlimited
     apply_condition: str | None = None       # checked once on apply
     tick_condition: str | None = None         # checked each tick/on-demand
 
@@ -85,6 +86,7 @@ def load_effects() -> dict[str, EffectDef]:
             duration=edata["duration"],
             stackable=edata["stackable"],
             actions=actions,
+            max_stacks=edata.get("max_stacks"),
             apply_condition=edata.get("apply_condition"),
             tick_condition=edata.get("tick_condition"),
         )
@@ -110,10 +112,13 @@ class OnHitEffectData:
 
 @dataclass(frozen=True)
 class SkillHitData:
+    target_type: TargetType
     formula: str
     base_power: int
+    damage_type: DamageType | None = None
     variance: float | None = None
     on_hit_effects: tuple[OnHitEffectData, ...] = ()
+    share_with: int | None = None
 
 
 @dataclass(frozen=True)
@@ -126,12 +131,11 @@ class SelfEffectData:
 class SkillData:
     skill_id: str
     name: str
-    target_type: TargetType
     energy_cost: int
     action_type: ActionType
-    damage_type: DamageType | None
     hits: tuple[SkillHitData, ...]
     self_effects: tuple[SelfEffectData, ...]
+    cooldown: int = 0
 
 
 def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
@@ -141,11 +145,17 @@ def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
             effect_id=ohe["effect"],
             chance=ohe["chance"],
         ))
+    dmg_type = None
+    if "damage_type" in hit_raw:
+        dmg_type = DamageType(hit_raw["damage_type"])
     return SkillHitData(
+        target_type=TargetType(hit_raw["target_type"]),
         formula=hit_raw["formula"],
         base_power=hit_raw["base_power"],
+        damage_type=dmg_type,
         variance=hit_raw.get("variance"),
         on_hit_effects=tuple(on_hits),
+        share_with=hit_raw.get("share_with"),
     )
 
 
@@ -153,10 +163,6 @@ def load_skills() -> dict[str, SkillData]:
     raw = _load_toml("skills.toml")["skills"]
     result: dict[str, SkillData] = {}
     for sid, sdata in raw.items():
-        dmg_type = None
-        if "damage_type" in sdata:
-            dmg_type = DamageType(sdata["damage_type"])
-
         hits = tuple(_parse_hit(h) for h in sdata.get("hits", []))
 
         self_effects: list[SelfEffectData] = []
@@ -169,12 +175,11 @@ def load_skills() -> dict[str, SkillData]:
         result[sid] = SkillData(
             skill_id=sid,
             name=sdata["name"],
-            target_type=TargetType(sdata["target_type"]),
             energy_cost=sdata["energy_cost"],
             action_type=ActionType(sdata["action_type"]),
-            damage_type=dmg_type,
             hits=hits,
             self_effects=tuple(self_effects),
+            cooldown=sdata.get("cooldown", 0),
         )
     return result
 
@@ -359,7 +364,10 @@ class PassiveSkillData:
     usage_limit: UsageLimit
     max_uses: int | None = None
     effect_id: str | None = None
+    cast_skill_id: str | None = None
+    consume_effect_id: str | None = None
     target_type: TargetType = TargetType.SELF
+    cooldown: int = 0
 
 
 def load_passives() -> dict[str, PassiveSkillData]:
@@ -375,7 +383,10 @@ def load_passives() -> dict[str, PassiveSkillData]:
             usage_limit=UsageLimit(pdata["usage_limit"]),
             max_uses=pdata.get("max_uses"),
             effect_id=pdata.get("effect_id"),
+            cast_skill_id=pdata.get("cast_skill_id"),
+            consume_effect_id=pdata.get("consume_effect_id"),
             target_type=TargetType(pdata.get("target_type", "self")),
+            cooldown=pdata.get("cooldown", 0),
         )
         for pid, pdata in raw.items()
     }
@@ -400,7 +411,9 @@ class SkillModifierData:
     stackable: bool
     expr: str
     action: str
+    max_stacks: int | None = None            # None = unlimited
     skill_filter: str | None = None
+    class_tags: tuple[str, ...] = ()
     damage_type_filter: str | None = None
     damage_type_override: str | None = None
 
@@ -415,7 +428,9 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             stackable=mdata.get("stackable", False),
             expr=mdata.get("expr", "0"),
             action=mdata["action"],
+            max_stacks=mdata.get("max_stacks"),
             skill_filter=mdata.get("skill_filter"),
+            class_tags=tuple(mdata.get("class_tags", [])),
             damage_type_filter=mdata.get("damage_type_filter"),
             damage_type_override=mdata.get("damage_type_override"),
         )

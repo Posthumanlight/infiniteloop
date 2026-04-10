@@ -1,43 +1,62 @@
 #generics
 [skills.generic_enemy_attack]
 name = "Attack"
-target_type = "single_enemy"
 energy_cost = 0
 action_type = "action"
-damage_type = "slashing"
 hits = [
-  { formula = "attacker.attack+base_power",   base_power = 0, variance = 0.25 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack+base_power", base_power = 0, variance = 0.25 },
 ]
 #warrior
 [skills.slash]
 name = "Slash"
-target_type = "single_enemy"
 energy_cost = 0
 action_type = "action"
-damage_type = "slashing"
 hits = [
-  { formula = "base_power + attacker.attack * 1.5", base_power = 10, variance = 0.1 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 10, variance = 0.0 },
 ]
 
 [skills.cleave]
 name = "Cleave"
-target_type = "all_enemies"
 energy_cost = 10
 action_type = "action"
-damage_type = "slashing"
 hits = [
-  { formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.1 },
+  { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.0 },
 ]
 
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"
-target_type = "single_enemy"
 energy_cost = 0
 action_type = "action"
-damage_type = "arcane"
 hits = [
-  { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
-  { formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.1 },
+  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.7", base_power = 1, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.7", base_power = 1, variance = 0.0, share_with = 0 },
+]
 
+#don`t include in actual spell list, exists just for passive arcane_rupture
+[skills.arcane_rupture]
+name = "Arcane Rupture"
+energy_cost = 0
+action_type = "action"
+hits = [
+  { target_type = "all_enemies", damage_type = "arcane", formula = "base_power + attacker.attack * 0.05", base_power = 1, variance = 0.0 },
+]
+
+[skills.annihilation]
+name = "Annihilation"
+energy_cost = 35
+action_type = "action"
+cooldown = 5
+hits = [
+  { target_type = "single_enemy", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.9)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
+]
+
+[skills.singularity]
+name = "Singularity"
+energy_cost = 50
+action_type = "action"
+cooldown = 8
+hits = [
+  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 1.1", base_power = 10, variance = 0.0 },
+  { target_type = "all_enemies", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.25)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
 ]

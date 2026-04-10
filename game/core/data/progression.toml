@@ -8,10 +8,14 @@ xp_thresholds = [0, 100, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000
 attack = 3
 hp = 25
 speed = 1
-resistance = 1
+resistance = 3
+mastery = 3
+
 
 [level_scaling.mage]
 attack = 5
 hp = 12
 speed = 1
 energy = 5
+mastery = 5
+resistance = 1

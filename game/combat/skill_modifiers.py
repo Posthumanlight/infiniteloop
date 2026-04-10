@@ -30,23 +30,27 @@ class ResolvedModifier:
     expr: str
     action: str
     stack_count: int
+    damage_type_filter: str | None = None
 
 
 def add_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
-    """Add a modifier. Stackable mods increment count; unique mods are no-op if present."""
     mod_data = load_modifier(modifier_id)
     existing = list(entity.skill_modifiers)
     for i, inst in enumerate(existing):
         if inst.modifier_id == modifier_id:
             if mod_data.stackable:
-                existing[i] = replace(inst, stack_count=inst.stack_count + 1)
+                at_max = (
+                    mod_data.max_stacks is not None
+                    and inst.stack_count >= mod_data.max_stacks
+                )
+                if not at_max:
+                    existing[i] = replace(inst, stack_count=inst.stack_count + 1)
             return replace(entity, skill_modifiers=tuple(existing))
     existing.append(ModifierInstance(modifier_id=modifier_id))
     return replace(entity, skill_modifiers=tuple(existing))
 
 
 def remove_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
-    """Remove one stack of a modifier. If last stack, remove entirely."""
     existing = list(entity.skill_modifiers)
     for i, inst in enumerate(existing):
         if inst.modifier_id == modifier_id:
@@ -68,18 +72,15 @@ def collect_modifiers(
         mod_data = load_modifier(inst.modifier_id)
         if mod_data.skill_filter and mod_data.skill_filter != skill.skill_id:
             continue
-        if (
-            mod_data.damage_type_filter
-            and skill.damage_type
-            and skill.damage_type.value != mod_data.damage_type_filter
-        ):
-            continue
+        # damage_type filter is re-checked per hit in skill_resolver, since
+        # skills no longer carry a single damage_type.
         result.append(ResolvedModifier(
             modifier_id=inst.modifier_id,
             phase=mod_data.phase,
             expr=mod_data.expr,
             action=mod_data.action,
             stack_count=inst.stack_count,
+            damage_type_filter=mod_data.damage_type_filter,
         ))
     return tuple(result)
 
