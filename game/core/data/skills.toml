@@ -41,6 +41,7 @@ hits = [
   { formula = "base_power + attacker.attack * 0.7", base_power = 1, variance = 0.0 },
 ]
 
+#don`t include in actual spell list, exists just for passive arcane_rupture
 [skills.arcane_rupture]
 name = "Arcane Rupture"
 target_type = "all_enemies"
@@ -48,3 +49,12 @@ energy_cost = 0
 action_type = "action"
 damage_type = "arcane"
 hits = [{ formula = "base_power + attacker.attack * 0.05", base_power = 1, variance = 0.0 }]
+
+[skills.annihilation]
+name = "Annihilation"
+target_type = "single_enemy"
+energy_cost = 35
+action_type = "action"
+damage_type = "arcane"
+cooldown = 5
+hits = [{formula = "(base_power + (attacker.attack * 1.9)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0}]

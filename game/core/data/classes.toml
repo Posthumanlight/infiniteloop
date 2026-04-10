@@ -21,7 +21,7 @@ slashing_dmg_pct = 0.1
 name = "Mage"
 description = "Spellcaster"
 starting_skills = ["arcane_bolt"]
-starting_passives = ["arcane_prowess", "arcane_rupture"]
+starting_passives = ["arcane_prowess", "arcane_rupture", "annihilation"]
 
 [classes.mage.major_stats]
 attack = 15
@@ -34,6 +34,4 @@ energy = 150
 mastery = 2
 
 [classes.mage.minor_stats]
-fire_dmg_pct = 0.1
 arcane_dmg_pct = 0.1
-ice_dmg_pct = 0.1

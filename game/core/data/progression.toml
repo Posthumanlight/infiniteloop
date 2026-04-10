@@ -9,9 +9,12 @@ attack = 3
 hp = 25
 speed = 1
 resistance = 1
+mastery = 3
+
 
 [level_scaling.mage]
 attack = 5
 hp = 12
 speed = 1
 energy = 5
+mastery = 5
