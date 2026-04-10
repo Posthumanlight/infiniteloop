@@ -171,9 +171,13 @@ def player_turn(state, actor_id):
         except (ValueError, IndexError):
             print("  Invalid choice, try again.")
 
-    target_id = None
-    if skill.target_type.value == "single_enemy":
-        print(f"  Targets:")
+    pairs: list[tuple[int, str]] = []
+    for hit_index, hit in enumerate(skill.hits):
+        if hit.share_with is not None:
+            continue
+        if hit.target_type.value != "single_enemy":
+            continue
+        print(f"  Targets for hit {hit_index + 1}:")
         for i, eid in enumerate(enemies_alive):
             e = state.entities[eid]
             print(f"    [{i + 1}] {e.entity_name} ({e.current_hp}/{e.major_stats.hp} HP)")
@@ -181,7 +185,7 @@ def player_turn(state, actor_id):
             try:
                 tc = input("  Pick target [1]: ").strip()
                 ti = int(tc) - 1 if tc else 0
-                target_id = enemies_alive[ti]
+                pairs.append((hit_index, enemies_alive[ti]))
                 break
             except (ValueError, IndexError):
                 print("  Invalid target, try again.")
@@ -190,7 +194,7 @@ def player_turn(state, actor_id):
         actor_id=actor_id,
         action_type=ActionType.ACTION,
         skill_id=skill.skill_id,
-        target_id=target_id,
+        target_ids=tuple(pairs),
     )
     return submit_action(state, action)
 
@@ -205,12 +209,18 @@ def enemy_turn(state, actor_id):
     ]
     target = players_alive[0]
     skill_id = entity.skills[0] if entity.skills else "slash"
+    from game.core.data_loader import load_skill
+    skill_def = load_skill(skill_id)
+    ai_pairs: list[tuple[int, str]] = []
+    for hit_index, hit in enumerate(skill_def.hits):
+        if hit.share_with is None and hit.target_type.value == "single_enemy":
+            ai_pairs.append((hit_index, target))
 
     action = ActionRequest(
         actor_id=actor_id,
         action_type=ActionType.ACTION,
         skill_id=skill_id,
-        target_id=target,
+        target_ids=tuple(ai_pairs),
     )
     return submit_action(state, action)
 

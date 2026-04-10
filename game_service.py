@@ -11,7 +11,7 @@ from game.core.data_loader import (
     load_passive,
     load_skill,
 )
-from game.core.enums import ActionType, EffectActionType, EntityType, SessionPhase
+from game.core.enums import ActionType, EffectActionType, EntityType, SessionPhase, TargetType
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
@@ -618,11 +618,12 @@ class GameService:
 
     @staticmethod
     def _build_enemy_action(session: _ActiveSession) -> ActionRequest:
-        """MVP enemy AI: first skill on first alive player."""
+        """MVP enemy AI: first skill, first alive player/ally per single-target hit."""
         combat = session.state.combat
         current_id = combat.turn_order[combat.current_turn_index]
         enemy = combat.entities[current_id]
         skill_id = enemy.skills[0]
+        skill = load_skill(skill_id)
 
         alive_players = [
             eid
@@ -630,13 +631,28 @@ class GameService:
             if combat.entities[eid].entity_type == EntityType.PLAYER
             and combat.entities[eid].current_hp > 0
         ]
-        target = alive_players[0] if alive_players else None
+        alive_allies = [
+            eid
+            for eid in combat.turn_order
+            if eid != current_id
+            and combat.entities[eid].entity_type == EntityType.ENEMY
+            and combat.entities[eid].current_hp > 0
+        ]
+
+        pairs: list[tuple[int, str]] = []
+        for hit_index, hit in enumerate(skill.hits):
+            if hit.share_with is not None:
+                continue
+            if hit.target_type == TargetType.SINGLE_ENEMY and alive_players:
+                pairs.append((hit_index, alive_players[0]))
+            elif hit.target_type == TargetType.SINGLE_ALLY and alive_allies:
+                pairs.append((hit_index, alive_allies[0]))
 
         return ActionRequest(
             actor_id=current_id,
             action_type=ActionType.ACTION,
             skill_id=skill_id,
-            target_id=target,
+            target_ids=tuple(pairs),
         )
 
     @staticmethod
