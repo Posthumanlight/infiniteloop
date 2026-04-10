@@ -74,6 +74,14 @@ async def cb_skill(
         await callback.answer(f"Skill on cooldown ({cd} turns)!", show_alert=True)
         return
 
+    current_energy = _get_actor_energy(game_service, sid, actor_id)
+    if current_energy is not None and current_energy < skill.energy_cost:
+        await callback.answer(
+            _not_enough_energy_message(current_energy, skill.energy_cost),
+            show_alert=True,
+        )
+        return
+
     # Build queue of hit indices that need single-target selection.
     pending_hits: list[int] = [
         idx for idx, hit in enumerate(skill.hits)
@@ -89,7 +97,7 @@ async def cb_skill(
             skill_id=skill_id,
             target_ids=(),
         )
-        await _submit_action(callback, game_service, sid, action)
+        await _submit_action(callback, game_service, sid, action, state)
         return
 
     # Need target selection — store skill_id and show target picker for first pending hit
@@ -152,27 +160,40 @@ async def cb_target(
         await callback.answer("No skill selected. Pick a skill first.", show_alert=True)
         return
 
+    skills = game_service.get_available_skills(sid, actor_id)
+    skill_match = next(((s, cd) for s, cd in skills if s.skill_id == skill_id), None)
+    if skill_match is None:
+        await _restore_skill_prompt(callback, game_service, sid, state)
+        await callback.answer("Skill no longer available.", show_alert=True)
+        return
+    skill, cd = skill_match
+    if cd > 0:
+        await _restore_skill_prompt(callback, game_service, sid, state)
+        await callback.answer(f"Skill on cooldown ({cd} turns)!", show_alert=True)
+        return
+
+    current_energy = _get_actor_energy(game_service, sid, actor_id)
+    if current_energy is not None and current_energy < skill.energy_cost:
+        await _restore_skill_prompt(callback, game_service, sid, state)
+        await callback.answer(
+            _not_enough_energy_message(current_energy, skill.energy_cost),
+            show_alert=True,
+        )
+        return
+
     current_hit_index = pending_hit_queue.pop(0)
     collected.append([current_hit_index, target_id])
 
     if pending_hit_queue:
         # Still more hits to target — show next picker
-        skills = game_service.get_available_skills(sid, actor_id)
-        skill_match = next((s for s, _ in skills if s.skill_id == skill_id), None)
-        if skill_match is None:
-            await callback.answer("Skill no longer available.", show_alert=True)
-            await state.update_data(
-                pending_skill=None, pending_hit_queue=[], collected_targets=[],
-            )
-            return
         next_hit_index = pending_hit_queue[0]
-        next_hit = skill_match.hits[next_hit_index]
+        next_hit = skill.hits[next_hit_index]
         candidates = (
             game_service.get_alive_enemies(sid)
             if next_hit.target_type == TargetType.SINGLE_ENEMY
             else game_service.get_alive_allies(sid)
         )
-        prompt = _target_prompt(skill_match.name, next_hit_index, len(skill_match.hits))
+        prompt = _target_prompt(skill.name, next_hit_index, len(skill.hits))
         await state.update_data(
             pending_hit_queue=pending_hit_queue,
             collected_targets=collected,
@@ -191,7 +212,7 @@ async def cb_target(
     await state.update_data(
         pending_skill=None, pending_hit_queue=[], collected_targets=[],
     )
-    await _submit_action(callback, game_service, sid, action)
+    await _submit_action(callback, game_service, sid, action, state)
 
 
 # ------------------------------------------------------------------
@@ -202,6 +223,7 @@ async def cb_target(
 async def cb_skip(
     callback: CallbackQuery,
     game_service: GameService,
+    state: FSMContext,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
@@ -217,7 +239,7 @@ async def cb_skip(
     batch = game_service.skip_player_turn(sid, actor_id)
     players = {p.entity_id: p for p in game_service.get_session_players(sid)}
 
-    await _render_batch_and_prompt(callback, game_service, sid, batch, players)
+    await _render_batch_and_prompt(callback, game_service, sid, batch, players, state)
 
 
 # ------------------------------------------------------------------
@@ -271,12 +293,20 @@ async def _submit_action(
     game_service: GameService,
     session_id: str,
     action: ActionRequest,
+    state: FSMContext,
 ) -> None:
     """Submit action, render results, prompt next turn."""
-    batch = game_service.submit_player_action(session_id, action)
+    try:
+        batch = game_service.submit_player_action(session_id, action)
+    except ValueError as exc:
+        await _restore_skill_prompt(callback, game_service, session_id, state)
+        await callback.answer(str(exc), show_alert=True)
+        return
     players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
 
-    await _render_batch_and_prompt(callback, game_service, session_id, batch, players)
+    await _render_batch_and_prompt(
+        callback, game_service, session_id, batch, players, state,
+    )
 
 
 async def _render_batch_and_prompt(
@@ -285,8 +315,10 @@ async def _render_batch_and_prompt(
     session_id: str,
     batch,
     players: dict,
+    state: FSMContext,
 ) -> None:
     """Render turn batch results and either prompt next turn or show combat end."""
+    await _clear_pending_combat_selection(state)
     await callback.answer()
 
     # Render action results
@@ -309,12 +341,14 @@ async def _render_batch_and_prompt(
                 reply_markup=location_keyboard(options),
             )
             await _send_modifier_prompts(callback, game_service, session_id)
+            await state.set_state(GameStates.exploring)
         elif phase == SessionPhase.ENDED:
             stats = game_service.get_run_stats(session_id)
             session = game_service._get_session(session_id)
             victory = any(p.current_hp > 0 for p in session.state.players)
             await callback.message.answer(render_run_summary(stats, victory))
             game_service.remove_session(session_id)
+            await state.set_state(GameStates.run_ended)
         else:
             game_service.remove_session(session_id)
     else:
@@ -324,4 +358,65 @@ async def _render_batch_and_prompt(
             turn_snap = batch.entities[whose_turn]
             skills = game_service.get_available_skills(session_id, whose_turn)
             prompt = render_turn_prompt(whose_turn, turn_snap, players)
-            await callback.message.answer(prompt, reply_markup=skill_keyboard(skills))
+            await callback.message.answer(
+                prompt,
+                reply_markup=skill_keyboard(skills, turn_snap.current_energy),
+            )
+            await state.set_state(GameStates.combat_idle)
+
+
+def _get_actor_energy(
+    game_service: GameService,
+    session_id: str,
+    actor_id: str,
+) -> int | None:
+    snapshot = game_service.get_combat_snapshot(session_id)
+    actor = snapshot.entities.get(actor_id)
+    if actor is None:
+        return None
+    return actor.current_energy
+
+
+def _not_enough_energy_message(current_energy: int, energy_cost: int) -> str:
+    return f"Not enough energy: have {current_energy}, need {energy_cost}"
+
+
+async def _clear_pending_combat_selection(state: FSMContext) -> None:
+    await state.update_data(
+        pending_skill=None,
+        pending_hit_queue=[],
+        collected_targets=[],
+    )
+
+
+async def _restore_skill_prompt(
+    callback: CallbackQuery,
+    game_service: GameService,
+    session_id: str,
+    state: FSMContext,
+) -> None:
+    previous_state = await state.get_state()
+    await _clear_pending_combat_selection(state)
+    await state.set_state(GameStates.combat_idle)
+
+    if previous_state != GameStates.combat_target.state:
+        return
+    if not game_service.has_session(session_id) or not game_service.is_in_combat(session_id):
+        return
+
+    whose_turn = game_service.get_whose_turn(session_id)
+    if whose_turn is None:
+        return
+
+    snapshot = game_service.get_combat_snapshot(session_id)
+    turn_snap = snapshot.entities.get(whose_turn)
+    if turn_snap is None:
+        return
+
+    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+    skills = game_service.get_available_skills(session_id, whose_turn)
+    prompt = render_turn_prompt(whose_turn, turn_snap, players)
+    await callback.message.edit_text(
+        prompt,
+        reply_markup=skill_keyboard(skills, turn_snap.current_energy),
+    )

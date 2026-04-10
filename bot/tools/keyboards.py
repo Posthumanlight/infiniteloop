@@ -53,11 +53,16 @@ def lobby_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def skill_keyboard(skills: list[tuple[SkillData, int]]) -> InlineKeyboardMarkup:
+def skill_keyboard(
+    skills: list[tuple[SkillData, int]],
+    current_energy: int | None = None,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for skill, cd in skills:
         if cd > 0:
             text = f"{skill.name} (CD: {cd})"
+        elif current_energy is not None and current_energy < skill.energy_cost:
+            text = f"{skill.name} (\u26a1{skill.energy_cost}, no energy)"
         elif skill.energy_cost > 0:
             text = f"{skill.name} (\u26a1{skill.energy_cost})"
         else:
