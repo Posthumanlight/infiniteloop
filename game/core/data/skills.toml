@@ -57,6 +57,6 @@ energy_cost = 50
 action_type = "action"
 cooldown = 8
 hits = [
-  {target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 1.1, base power = 10, variance = 0.0}
+  {target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 1.1, base power = 10, variance = 0.0},
   { target_type = "all_enemies", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.25)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
 ]
