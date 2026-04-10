@@ -11,10 +11,13 @@ class OnHitEffect:
 
 @dataclass(frozen=True)
 class SkillHit:
+    target_type: TargetType
     formula: str
     base_power: int
+    damage_type: DamageType | None = None
     variance: float | None = None
     on_hit_effects: tuple[OnHitEffect, ...] = ()
+    share_with: int | None = None
 
 
 @dataclass(frozen=True)
@@ -27,9 +30,7 @@ class SelfEffect:
 class SkillDef:
     skill_id: str
     name: str
-    target_type: TargetType
     energy_cost: int
     action_type: ActionType
-    damage_type: DamageType | None
     hits: tuple[SkillHit, ...]
     self_effects: tuple[SelfEffect, ...] = ()

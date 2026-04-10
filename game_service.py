@@ -26,6 +26,7 @@ from game.core.game_models import (
     PendingModifierChoiceInfo,
     PassiveInfo,
     PlayerInfo,
+    SkillHitInfo,
     SkillInfo,
     TurnBatch,
 )
@@ -339,6 +340,15 @@ class GameService:
             if e.entity_type == EntityType.ENEMY and e.current_hp > 0
         ]
 
+    def get_alive_allies(self, session_id: str) -> list[EntitySnapshot]:
+        session = self._get_session(session_id)
+        self._assert_in_combat(session)
+        return [
+            self._entity_to_snapshot(e)
+            for e in session.state.combat.entities.values()
+            if e.entity_type == EntityType.PLAYER and e.current_hp > 0
+        ]
+
     def get_whose_turn(self, session_id: str) -> str | None:
         session = self._sessions.get(session_id)
         if session is None or session.state is None or session.state.combat is None:
@@ -496,8 +506,13 @@ class GameService:
             skill_id=data.skill_id,
             name=data.name,
             energy_cost=data.energy_cost,
-            target_type=data.target_type,
-            damage_type=data.damage_type.value if data.damage_type else None,
+            hits=tuple(
+                SkillHitInfo(
+                    target_type=hit.target_type,
+                    damage_type=hit.damage_type.value if hit.damage_type else None,
+                )
+                for hit in data.hits
+            ),
         )
 
     @staticmethod

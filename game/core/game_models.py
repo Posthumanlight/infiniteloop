@@ -59,14 +59,21 @@ class CombatSnapshot:
 
 
 @dataclass(frozen=True)
+class SkillHitInfo:
+    """Display-ready per-hit summary."""
+
+    target_type: TargetType
+    damage_type: str | None
+
+
+@dataclass(frozen=True)
 class SkillInfo:
     """Display-ready skill data."""
 
     skill_id: str
     name: str
     energy_cost: int
-    target_type: TargetType
-    damage_type: str | None
+    hits: tuple[SkillHitInfo, ...]
 
 
 @dataclass(frozen=True)

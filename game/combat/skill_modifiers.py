@@ -30,6 +30,7 @@ class ResolvedModifier:
     expr: str
     action: str
     stack_count: int
+    damage_type_filter: str | None = None
 
 
 def add_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
@@ -71,18 +72,15 @@ def collect_modifiers(
         mod_data = load_modifier(inst.modifier_id)
         if mod_data.skill_filter and mod_data.skill_filter != skill.skill_id:
             continue
-        if (
-            mod_data.damage_type_filter
-            and skill.damage_type
-            and skill.damage_type.value != mod_data.damage_type_filter
-        ):
-            continue
+        # damage_type filter is re-checked per hit in skill_resolver, since
+        # skills no longer carry a single damage_type.
         result.append(ResolvedModifier(
             modifier_id=inst.modifier_id,
             phase=mod_data.phase,
             expr=mod_data.expr,
             action=mod_data.action,
             stack_count=inst.stack_count,
+            damage_type_filter=mod_data.damage_type_filter,
         ))
     return tuple(result)
 

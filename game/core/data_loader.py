@@ -112,10 +112,13 @@ class OnHitEffectData:
 
 @dataclass(frozen=True)
 class SkillHitData:
+    target_type: TargetType
     formula: str
     base_power: int
+    damage_type: DamageType | None = None
     variance: float | None = None
     on_hit_effects: tuple[OnHitEffectData, ...] = ()
+    share_with: int | None = None
 
 
 @dataclass(frozen=True)
@@ -128,10 +131,8 @@ class SelfEffectData:
 class SkillData:
     skill_id: str
     name: str
-    target_type: TargetType
     energy_cost: int
     action_type: ActionType
-    damage_type: DamageType | None
     hits: tuple[SkillHitData, ...]
     self_effects: tuple[SelfEffectData, ...]
     cooldown: int = 0
@@ -144,11 +145,17 @@ def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
             effect_id=ohe["effect"],
             chance=ohe["chance"],
         ))
+    dmg_type = None
+    if "damage_type" in hit_raw:
+        dmg_type = DamageType(hit_raw["damage_type"])
     return SkillHitData(
+        target_type=TargetType(hit_raw["target_type"]),
         formula=hit_raw["formula"],
         base_power=hit_raw["base_power"],
+        damage_type=dmg_type,
         variance=hit_raw.get("variance"),
         on_hit_effects=tuple(on_hits),
+        share_with=hit_raw.get("share_with"),
     )
 
 
@@ -156,10 +163,6 @@ def load_skills() -> dict[str, SkillData]:
     raw = _load_toml("skills.toml")["skills"]
     result: dict[str, SkillData] = {}
     for sid, sdata in raw.items():
-        dmg_type = None
-        if "damage_type" in sdata:
-            dmg_type = DamageType(sdata["damage_type"])
-
         hits = tuple(_parse_hit(h) for h in sdata.get("hits", []))
 
         self_effects: list[SelfEffectData] = []
@@ -172,10 +175,8 @@ def load_skills() -> dict[str, SkillData]:
         result[sid] = SkillData(
             skill_id=sid,
             name=sdata["name"],
-            target_type=TargetType(sdata["target_type"]),
             energy_cost=sdata["energy_cost"],
             action_type=ActionType(sdata["action_type"]),
-            damage_type=dmg_type,
             hits=hits,
             self_effects=tuple(self_effects),
             cooldown=sdata.get("cooldown", 0),

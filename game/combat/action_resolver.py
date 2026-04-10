@@ -5,7 +5,6 @@ from game.combat.effects import is_skipped
 from game.combat.models import ActionRequest, ActionResult, CombatState
 from game.combat.passives import check_passives
 from game.combat.skill_resolver import resolve_skill
-from game.combat.targeting import resolve_targets
 from game.core.data_loader import load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import ActionType, TriggerType
@@ -62,11 +61,9 @@ def _resolve_skill_action(
         }
         state = replace(state, entities=new_entities)
 
-    target_ids = resolve_targets(
-        state, action.actor_id, skill.target_type, action.target_id,
+    state, hits = resolve_skill(
+        state, action.actor_id, skill, action.get_target_map(), rng, constants,
     )
-
-    state, hits = resolve_skill(state, action.actor_id, skill, target_ids, rng, constants)
 
     state = put_on_cooldown(state, action.actor_id, action.skill_id, skill.cooldown)
 

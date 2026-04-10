@@ -74,27 +74,50 @@ async def cb_skill(
         await callback.answer(f"Skill on cooldown ({cd} turns)!", show_alert=True)
         return
 
-    match skill.target_type:
-        case TargetType.SINGLE_ENEMY:
-            # Need target selection — store skill_id and show target picker
-            await state.update_data(pending_skill=skill_id)
-            await state.set_state(GameStates.combat_target)
-            enemies = game_service.get_alive_enemies(sid)
-            await callback.message.edit_text(
-                f"Pick a target for {skill.name}:",
-                reply_markup=target_keyboard(enemies),
-            )
-            await callback.answer()
+    # Build queue of hit indices that need single-target selection.
+    pending_hits: list[int] = [
+        idx for idx, hit in enumerate(skill.hits)
+        if hit.share_with is None
+        and hit.target_type in (TargetType.SINGLE_ENEMY, TargetType.SINGLE_ALLY)
+    ]
 
-        case TargetType.ALL_ENEMIES | TargetType.SELF | TargetType.ALL_ALLIES | TargetType.SINGLE_ALLY:
-            # No target selection needed — submit immediately
-            action = ActionRequest(
-                actor_id=actor_id,
-                action_type=ActionType.ACTION,
-                skill_id=skill_id,
-                target_id=None,
-            )
-            await _submit_action(callback, game_service, sid, action)
+    if not pending_hits:
+        # No target selection needed — submit immediately
+        action = ActionRequest(
+            actor_id=actor_id,
+            action_type=ActionType.ACTION,
+            skill_id=skill_id,
+            target_ids=(),
+        )
+        await _submit_action(callback, game_service, sid, action)
+        return
+
+    # Need target selection — store skill_id and show target picker for first pending hit
+    await state.update_data(
+        pending_skill=skill_id,
+        pending_hit_queue=pending_hits,
+        collected_targets=[],
+    )
+    await state.set_state(GameStates.combat_target)
+    first_hit_index = pending_hits[0]
+    first_hit = skill.hits[first_hit_index]
+    candidates = (
+        game_service.get_alive_enemies(sid)
+        if first_hit.target_type == TargetType.SINGLE_ENEMY
+        else game_service.get_alive_allies(sid)
+    )
+    prompt = _target_prompt(skill.name, first_hit_index, len(skill.hits))
+    await callback.message.edit_text(
+        prompt,
+        reply_markup=target_keyboard(candidates),
+    )
+    await callback.answer()
+
+
+def _target_prompt(skill_name: str, hit_index: int, total_hits: int) -> str:
+    if total_hits <= 1:
+        return f"Pick a target for {skill_name}:"
+    return f"Pick a target for {skill_name} (hit {hit_index + 1}/{total_hits}):"
 
 
 # ------------------------------------------------------------------
@@ -123,17 +146,51 @@ async def cb_target(
     # Retrieve the pending skill from FSM state data
     data = await state.get_data()
     skill_id = data.get("pending_skill")
-    if skill_id is None:
+    pending_hit_queue: list[int] = list(data.get("pending_hit_queue") or [])
+    collected: list[list] = list(data.get("collected_targets") or [])
+    if skill_id is None or not pending_hit_queue:
         await callback.answer("No skill selected. Pick a skill first.", show_alert=True)
         return
 
+    current_hit_index = pending_hit_queue.pop(0)
+    collected.append([current_hit_index, target_id])
+
+    if pending_hit_queue:
+        # Still more hits to target — show next picker
+        skills = game_service.get_available_skills(sid, actor_id)
+        skill_match = next((s for s, _ in skills if s.skill_id == skill_id), None)
+        if skill_match is None:
+            await callback.answer("Skill no longer available.", show_alert=True)
+            await state.update_data(
+                pending_skill=None, pending_hit_queue=[], collected_targets=[],
+            )
+            return
+        next_hit_index = pending_hit_queue[0]
+        next_hit = skill_match.hits[next_hit_index]
+        candidates = (
+            game_service.get_alive_enemies(sid)
+            if next_hit.target_type == TargetType.SINGLE_ENEMY
+            else game_service.get_alive_allies(sid)
+        )
+        prompt = _target_prompt(skill_match.name, next_hit_index, len(skill_match.hits))
+        await state.update_data(
+            pending_hit_queue=pending_hit_queue,
+            collected_targets=collected,
+        )
+        await callback.message.edit_text(prompt, reply_markup=target_keyboard(candidates))
+        await callback.answer()
+        return
+
+    # All targets collected — submit action
     action = ActionRequest(
         actor_id=actor_id,
         action_type=ActionType.ACTION,
         skill_id=skill_id,
-        target_id=target_id,
+        target_ids=tuple((idx, tid) for idx, tid in collected),
     )
-    await state.update_data(pending_skill=None)
+    await state.update_data(
+        pending_skill=None, pending_hit_queue=[], collected_targets=[],
+    )
     await _submit_action(callback, game_service, sid, action)
 
 

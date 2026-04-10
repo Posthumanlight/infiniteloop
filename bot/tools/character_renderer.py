@@ -82,9 +82,13 @@ def render_character_sheet(sheet: CharacterSheet) -> str:
     if sheet.skills:
         for sk in sheet.skills:
             cost = f" ({sk.energy_cost} energy)" if sk.energy_cost > 0 else ""
-            dmg = f", {sk.damage_type}" if sk.damage_type else ""
-            target = _format_target_type(sk.target_type.value)
-            lines.append(f"{sk.name}{cost} - {target}{dmg}")
+            hit_parts = []
+            for hit in sk.hits:
+                target = _format_target_type(hit.target_type.value)
+                dmg = f" {hit.damage_type}" if hit.damage_type else ""
+                hit_parts.append(f"{target}{dmg}")
+            hits_text = " | ".join(hit_parts) if hit_parts else ""
+            lines.append(f"{sk.name}{cost} - {hits_text}")
     else:
         lines.append("(none)")
     lines.append("")

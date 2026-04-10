@@ -14,8 +14,11 @@ class ActionRequest:
     actor_id: str
     action_type: ActionType
     skill_id: str | None = None
-    target_id: str | None = None
+    target_ids: tuple[tuple[int, str], ...] = ()  # (hit_index, entity_id) pairs for single-target hits
     item_id: str | None = None
+
+    def get_target_map(self) -> dict[int, str]:
+        return dict(self.target_ids)
 
 
 @dataclass(frozen=True)
