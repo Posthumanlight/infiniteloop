@@ -136,6 +136,8 @@ class SkillData:
     hits: tuple[SkillHitData, ...]
     self_effects: tuple[SelfEffectData, ...]
     cooldown: int = 0
+    level_eligibility: tuple[int, int] | None = None
+    class_tags: tuple[str, ...] = ()
 
 
 def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
@@ -172,6 +174,15 @@ def load_skills() -> dict[str, SkillData]:
                 duration_override=se.get("duration_override"),
             ))
 
+        level_eligibility: tuple[int, int] | None = None
+        raw_eligibility = sdata.get("level_eligibility")
+        if raw_eligibility is not None:
+            if len(raw_eligibility) != 2:
+                raise ValueError(
+                    f"Skill {sid}: level_eligibility must be [min, max], got {raw_eligibility}",
+                )
+            level_eligibility = (int(raw_eligibility[0]), int(raw_eligibility[1]))
+
         result[sid] = SkillData(
             skill_id=sid,
             name=sdata["name"],
@@ -180,6 +191,8 @@ def load_skills() -> dict[str, SkillData]:
             hits=hits,
             self_effects=tuple(self_effects),
             cooldown=sdata.get("cooldown", 0),
+            level_eligibility=level_eligibility,
+            class_tags=tuple(sdata.get("class_tags", [])),
         )
     return result
 
@@ -189,6 +202,25 @@ def load_skill(skill_id: str) -> SkillData:
     if skill_id not in skills:
         raise KeyError(f"Unknown skill: {skill_id}")
     return skills[skill_id]
+
+
+def is_skill_offerable(
+    skill: SkillData, player_level: int, player_class: str,
+) -> bool:
+    """Whether a skill can be offered to a player at level-up.
+
+    Skills must declare `level_eligibility` to be in the pool. Level must fall
+    within [min, max] inclusive. If `class_tags` is non-empty, the player's
+    class must be in the list.
+    """
+    if skill.level_eligibility is None:
+        return False
+    lo, hi = skill.level_eligibility
+    if player_level < lo or player_level > hi:
+        return False
+    if skill.class_tags and player_class not in skill.class_tags:
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -563,18 +595,28 @@ class LevelScalingConfig:
 class ProgressionConfig:
     xp_thresholds: tuple[int, ...]  # cumulative XP needed per level
     level_scaling: dict[str, LevelScalingConfig]  # keyed by class_id
+    skill_reward_levels: tuple[int, ...] = ()
+    skill_reward_offer_size: int = 2
 
 
 def load_progression() -> ProgressionConfig:
     raw = _load_toml("progression.toml")
-    thresholds = tuple(raw["progression"]["xp_thresholds"])
+    prog_raw = raw["progression"]
+    thresholds = tuple(prog_raw["xp_thresholds"])
+    skill_reward_levels = tuple(prog_raw.get("skill_reward_levels", []))
+    skill_reward_offer_size = int(prog_raw.get("skill_reward_offer_size", 2))
     scaling: dict[str, LevelScalingConfig] = {}
     for class_id, gains in raw.get("level_scaling", {}).items():
         scaling[class_id] = LevelScalingConfig(
             class_id=class_id,
             stat_gains=dict(gains),
         )
-    return ProgressionConfig(xp_thresholds=thresholds, level_scaling=scaling)
+    return ProgressionConfig(
+        xp_thresholds=thresholds,
+        level_scaling=scaling,
+        skill_reward_levels=skill_reward_levels,
+        skill_reward_offer_size=skill_reward_offer_size,
+    )
 
 
 def clear_cache() -> None:

@@ -16,13 +16,13 @@ from bot.tools.combat_renderer import (
 )
 from bot.tools.exploration_renderer import (
     render_exploration_choices,
-    render_modifier_choices,
-    render_modifier_notice,
+    render_reward_choices,
+    render_reward_notice,
     render_run_summary,
 )
 from bot.tools.keyboards import (
     location_keyboard,
-    modifier_choice_keyboard,
+    reward_choice_keyboard,
     skill_keyboard,
     target_keyboard,
 )
@@ -259,32 +259,34 @@ async def _persist_characters(
         )
 
 
-async def _send_modifier_prompts(
+async def _send_reward_prompts(
     callback: CallbackQuery,
     game_service: GameService,
     session_id: str,
 ) -> None:
     players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
 
-    for notice in game_service.consume_modifier_choice_notices(session_id):
+    for notice in game_service.consume_reward_notices(session_id):
         player_name = (
             players[notice.player_id].display_name
             if notice.player_id in players
             else notice.player_id
         )
         await callback.message.answer(
-            render_modifier_notice(player_name, notice.skipped_count),
+            render_reward_notice(player_name, notice.reward_type, notice.skipped_count),
         )
 
-    for pending in game_service.get_pending_modifier_choices(session_id):
+    for pending in game_service.get_pending_rewards(session_id):
         player_name = (
             players[pending.player_id].display_name
             if pending.player_id in players
             else pending.player_id
         )
         await callback.message.answer(
-            render_modifier_choices(player_name, pending.pending_count, pending.offers),
-            reply_markup=modifier_choice_keyboard(pending.offers),
+            render_reward_choices(
+                player_name, pending.reward_type, pending.pending_count, pending.offers,
+            ),
+            reply_markup=reward_choice_keyboard(pending.offers),
         )
 
 
@@ -340,7 +342,7 @@ async def _render_batch_and_prompt(
                 render_exploration_choices(options, (), players),
                 reply_markup=location_keyboard(options),
             )
-            await _send_modifier_prompts(callback, game_service, session_id)
+            await _send_reward_prompts(callback, game_service, session_id)
             await state.set_state(GameStates.exploring)
         elif phase == SessionPhase.ENDED:
             stats = game_service.get_run_stats(session_id)

@@ -2,20 +2,46 @@ from dataclasses import dataclass, field
 
 from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState
-from game.core.enums import SessionEndReason, SessionPhase
+from game.core.enums import LevelRewardType, SessionEndReason, SessionPhase
 from game.events.models import EventState
 from game.world.models import ExplorationState
 
 
 @dataclass(frozen=True)
-class PendingModifierChoice:
-    pending_count: int = 0
-    current_offer: tuple[str, ...] = ()
+class PendingReward:
+    """One queued level-up reward awaiting the player's pick.
+
+    `offer` lists the rolled options (modifier_ids or skill_ids depending on
+    `reward_type`). Empty tuple means the roll has not been performed yet.
+    """
+
+    reward_type: LevelRewardType
+    offer: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
-class ModifierRewardNotice:
+class PendingRewardQueue:
+    entries: tuple[PendingReward, ...] = ()
+
+    @property
+    def pending_count(self) -> int:
+        return len(self.entries)
+
+    @property
+    def current_offer(self) -> tuple[str, ...]:
+        return self.entries[0].offer if self.entries else ()
+
+    @property
+    def current_type(self) -> LevelRewardType | None:
+        return self.entries[0].reward_type if self.entries else None
+
+
+@dataclass(frozen=True)
+class RewardNotice:
+    """Informational notice that a queued reward was skipped (empty pool)."""
+
     player_id: str
+    reward_type: LevelRewardType
     skipped_count: int = 1
 
 
@@ -38,8 +64,8 @@ class SessionState:
     exploration: ExplorationState | None = None
     combat: CombatState | None = None
     event: EventState | None = None
-    pending_modifier_choices: dict[str, PendingModifierChoice] = field(default_factory=dict)
-    modifier_reward_notices: tuple[ModifierRewardNotice, ...] = ()
+    pending_rewards: dict[str, PendingRewardQueue] = field(default_factory=dict)
+    reward_notices: tuple[RewardNotice, ...] = ()
     run_stats: RunStats = RunStats()
     end_reason: SessionEndReason | None = None
     max_depth: int = 10

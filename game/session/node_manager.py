@@ -12,12 +12,20 @@ from game.combat.engine import (
     submit_action,
 )
 from game.combat.models import ActionRequest, CombatState
-from game.core.data_loader import ProgressionConfig, load_effect, load_event, load_modifiers
+from game.core.data_loader import (
+    ProgressionConfig,
+    is_skill_offerable,
+    load_effect,
+    load_event,
+    load_modifiers,
+    load_skills,
+)
 from game.core.formula_eval import evaluate_expr
 from game.core.dice import SeededRNG
 from game.core.enums import (
     CombatPhase,
     EntityType,
+    LevelRewardType,
     OutcomeAction,
     SessionPhase,
 )
@@ -28,7 +36,12 @@ from game.events.engine import (
 )
 from game.events.models import OutcomeResult
 from game.session.factories import build_enemies
-from game.session.models import ModifierRewardNotice, PendingModifierChoice, SessionState
+from game.session.models import (
+    PendingReward,
+    PendingRewardQueue,
+    RewardNotice,
+    SessionState,
+)
 
 
 class NodeManager:
@@ -195,66 +208,74 @@ class NodeManager:
         return state, tuple(combat_enemy_ids)
 
     # ------------------------------------------------------------------
-    # Modifier rewards
+    # Level-up rewards (modifier or skill)
     # ------------------------------------------------------------------
 
     @staticmethod
-    def has_pending_modifier_choice(state: SessionState, player_id: str) -> bool:
-        pending = state.pending_modifier_choices.get(player_id)
-        return pending is not None and pending.pending_count > 0
+    def has_pending_reward(state: SessionState, player_id: str) -> bool:
+        queue = state.pending_rewards.get(player_id)
+        return queue is not None and queue.pending_count > 0
 
     @staticmethod
-    def clear_modifier_notices(state: SessionState) -> SessionState:
-        return replace(state, modifier_reward_notices=())
+    def clear_reward_notices(state: SessionState) -> SessionState:
+        return replace(state, reward_notices=())
 
-    def prepare_modifier_choices(self, state: SessionState) -> SessionState:
-        """Roll offers for players with pending picks and no current offer."""
-        pending_map = dict(state.pending_modifier_choices)
-        notices = list(state.modifier_reward_notices)
+    def prepare_reward_choices(self, state: SessionState) -> SessionState:
+        """Roll offers for the front entry of each player's reward queue."""
+        queues = dict(state.pending_rewards)
+        notices = list(state.reward_notices)
         players = {p.entity_id: p for p in state.players}
 
-        for player_id, pending in list(pending_map.items()):
+        for player_id, queue in list(queues.items()):
             player = players.get(player_id)
             if player is None:
-                pending_map.pop(player_id, None)
+                queues.pop(player_id, None)
                 continue
 
-            rolled, skipped = self._roll_offer_for_player(player, pending)
-            if skipped > 0:
-                notices.append(
-                    ModifierRewardNotice(player_id=player_id, skipped_count=skipped),
-                )
+            rolled_entries, skipped_by_type = self._roll_front_entry(player, queue)
+            for reward_type, skipped in skipped_by_type.items():
+                if skipped > 0:
+                    notices.append(
+                        RewardNotice(
+                            player_id=player_id,
+                            reward_type=reward_type,
+                            skipped_count=skipped,
+                        ),
+                    )
 
-            if rolled.pending_count <= 0 and not rolled.current_offer:
-                pending_map.pop(player_id, None)
+            if not rolled_entries:
+                queues.pop(player_id, None)
             else:
-                pending_map[player_id] = rolled
+                queues[player_id] = PendingRewardQueue(entries=tuple(rolled_entries))
 
         return replace(
             state,
-            pending_modifier_choices=pending_map,
-            modifier_reward_notices=tuple(notices),
+            pending_rewards=queues,
+            reward_notices=tuple(notices),
         )
 
-    def apply_modifier_choice(
+    def apply_reward_choice(
         self,
         state: SessionState,
         player_id: str,
-        modifier_id: str,
+        reward_id: str,
     ) -> SessionState:
-        pending = state.pending_modifier_choices.get(player_id)
-        if pending is None or pending.pending_count <= 0:
-            raise ValueError("No pending modifier choice for this player.")
-        if not pending.current_offer:
-            raise ValueError("No modifier offer available for this player.")
-        if modifier_id not in pending.current_offer:
-            raise ValueError("Modifier is not part of the current offer.")
+        queue = state.pending_rewards.get(player_id)
+        if queue is None or queue.pending_count <= 0:
+            raise ValueError("No pending reward for this player.")
+        front = queue.entries[0]
+        if not front.offer:
+            raise ValueError("No reward offer available for this player.")
+        if reward_id not in front.offer:
+            raise ValueError("Reward is not part of the current offer.")
 
         updated_players: list[PlayerCharacter] = []
         found = False
         for player in state.players:
             if player.entity_id == player_id:
-                updated_players.append(add_modifier(player, modifier_id))
+                updated_players.append(
+                    self._apply_reward_to_player(player, front.reward_type, reward_id),
+                )
                 found = True
             else:
                 updated_players.append(player)
@@ -262,38 +283,55 @@ class NodeManager:
         if not found:
             raise ValueError("Player is not part of this run.")
 
-        pending_map = dict(state.pending_modifier_choices)
-        next_pending = PendingModifierChoice(
-            pending_count=pending.pending_count - 1,
-            current_offer=(),
-        )
-        if next_pending.pending_count <= 0:
-            pending_map.pop(player_id, None)
+        queues = dict(state.pending_rewards)
+        remaining = queue.entries[1:]
+        if remaining:
+            queues[player_id] = PendingRewardQueue(entries=remaining)
         else:
-            pending_map[player_id] = next_pending
+            queues.pop(player_id, None)
 
         state = replace(
             state,
             players=tuple(updated_players),
-            pending_modifier_choices=pending_map,
+            pending_rewards=queues,
         )
-        return self.prepare_modifier_choices(state)
+        return self.prepare_reward_choices(state)
 
     @staticmethod
-    def _enqueue_modifier_rewards(
+    def _apply_reward_to_player(
+        player: PlayerCharacter,
+        reward_type: LevelRewardType,
+        reward_id: str,
+    ) -> PlayerCharacter:
+        if reward_type == LevelRewardType.MODIFIER:
+            return add_modifier(player, reward_id)
+        if reward_type == LevelRewardType.SKILL:
+            if reward_id in player.skills:
+                raise ValueError("Skill already known.")
+            return replace(player, skills=player.skills + (reward_id,))
+        raise ValueError(f"Unknown reward type: {reward_type}")
+
+    def _enqueue_level_rewards(
+        self,
         state: SessionState,
-        level_ups: dict[str, int],
+        crossed_levels: dict[str, list[int]],
     ) -> SessionState:
-        pending_map = dict(state.pending_modifier_choices)
-        for player_id, gained in level_ups.items():
-            if gained <= 0:
+        queues = dict(state.pending_rewards)
+        skill_reward_levels = set(self._progression.skill_reward_levels)
+        for player_id, levels in crossed_levels.items():
+            if not levels:
                 continue
-            current = pending_map.get(player_id, PendingModifierChoice())
-            pending_map[player_id] = PendingModifierChoice(
-                pending_count=current.pending_count + gained,
-                current_offer=current.current_offer,
-            )
-        return replace(state, pending_modifier_choices=pending_map)
+            current = queues.get(player_id, PendingRewardQueue()).entries
+            new_entries = list(current)
+            for level in levels:
+                reward_type = (
+                    LevelRewardType.SKILL
+                    if level in skill_reward_levels
+                    else LevelRewardType.MODIFIER
+                )
+                new_entries.append(PendingReward(reward_type=reward_type))
+            queues[player_id] = PendingRewardQueue(entries=tuple(new_entries))
+        return replace(state, pending_rewards=queues)
 
     def _eligible_modifier_ids(self, player: PlayerCharacter) -> list[str]:
         all_mods = load_modifiers()
@@ -319,38 +357,64 @@ class NodeManager:
 
         return eligible
 
-    def _sample_modifier_ids(self, modifier_ids: list[str], count: int) -> tuple[str, ...]:
-        remaining = list(modifier_ids)
+    @staticmethod
+    def _eligible_skill_ids(player: PlayerCharacter) -> list[str]:
+        all_skills = load_skills()
+        owned = set(player.skills)
+        eligible: list[str] = []
+        for skill_id, skill in all_skills.items():
+            if skill_id in owned:
+                continue
+            if is_skill_offerable(skill, player.level, player.player_class):
+                eligible.append(skill_id)
+        return eligible
+
+    def _sample_ids(self, pool: list[str], count: int) -> tuple[str, ...]:
+        remaining = list(pool)
         selected: list[str] = []
         for _ in range(min(count, len(remaining))):
             idx = self._rng.d(len(remaining)) - 1
             selected.append(remaining.pop(idx))
         return tuple(selected)
 
-    def _roll_offer_for_player(
+    def _roll_front_entry(
         self,
         player: PlayerCharacter,
-        pending: PendingModifierChoice,
-    ) -> tuple[PendingModifierChoice, int]:
-        if pending.current_offer:
-            return pending, 0
+        queue: PendingRewardQueue,
+    ) -> tuple[list[PendingReward], dict[LevelRewardType, int]]:
+        """Roll offers for entries starting from the front, skipping empty pools.
 
-        pending_count = pending.pending_count
-        skipped = 0
-        current_offer: tuple[str, ...] = ()
+        Returns the remaining entries (front entry has a rolled offer, or the
+        queue is empty) and a per-type count of skipped rolls for notices.
+        """
+        entries = list(queue.entries)
+        skipped: dict[LevelRewardType, int] = {
+            LevelRewardType.MODIFIER: 0,
+            LevelRewardType.SKILL: 0,
+        }
 
-        while pending_count > 0 and not current_offer:
-            eligible = self._eligible_modifier_ids(player)
-            if not eligible:
-                pending_count -= 1
-                skipped += 1
+        while entries:
+            front = entries[0]
+            if front.offer:
+                return entries, skipped
+
+            if front.reward_type == LevelRewardType.MODIFIER:
+                pool = self._eligible_modifier_ids(player)
+                offer_size = 2
+            else:
+                pool = self._eligible_skill_ids(player)
+                offer_size = self._progression.skill_reward_offer_size
+
+            if not pool:
+                skipped[front.reward_type] += 1
+                entries.pop(0)
                 continue
-            current_offer = self._sample_modifier_ids(eligible, 2)
 
-        return PendingModifierChoice(
-            pending_count=pending_count,
-            current_offer=current_offer,
-        ), skipped
+            offer = self._sample_ids(pool, offer_size)
+            entries[0] = PendingReward(reward_type=front.reward_type, offer=offer)
+            return entries, skipped
+
+        return entries, skipped
 
     # ------------------------------------------------------------------
     # Side-effect application
@@ -394,7 +458,7 @@ class NodeManager:
         """Merge HP/energy/effects from combat entities back to session players."""
         combat_state = state.combat
         updated_players: list[PlayerCharacter] = []
-        level_ups: dict[str, int] = {}
+        crossed_levels: dict[str, list[int]] = {}
         enemies_defeated = 0
         total_damage_dealt = 0
         total_damage_taken = 0
@@ -431,14 +495,12 @@ class NodeManager:
             if total_xp > 0:
                 base = self._base_stats.get(updated.player_class)
                 if base is not None:
-                    old_level = updated.level
-                    updated = apply_xp(
+                    updated, crossed = apply_xp(
                         updated, total_xp, self._progression, base,
                     )
-                    gained = updated.level - old_level
-                    if gained > 0:
-                        level_ups[updated.entity_id] = (
-                            level_ups.get(updated.entity_id, 0) + gained
+                    if crossed:
+                        crossed_levels[updated.entity_id] = (
+                            crossed_levels.get(updated.entity_id, []) + crossed
                         )
 
             updated_players.append(updated)
@@ -451,7 +513,7 @@ class NodeManager:
             total_xp_gained=state.run_stats.total_xp_gained + total_xp,
         )
         state = replace(state, players=tuple(updated_players), run_stats=new_stats)
-        return self._enqueue_modifier_rewards(state, level_ups)
+        return self._enqueue_level_rewards(state, crossed_levels)
 
     def _apply_event_outcomes(
         self,
@@ -462,7 +524,7 @@ class NodeManager:
         player_map: dict[str, PlayerCharacter] = {
             p.entity_id: p for p in state.players
         }
-        level_ups: dict[str, int] = {}
+        crossed_levels: dict[str, list[int]] = {}
         total_healing = 0
         total_damage = 0
         total_xp = 0
@@ -501,14 +563,12 @@ class NodeManager:
                     total_xp += outcome.amount
                     base = self._base_stats.get(player.player_class)
                     if base is not None:
-                        old_level = player.level
-                        player = apply_xp(
+                        player, crossed = apply_xp(
                             player, outcome.amount, self._progression, base,
                         )
-                        gained = player.level - old_level
-                        if gained > 0:
-                            level_ups[player.entity_id] = (
-                                level_ups.get(player.entity_id, 0) + gained
+                        if crossed:
+                            crossed_levels[player.entity_id] = (
+                                crossed_levels.get(player.entity_id, []) + crossed
                             )
                     else:
                         player = replace(player, xp=player.xp + outcome.amount)
@@ -546,4 +606,4 @@ class NodeManager:
             total_xp_gained=state.run_stats.total_xp_gained + total_xp,
         )
         state = replace(state, players=updated_players, run_stats=new_stats)
-        return self._enqueue_modifier_rewards(state, level_ups)
+        return self._enqueue_level_rewards(state, crossed_levels)

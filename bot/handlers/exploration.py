@@ -1,7 +1,7 @@
 """Exploration and event callback handlers.
 
 Handles location voting (g:loc:*), event choice voting (g:evt:*),
-and level-up modifier picks (g:mod:*).
+and level-up reward picks (g:rwd:*).
 """
 
 import asyncpg
@@ -14,14 +14,14 @@ from bot.tools.combat_renderer import render_combat_start, render_turn_prompt
 from bot.tools.exploration_renderer import (
     render_event,
     render_exploration_choices,
-    render_modifier_choices,
-    render_modifier_notice,
+    render_reward_choices,
+    render_reward_notice,
     render_run_summary,
 )
 from bot.tools.keyboards import (
     event_choice_keyboard,
     location_keyboard,
-    modifier_choice_keyboard,
+    reward_choice_keyboard,
     skill_keyboard,
 )
 from bot.tools.session_lookup import entity_id_for_tg_user
@@ -119,8 +119,8 @@ async def cb_event_vote(
     await _handle_phase_transition(callback, game_service, sid, phase, state, db_pool)
 
 
-@router.callback_query(F.data.startswith("g:mod:"))
-async def cb_modifier_choice(
+@router.callback_query(F.data.startswith("g:rwd:"))
+async def cb_reward_choice(
     callback: CallbackQuery,
     game_service: GameService,
 ) -> None:
@@ -129,71 +129,75 @@ async def cb_modifier_choice(
     if player_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
-    modifier_id = callback.data[6:]  # strip "g:mod:"
+    reward_id = callback.data[6:]  # strip "g:rwd:"
 
     try:
-        game_service.submit_modifier_choice(sid, player_id, modifier_id)
+        game_service.submit_reward_choice(sid, player_id, reward_id)
     except ValueError as e:
         await callback.answer(str(e), show_alert=True)
         return
 
-    await callback.answer("Modifier selected!")
+    await callback.answer("Reward selected!")
 
     players = {p.entity_id: p for p in game_service.get_session_players(sid)}
-    for notice in game_service.consume_modifier_choice_notices(sid):
+    for notice in game_service.consume_reward_notices(sid):
         player_name = (
             players[notice.player_id].display_name
             if notice.player_id in players
             else notice.player_id
         )
         await callback.message.answer(
-            render_modifier_notice(player_name, notice.skipped_count),
+            render_reward_notice(player_name, notice.reward_type, notice.skipped_count),
         )
 
     pending_choices = {
         choice.player_id: choice
-        for choice in game_service.get_pending_modifier_choices(sid)
+        for choice in game_service.get_pending_rewards(sid)
     }
     pending = pending_choices.get(player_id)
     if pending is None:
-        await callback.message.edit_text("Modifier selected.")
+        await callback.message.edit_text("Reward selected.")
         return
 
     player_name = (
         players[player_id].display_name if player_id in players else player_id
     )
     await callback.message.edit_text(
-        render_modifier_choices(player_name, pending.pending_count, pending.offers),
-        reply_markup=modifier_choice_keyboard(pending.offers),
+        render_reward_choices(
+            player_name, pending.reward_type, pending.pending_count, pending.offers,
+        ),
+        reply_markup=reward_choice_keyboard(pending.offers),
     )
 
 
-async def _send_modifier_prompts(
+async def _send_reward_prompts(
     callback: CallbackQuery,
     game_service: GameService,
     session_id: str,
 ) -> None:
     players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
 
-    for notice in game_service.consume_modifier_choice_notices(session_id):
+    for notice in game_service.consume_reward_notices(session_id):
         player_name = (
             players[notice.player_id].display_name
             if notice.player_id in players
             else notice.player_id
         )
         await callback.message.answer(
-            render_modifier_notice(player_name, notice.skipped_count),
+            render_reward_notice(player_name, notice.reward_type, notice.skipped_count),
         )
 
-    for pending in game_service.get_pending_modifier_choices(session_id):
+    for pending in game_service.get_pending_rewards(session_id):
         player_name = (
             players[pending.player_id].display_name
             if pending.player_id in players
             else pending.player_id
         )
         await callback.message.answer(
-            render_modifier_choices(player_name, pending.pending_count, pending.offers),
-            reply_markup=modifier_choice_keyboard(pending.offers),
+            render_reward_choices(
+                player_name, pending.reward_type, pending.pending_count, pending.offers,
+            ),
+            reply_markup=reward_choice_keyboard(pending.offers),
         )
 
 
@@ -254,7 +258,7 @@ async def _handle_phase_transition(
                 render_exploration_choices(options, (), players),
                 reply_markup=location_keyboard(options),
             )
-            await _send_modifier_prompts(callback, game_service, session_id)
+            await _send_reward_prompts(callback, game_service, session_id)
             await state.set_state(GameStates.exploring)
 
         case SessionPhase.ENDED:

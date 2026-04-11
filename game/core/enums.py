@@ -128,3 +128,8 @@ class PassiveAction(Enum):
 class ModifierPhase(Enum):
     PRE_HIT = "pre_hit"
     POST_HIT = "post_hit"
+
+
+class LevelRewardType(Enum):
+    MODIFIER = "modifier"
+    SKILL = "skill"

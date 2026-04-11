@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from game.combat.models import ActionResult
-from game.core.enums import EntityType, TargetType
+from game.core.enums import EntityType, LevelRewardType, TargetType
 
 
 @dataclass(frozen=True)
@@ -96,27 +96,30 @@ class ModifierInfo:
 
 
 @dataclass(frozen=True)
-class ModifierOfferInfo:
-    """One selectable modifier reward option."""
+class RewardOfferInfo:
+    """One selectable level-up reward option (modifier or skill)."""
 
-    modifier_id: str
+    reward_id: str
     name: str
+    description: str = ""
 
 
 @dataclass(frozen=True)
-class PendingModifierChoiceInfo:
-    """Current pending modifier offer for a player."""
+class PendingRewardInfo:
+    """Current pending level-up reward for a player."""
 
     player_id: str
+    reward_type: LevelRewardType
     pending_count: int
-    offers: tuple[ModifierOfferInfo, ...]
+    offers: tuple[RewardOfferInfo, ...]
 
 
 @dataclass(frozen=True)
-class ModifierChoiceNoticeInfo:
+class RewardNoticeInfo:
     """Informational message about skipped pending picks."""
 
     player_id: str
+    reward_type: LevelRewardType
     skipped_count: int
 
 

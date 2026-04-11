@@ -49,18 +49,24 @@ def apply_xp(
     xp_gained: int,
     progression: ProgressionConfig,
     base_major_stats: MajorStats,
-) -> PlayerCharacter:
+) -> tuple[PlayerCharacter, list[int]]:
     """Award XP and level up if thresholds are crossed.
 
     Stats are always recalculated from *base_major_stats* + (level-1) * gains
     to avoid drift on multi-level jumps.  When HP/energy cap increases the
     player gains the difference immediately.
+
+    Returns:
+        (updated_player, crossed_levels) — crossed_levels lists the new level
+        numbers the player reached this call (empty if no level-up).
     """
     new_xp = player.xp + xp_gained
     new_level = compute_level(new_xp, progression.xp_thresholds)
 
     if new_level == player.level:
-        return replace(player, xp=new_xp)
+        return replace(player, xp=new_xp), []
+
+    crossed_levels = list(range(player.level + 1, new_level + 1))
 
     levels_above_base = new_level - 1
     scaling = progression.level_scaling.get(player.player_class)
@@ -76,7 +82,7 @@ def apply_xp(
         player.current_energy + max(0, energy_increase), new_major.energy,
     )
 
-    return replace(
+    updated = replace(
         player,
         xp=new_xp,
         level=new_level,
@@ -84,3 +90,4 @@ def apply_xp(
         current_hp=new_current_hp,
         current_energy=new_current_energy,
     )
+    return updated, crossed_levels

@@ -11,7 +11,7 @@ from game.core.enums import (
     SessionPhase,
 )
 from game.session.location_manager import LocationManager
-from game.session.models import ModifierRewardNotice, PendingModifierChoice, SessionState
+from game.session.models import PendingRewardQueue, RewardNotice, SessionState
 from game.session.node_manager import NodeManager
 from game.world.models import GenerationConfig
 from game.world.world_run import WorldManager
@@ -113,7 +113,7 @@ class SessionManager:
     ) -> SessionState:
         self._assert_phase(state, SessionPhase.EXPLORING)
         state = self._location.generate_choices(state, config)
-        return self._node.prepare_modifier_choices(state)
+        return self._node.prepare_reward_choices(state)
 
     def submit_location_vote(
         self,
@@ -122,31 +122,31 @@ class SessionManager:
         location_index: int,
     ) -> SessionState:
         self._assert_phase(state, SessionPhase.EXPLORING)
-        if self._node.has_pending_modifier_choice(state, player_id):
-            raise ValueError("Choose your level-up modifier first.")
+        if self._node.has_pending_reward(state, player_id):
+            raise ValueError("Choose your level-up reward first.")
         return self._location.submit_vote(state, player_id, location_index)
 
-    def submit_modifier_choice(
+    def submit_reward_choice(
         self,
         state: SessionState,
         player_id: str,
-        modifier_id: str,
+        reward_id: str,
     ) -> SessionState:
         self._assert_phase(state, SessionPhase.EXPLORING)
-        return self._node.apply_modifier_choice(state, player_id, modifier_id)
+        return self._node.apply_reward_choice(state, player_id, reward_id)
 
-    def get_pending_modifier_choices(
+    def get_pending_rewards(
         self,
         state: SessionState,
-    ) -> dict[str, PendingModifierChoice]:
-        return state.pending_modifier_choices
+    ) -> dict[str, PendingRewardQueue]:
+        return state.pending_rewards
 
-    def consume_modifier_notices(
+    def consume_reward_notices(
         self,
         state: SessionState,
-    ) -> tuple[SessionState, tuple[ModifierRewardNotice, ...]]:
-        notices = state.modifier_reward_notices
-        return self._node.clear_modifier_notices(state), notices
+    ) -> tuple[SessionState, tuple[RewardNotice, ...]]:
+        notices = state.reward_notices
+        return self._node.clear_reward_notices(state), notices
 
     def resolve_location_choice(self, state: SessionState) -> SessionState:
         self._assert_phase(state, SessionPhase.EXPLORING)

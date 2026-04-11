@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
     from game.events.models import ChoiceDef
-    from game.core.game_models import EntitySnapshot, ModifierOfferInfo
+    from game.core.game_models import EntitySnapshot, RewardOfferInfo
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -122,13 +122,13 @@ def event_choice_keyboard(choices: tuple[ChoiceDef, ...]) -> InlineKeyboardMarku
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def modifier_choice_keyboard(
-    offers: tuple[ModifierOfferInfo, ...],
+def reward_choice_keyboard(
+    offers: tuple[RewardOfferInfo, ...],
 ) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(
             text=offer.name,
-            callback_data=f"g:mod:{offer.modifier_id}",
+            callback_data=f"g:rwd:{offer.reward_id}",
         )]
         for offer in offers
     ]

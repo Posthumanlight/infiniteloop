@@ -11,7 +11,14 @@ from game.core.data_loader import (
     load_passive,
     load_skill,
 )
-from game.core.enums import ActionType, EffectActionType, EntityType, SessionPhase, TargetType
+from game.core.enums import (
+    ActionType,
+    EffectActionType,
+    EntityType,
+    LevelRewardType,
+    SessionPhase,
+    TargetType,
+)
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
@@ -20,12 +27,12 @@ from game.core.game_models import (
     CombatSnapshot,
     EffectInfo,
     EntitySnapshot,
-    ModifierChoiceNoticeInfo,
     ModifierInfo,
-    ModifierOfferInfo,
-    PendingModifierChoiceInfo,
+    PendingRewardInfo,
     PassiveInfo,
     PlayerInfo,
+    RewardNoticeInfo,
+    RewardOfferInfo,
     SkillHitInfo,
     SkillInfo,
     TurnBatch,
@@ -177,52 +184,55 @@ class GameService:
         session = self._get_session(session_id)
         session.state = session.manager.generate_choices(session.state)
 
-    def get_pending_modifier_choices(
+    def get_pending_rewards(
         self,
         session_id: str,
-    ) -> tuple[PendingModifierChoiceInfo, ...]:
+    ) -> tuple[PendingRewardInfo, ...]:
         session = self._get_session(session_id)
         if session.state is None:
             raise ValueError("No active run")
 
-        pending = session.manager.get_pending_modifier_choices(session.state)
-        result: list[PendingModifierChoiceInfo] = []
-        for player_id, choice in sorted(pending.items(), key=lambda item: item[0]):
-            if not choice.current_offer:
+        pending = session.manager.get_pending_rewards(session.state)
+        result: list[PendingRewardInfo] = []
+        for player_id, queue in sorted(pending.items(), key=lambda item: item[0]):
+            if not queue.current_offer or queue.current_type is None:
                 continue
+            reward_type = queue.current_type
             offers = tuple(
-                self._build_modifier_offer_info(modifier_id)
-                for modifier_id in choice.current_offer
+                self._build_reward_offer_info(reward_type, reward_id)
+                for reward_id in queue.current_offer
             )
-            result.append(PendingModifierChoiceInfo(
+            result.append(PendingRewardInfo(
                 player_id=player_id,
-                pending_count=choice.pending_count,
+                reward_type=reward_type,
+                pending_count=queue.pending_count,
                 offers=offers,
             ))
         return tuple(result)
 
-    def submit_modifier_choice(
+    def submit_reward_choice(
         self,
         session_id: str,
         player_id: str,
-        modifier_id: str,
+        reward_id: str,
     ) -> None:
         session = self._get_session(session_id)
-        session.state = session.manager.submit_modifier_choice(
-            session.state, player_id, modifier_id,
+        session.state = session.manager.submit_reward_choice(
+            session.state, player_id, reward_id,
         )
 
-    def consume_modifier_choice_notices(
+    def consume_reward_notices(
         self,
         session_id: str,
-    ) -> tuple[ModifierChoiceNoticeInfo, ...]:
+    ) -> tuple[RewardNoticeInfo, ...]:
         session = self._get_session(session_id)
         if session.state is None:
             return ()
-        session.state, notices = session.manager.consume_modifier_notices(session.state)
+        session.state, notices = session.manager.consume_reward_notices(session.state)
         return tuple(
-            ModifierChoiceNoticeInfo(
+            RewardNoticeInfo(
                 player_id=notice.player_id,
+                reward_type=notice.reward_type,
                 skipped_count=notice.skipped_count,
             )
             for notice in notices
@@ -535,12 +545,32 @@ class GameService:
         )
 
     @staticmethod
-    def _build_modifier_offer_info(modifier_id: str) -> ModifierOfferInfo:
-        data = load_modifier(modifier_id)
-        return ModifierOfferInfo(
-            modifier_id=modifier_id,
-            name=data.name,
-        )
+    def _build_reward_offer_info(
+        reward_type: LevelRewardType, reward_id: str,
+    ) -> RewardOfferInfo:
+        if reward_type == LevelRewardType.MODIFIER:
+            data = load_modifier(reward_id)
+            return RewardOfferInfo(
+                reward_id=reward_id,
+                name=data.name,
+                description=getattr(data, "description", "") or "",
+            )
+        if reward_type == LevelRewardType.SKILL:
+            skill = load_skill(reward_id)
+            parts: list[str] = []
+            for hit in skill.hits:
+                target = hit.target_type.value.replace("_", " ")
+                dmg = f" {hit.damage_type.value}" if hit.damage_type else ""
+                parts.append(f"{target}{dmg}")
+            description = " | ".join(parts)
+            if skill.energy_cost > 0:
+                description = f"{skill.energy_cost} energy - {description}"
+            return RewardOfferInfo(
+                reward_id=reward_id,
+                name=skill.name,
+                description=description,
+            )
+        raise ValueError(f"Unknown reward type: {reward_type}")
 
     @staticmethod
     def _build_effect_info(eff) -> EffectInfo:
