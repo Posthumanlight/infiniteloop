@@ -1,11 +1,17 @@
 import uuid
+from typing import TYPE_CHECKING
 
 from game.character.enemy import Enemy
 from game.character.inventory import Inventory
 from game.character.player_character import PlayerCharacter
+from game.character.progression import _apply_stat_gains
 from game.character.stats import MajorStats, MinorStats
+from game.core.data_loader import ProgressionConfig
 from game.core.data_loader import load_class, load_enemy
 from game.core.enums import EntityType
+
+if TYPE_CHECKING:
+    from game.session.lobby_manager import CharacterRecord
 
 
 def build_enemy(enemy_id: str) -> Enemy:
@@ -67,4 +73,38 @@ def build_player(class_id: str, entity_id: str = "p1") -> PlayerCharacter:
         skills=cls.starting_skills,
         passive_skills=cls.starting_passives,
         inventory=Inventory(),
+    )
+
+
+def build_player_from_saved(
+    record: "CharacterRecord",
+    progression: ProgressionConfig,
+    base_stats: dict[str, MajorStats],
+) -> PlayerCharacter:
+    player = build_player(record.class_id, entity_id=str(record.character_id))
+    scaling = progression.level_scaling.get(record.class_id)
+    stat_gains = scaling.stat_gains if scaling else {}
+    scaled_major = _apply_stat_gains(
+        base_stats[record.class_id],
+        stat_gains,
+        max(0, record.level - 1),
+    )
+
+    return PlayerCharacter(
+        entity_id=player.entity_id,
+        entity_name=player.entity_name,
+        entity_type=player.entity_type,
+        major_stats=scaled_major,
+        minor_stats=player.minor_stats,
+        current_hp=scaled_major.hp,
+        current_energy=scaled_major.energy,
+        player_class=player.player_class,
+        skills=record.skills,
+        passive_skills=player.passive_skills,
+        active_effects=player.active_effects,
+        cooldowns=player.cooldowns,
+        skill_modifiers=player.skill_modifiers,
+        inventory=Inventory(content=dict(record.inventory)),
+        level=record.level,
+        xp=record.xp,
     )

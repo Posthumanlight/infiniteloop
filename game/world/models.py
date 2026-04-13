@@ -14,9 +14,9 @@ class GenerationConfig:
     predetermined_set_id: str | None = None
     combat_type_weights: dict[CombatLocationType, float] = field(
         default_factory=lambda: {
-            CombatLocationType.NORMAL: 1.0,
-            CombatLocationType.ELITE: 1.0,
-            CombatLocationType.SWARM: 1.0,
+            CombatLocationType.NORMAL: 10.0,
+            CombatLocationType.ELITE: 3.0,
+            CombatLocationType.SWARM: 2.0,
             CombatLocationType.SOLO_BOSS: 1.0,
             CombatLocationType.BOSS_GROUP: 1.0,
         },

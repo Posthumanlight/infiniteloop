@@ -19,6 +19,7 @@ from game.core.enums import (
     SessionPhase,
     TargetType,
 )
+from game.character.player_character import PlayerCharacter
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
@@ -45,8 +46,6 @@ class _ActiveSession:
     players: dict[str, PlayerInfo]  # entity_id -> PlayerInfo
     manager: SessionManager
     state: SessionState | None
-
-
 class GameService:
     """In-memory game orchestrator. One instance per server process.
 
@@ -71,6 +70,28 @@ class GameService:
             manager=manager,
             state=None,
         )
+
+    def launch_session(
+        self,
+        session_id: str,
+        player_infos: list[PlayerInfo],
+        players: list[PlayerCharacter],
+    ) -> None:
+        if session_id in self._sessions:
+            raise ValueError("Session already exists for this chat")
+        if not player_infos or not players:
+            raise ValueError("Cannot launch session without players")
+
+        manager = SessionManager(seed=hash(session_id) & 0x7FFFFFFF)
+        self._sessions[session_id] = _ActiveSession(
+            session_id=session_id,
+            players={info.entity_id: info for info in player_infos},
+            manager=manager,
+            state=None,
+        )
+        session = self._sessions[session_id]
+        session.state = session.manager.start_run(session_id, players)
+        session.state = session.manager.generate_choices(session.state)
 
     def join_session(self, session_id: str, player: PlayerInfo) -> None:
         session = self._get_session(session_id)
