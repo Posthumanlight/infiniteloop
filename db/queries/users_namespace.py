@@ -105,7 +105,7 @@ class UserCharactersData(UserData):
                 gc.created_at AS created_at
             FROM public.game_characters gc
             JOIN public.game_characters_data gcd
-              ON gc.character_id::text = gcd.character_id::text
+              ON gc.character_id = gcd.character_id
             WHERE gc.tg_id = $1
             ORDER BY gc.created_at DESC
         """
@@ -137,14 +137,14 @@ class UserCharactersData(UserData):
                 gcd.skills AS skills
             FROM public.game_characters gc
             JOIN public.game_characters_data gcd
-              ON gc.character_id::text = gcd.character_id::text
-            WHERE gc.character_id::text = $1
+              ON gc.character_id = gcd.character_id
+            WHERE gc.character_id = $1
             LIMIT 1
         """
         inventory_sql = """
             SELECT item_id, amount
             FROM public.game_characters_inventory
-            WHERE character_id::text = $1
+            WHERE character_id = $1
         """
 
         try:
