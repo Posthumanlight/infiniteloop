@@ -29,13 +29,13 @@ weight = 5
 [[events.river_with_surprise.choices]]
 label = "It`s crocodiles!"
 description = "It`s goddamn crocodiles!"
-outcomes = outcomes = [
+outcomes = [
     { action = "start_combat", target = "all", enemy_group = ["bandit"]},
 ]
 
 [[events.river_with_surprise.choices]]
 label = "It`s goblins!"
 description = "It`s goddamn goblins!"
-outcomes = outcomes = [
+outcomes = [
     { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
 ]
