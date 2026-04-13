@@ -130,7 +130,6 @@ def _build_player_from_saved(
         skills=record.skills,
         passive_skills=player.passive_skills,
         active_effects=player.active_effects,
-        cooldowns=player.cooldowns,
         skill_modifiers=player.skill_modifiers,
         inventory=Inventory(content=dict(record.inventory)),
         level=record.level,
