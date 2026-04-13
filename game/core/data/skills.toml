@@ -6,13 +6,14 @@ action_type = "action"
 hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack+base_power", base_power = 0, variance = 0.25 },
 ]
+
 #warrior
 [skills.slash]
 name = "Slash"
 energy_cost = 0
 action_type = "action"
 hits = [
-  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 10, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
 ]
 
 [skills.cleave]
@@ -25,6 +26,16 @@ hits = [
   { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.0 },
 ]
 
+[skills.brutalize]
+name = "Brutalize"
+energy_cost = 10
+action_type = "action"
+cooldown = 5
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = [
+  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun"}]}
+]
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"

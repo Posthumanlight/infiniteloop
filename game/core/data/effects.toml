@@ -42,5 +42,5 @@ duration = 3
 stackable = false
 actions = [
   { type = "stat_modify", stat = "mastery", expr = "10 + 2 * target.mastery", scales_with_stacks = false },
-  { type = "grant_energy", expr = "target.energy * 0.1", scales_with_stacks = false },
+  { type = "grant_energy", expr = "target.energy * 0.2", scales_with_stacks = false },
 ]
