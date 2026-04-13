@@ -149,10 +149,10 @@ class UserCharactersData(UserData):
 
         try:
             async with self.pool.acquire() as conn:
-                row = await conn.fetchrow(sql, str(character_id))
+                row = await conn.fetchrow(sql, int(character_id))
                 if row is None:
                     raise KeyError(f"Unknown character: {character_id}")
-                inventory_rows = await conn.fetch(inventory_sql, str(character_id))
+                inventory_rows = await conn.fetch(inventory_sql, int(character_id))
         except KeyError:
             raise
         except Exception as exc:
@@ -210,9 +210,9 @@ class UserCharactersData(UserData):
                     if row is None:
                         raise RuntimeError("Failed to create character data row")
                     character_id = int(row["character_id"])
-                    await conn.execute(sql_insert_character, tg_id, str(character_id))
+                    await conn.execute(sql_insert_character, tg_id, int(character_id))
                     for item_id, amount in inventory.items():
-                        await conn.execute(sql_insert_inventory, str(character_id), item_id, amount)
+                        await conn.execute(sql_insert_inventory, int(character_id), item_id, amount)
         except Exception as exc:
             logger.error(f"DB error in create_character for tg_id={tg_id}: {exc}")
             raise
@@ -235,7 +235,7 @@ class UserCharactersData(UserData):
         """
         try:
             async with self.pool.acquire() as conn:
-                await conn.execute(sql, tg_id, str(character_id))
+                await conn.execute(sql, tg_id, int(character_id))
         except Exception as exc:
             logger.error(f"DB error in add_user_character for tg_id={tg_id}: {exc}")
 
