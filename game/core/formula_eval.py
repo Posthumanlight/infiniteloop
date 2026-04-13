@@ -57,6 +57,16 @@ class ExprContext:
     mastery: int
 
 
+@dataclass(frozen=True)
+class ZeroDefaultNamespace:
+    """Attribute namespace that returns 0 for missing numeric keys."""
+
+    values: dict[str, int | float]
+
+    def __getattr__(self, name: str) -> int | float:
+        return self.values.get(name, 0)
+
+
 class ExprError(Exception):
     """Raised when an expression is invalid or uses disallowed syntax."""
 

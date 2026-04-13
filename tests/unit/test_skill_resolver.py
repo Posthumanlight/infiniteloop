@@ -115,6 +115,31 @@ def test_arcane_rupture_passive_casts_without_target_map_crash():
     assert state.entities["e1"].current_hp < goblin.current_hp
 
 
+def test_missing_stack_namespace_defaults_to_zero_for_passive_conditions(monkeypatch):
+    def fake_load_passive(passive_id: str) -> PassiveSkillData:
+        if passive_id != "stack_check":
+            raise KeyError(passive_id)
+        return PassiveSkillData(
+            skill_id="stack_check",
+            name="Stack Check",
+            trigger=TriggerType.ON_CAST,
+            condition="stacks.nonexistent_effect >= 1",
+            action=PassiveAction.HEAL,
+            expr="1",
+            usage_limit=UsageLimit.UNLIMITED,
+        )
+
+    monkeypatch.setattr(combat_passives, "load_passive", fake_load_passive)
+
+    warrior = replace(make_warrior(), passive_skills=("stack_check",), current_hp=100)
+    state = make_combat_state(players=[warrior])
+
+    state, hits = check_passives(state, "p1", TriggerType.ON_CAST)
+
+    assert hits == []
+    assert state.entities["p1"].current_hp == 100
+
+
 def test_enlightenment_buff_increases_spell_damage_restores_energy_and_expires():
     mage = replace(build_player("mage", entity_id="p1"), current_energy=100)
     baseline_state = make_combat_state(

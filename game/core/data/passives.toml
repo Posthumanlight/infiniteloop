@@ -20,7 +20,7 @@ usage_limit = "unlimited"
 [passives.arcane_rupture]
 name = "Arcane Rupture"
 trigger = "on_cast"
-condition = "empowered_arcane_stacks >= 10"
+condition = "stacks.empowered_arcane >= 10"
 action = "cast_skill"
 cast_skill_id = "arcane_rupture"
 consume_effect_id = "empowered_arcane"

@@ -15,7 +15,7 @@ from game.combat.targeting import get_enemies
 from game.core.data_loader import PassiveSkillData, load_passive, load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, PassiveAction, TriggerType, UsageLimit
-from game.core.formula_eval import evaluate_expr
+from game.core.formula_eval import ZeroDefaultNamespace, evaluate_expr
 
 
 @dataclass(frozen=True)
@@ -181,10 +181,10 @@ def check_passives(
     if "damage_type" in ctx_extra:
         ctx_extra["damage_type"] = _normalize_damage_type(ctx_extra["damage_type"])
 
-    # Inject effect stack counts so conditions can reference them
-    stack_ctx: dict[str, int] = {}
-    for eff in entity.active_effects:
-        stack_ctx[f"{eff.effect_id}_stacks"] = eff.stack_count
+    stack_ctx = ZeroDefaultNamespace({
+        eff.effect_id: eff.stack_count
+        for eff in entity.active_effects
+    })
 
     for passive_id in entity.passive_skills:
         passive = load_passive(passive_id)
@@ -200,8 +200,8 @@ def check_passives(
 
         ctx: dict[str, Any] = {
             "attacker": build_effective_expr_context(state, entity_id),
+            "stacks": stack_ctx,
             **_build_damage_type_constants(),
-            **stack_ctx,
             **ctx_extra,
         }
         if passive.condition and not evaluate_expr(passive.condition, ctx):
