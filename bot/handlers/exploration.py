@@ -28,6 +28,7 @@ from bot.tools.session_lookup import entity_id_for_tg_user
 from db.queries.users_namespace import UserСharactersData
 from game.core.enums import SessionPhase
 from game_service import GameService
+from bot.handlers.combat import _send_combat_image
 
 router = Router(name="exploration_router")
 
@@ -230,6 +231,9 @@ async def _handle_phase_transition(
             snapshot = game_service.get_combat_snapshot(session_id)
             text = render_combat_start(snapshot, players)
             await callback.message.answer(text)
+            
+            # Надсилаємо першу генерацію картинки бою для поточної кімнати
+            await _send_combat_image(callback, game_service, session_id)
 
             whose_turn = game_service.get_whose_turn(session_id)
             if whose_turn is not None:
