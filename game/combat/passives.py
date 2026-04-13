@@ -141,8 +141,13 @@ def _execute_passive_action(
             target_ids = get_enemies(state, entity_id)
             if not target_ids:
                 return state, []
+            selected_targets = {
+                hit_index: target_ids[0]
+                for hit_index, hit in enumerate(skill.hits)
+                if hit.target_type.value in {"single_enemy", "single_ally"}
+            }
             state, hits = resolve_skill(
-                state, entity_id, skill, target_ids, rng, constants,
+                state, entity_id, skill, selected_targets, rng, constants,
             )
             return state, hits
 

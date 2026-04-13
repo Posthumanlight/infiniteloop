@@ -5,13 +5,15 @@ from dataclasses import replace
 
 import game.combat.passives as combat_passives
 import game.combat.skill_modifiers as combat_skill_modifiers
+from game.combat.action_resolver import resolve_action
 from game.combat.effects import apply_effect, expire_effects
 from game.combat.passives import check_passives
+from game.combat.models import ActionRequest
 from game.combat.skill_modifiers import ModifierInstance
 from game.combat.skill_resolver import resolve_skill
 from game.core.data_loader import PassiveSkillData, SkillModifierData, clear_cache, load_skill
 from game.core.dice import SeededRNG
-from game.core.enums import ModifierPhase, PassiveAction, TriggerType, UsageLimit
+from game.core.enums import ActionType, ModifierPhase, PassiveAction, TriggerType, UsageLimit
 from game.session.factories import build_player
 
 from tests.unit.conftest import make_combat_state, make_goblin, make_warrior
@@ -85,6 +87,32 @@ def test_arcane_prowess_applies_empowered_arcane_on_hit():
     ]
     assert len(empowered) == 1
     assert empowered[0].stack_count == 2
+
+
+def test_arcane_rupture_passive_casts_without_target_map_crash():
+    mage = build_player("mage", entity_id="p1")
+    goblin = replace(make_goblin("e1"), current_hp=500)
+    state = make_combat_state(
+        players=[replace(mage, skills=("arcane_bolt",), current_energy=100)],
+        enemies=[goblin],
+        turn_order=("p1", "e1"),
+    )
+
+    for _ in range(5):
+        action = ActionRequest(
+            actor_id="p1",
+            action_type=ActionType.ACTION,
+            skill_id="arcane_bolt",
+            target_ids=((0, "e1"),),
+        )
+        state, _ = resolve_action(state, action, SeededRNG(42), CONSTANTS)
+
+    empowered = [
+        eff for eff in state.entities["p1"].active_effects
+        if eff.effect_id == "empowered_arcane"
+    ]
+    assert empowered == []
+    assert state.entities["e1"].current_hp < goblin.current_hp
 
 
 def test_enlightenment_buff_increases_spell_damage_restores_energy_and_expires():
