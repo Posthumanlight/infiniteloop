@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+from bot.tools.location_labels import location_display_label
 
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
@@ -103,7 +104,7 @@ def location_keyboard(options: tuple[LocationOption, ...]) -> InlineKeyboardMark
     icons = {LocationType.COMBAT: "\u2694\ufe0f", LocationType.EVENT: "\U0001f4dc"}
     rows = [
         [InlineKeyboardButton(
-            text=f"{icons.get(opt.location_type, '\u2753')} {opt.name}",
+            text=f"{icons.get(opt.location_type, '\u2753')} {location_display_label(opt)}",
             callback_data=f"g:loc:{i}",
         )]
         for i, opt in enumerate(options)

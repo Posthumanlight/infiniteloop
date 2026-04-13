@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from bot.tools.location_labels import location_display_label
 from game.core.enums import LevelRewardType, LocationType
 
 if TYPE_CHECKING:
@@ -51,7 +52,8 @@ def render_exploration_choices(
     for i, opt in enumerate(options):
         icon = icons.get(opt.location_type, "\u2753")
         vote_count = sum(1 for v in votes if v.location_index == i)
-        lines.append(f"  {icon} {i + 1}. {opt.name} [{vote_count} votes]")
+        label = location_display_label(opt)
+        lines.append(f"  {icon} {i + 1}. {label} [{vote_count} votes]")
 
     voted_ids = {v.player_id for v in votes}
     waiting = [
