@@ -238,6 +238,8 @@ def run_combat(player: PlayerCharacter, location: LocationOption, seed: int) -> 
     enemy_names = ", ".join(e.entity_name for e in enemies)
     print(f"\n{'=' * 50}")
     print(f"  COMBAT: {location.name}")
+    if location.combat_type is not None:
+        print(f"  Type: {location.combat_type.value}")
     print(f"  Enemies: {enemy_names}")
     if location.status_ids:
         print(f"  Location effects: {', '.join(location.status_ids)}")
@@ -373,7 +375,8 @@ def run_exploration():
             loc_type = loc.location_type.value.upper()
             details = ""
             if loc.location_type == LocationType.COMBAT and loc.enemy_ids:
-                details = f" (enemies: {', '.join(loc.enemy_ids)})"
+                combat_type = f"{loc.combat_type.value}: " if loc.combat_type is not None else ""
+                details = f" ({combat_type}{', '.join(loc.enemy_ids)})"
             elif loc.location_type == LocationType.EVENT and loc.event_id:
                 details = f" (event: {loc.event_id})"
             print(f"    [{i + 1}] [{loc_type}] {loc.name}{details}")

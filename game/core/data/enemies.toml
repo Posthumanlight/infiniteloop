@@ -4,6 +4,7 @@ name = "Goblin"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 15
+combat_type = "normal"
 tags = ["forest", "cave"]
 [enemies.goblin.major_stats]
 attack = 3
@@ -21,6 +22,7 @@ name = "Bayayamshiks"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 100
+combat_type = "boss"
 tags = ["forest", "cave"]
 [enemies.goblin_boss.major_stats]
 attack = 10
@@ -39,6 +41,7 @@ name = "Bandit"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 16
+combat_type = "normal"
 tags = ["forest", "road", "ruins"]
 [enemies.bandit.major_stats]
 attack = 8
@@ -57,6 +60,7 @@ name = "Skeleton"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 18
+combat_type = "normal"
 tags = ["undead", "cave", "ruins"]
 [enemies.skeleton.major_stats]
 attack = 5
@@ -76,6 +80,7 @@ name = "Wolf"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 12
+combat_type = "normal"
 tags = ["forest", "wild"]
 [enemies.wolf.major_stats]
 attack = 7
@@ -94,6 +99,7 @@ name = "Fire Imp"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 20
+combat_type = "elite"
 tags = ["fire", "cave"]
 [enemies.fire_imp.major_stats]
 attack = 12
@@ -106,5 +112,4 @@ energy = 70
 mastery = 6
 [enemies.fire_imp.minor_stats]
 fire_dmg_pct = 0.15
-
 

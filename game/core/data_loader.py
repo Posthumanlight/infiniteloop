@@ -5,7 +5,9 @@ from typing import Any
 
 from game.core.enums import (
     ActionType,
+    CombatLocationType,
     DamageType,
+    EnemyCombatType,
     EffectActionType,
     EventType,
     LocationType,
@@ -273,6 +275,7 @@ class EnemyData:
     minor_stats: dict[str, float]
     skills: tuple[str, ...]
     xp_reward: int
+    combat_type: EnemyCombatType
     tags: tuple[str, ...] = ()
     passives: tuple[str, ...] = ()
 
@@ -287,6 +290,7 @@ def load_enemies() -> dict[str, EnemyData]:
             minor_stats=dict(edata.get("minor_stats", {})),
             skills=tuple(edata["skills"]),
             xp_reward=edata["xp_reward"],
+            combat_type=EnemyCombatType(edata["combat_type"]),
             tags=tuple(edata.get("tags", [])),
             passives=tuple(edata.get("passives", [])),
         )
@@ -504,6 +508,7 @@ class LocationOption:
     # Combat fields (populated when location_type == COMBAT)
     enemy_ids: tuple[str, ...] = ()
     status_ids: tuple[str, ...] = ()
+    combat_type: CombatLocationType | None = None
     # Event fields (populated when location_type == EVENT)
     event_id: str | None = None
 
@@ -548,6 +553,9 @@ def load_location_status(status_id: str) -> LocationStatusDef:
 
 def _parse_location_option(index: int, raw: dict[str, Any]) -> LocationOption:
     loc_type = LocationType(raw["type"])
+    combat_type = None
+    if loc_type == LocationType.COMBAT and "combat_type" in raw:
+        combat_type = CombatLocationType(raw["combat_type"])
     return LocationOption(
         location_id=f"preset_{index}",
         name=raw.get("name", f"{loc_type.value.title()} {index + 1}"),
@@ -555,6 +563,7 @@ def _parse_location_option(index: int, raw: dict[str, Any]) -> LocationOption:
         tags=tuple(raw.get("tags", [])),
         enemy_ids=tuple(raw.get("enemies", [])),
         status_ids=tuple(raw.get("statuses", [])),
+        combat_type=combat_type,
         event_id=raw.get("event_id"),
     )
 

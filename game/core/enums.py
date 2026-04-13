@@ -93,6 +93,20 @@ class LocationType(Enum):
     EVENT = "event"
 
 
+class EnemyCombatType(Enum):
+    NORMAL = "normal"
+    ELITE = "elite"
+    BOSS = "boss"
+
+
+class CombatLocationType(Enum):
+    NORMAL = "normal"
+    ELITE = "elite"
+    SWARM = "swarm"
+    SOLO_BOSS = "solo_boss"
+    BOSS_GROUP = "boss_group"
+
+
 class ExplorationPhase(Enum):
     CHOOSING = "choosing"
     RESOLVING = "resolving"
