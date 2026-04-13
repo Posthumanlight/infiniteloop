@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from game.combat.effects import build_expr_context
+from game.combat.effects import build_effective_expr_context, get_effective_major_stat
 from game.combat.models import CombatState, HitResult
 from game.core.data_loader import SkillData, load_modifier
 from game.core.enums import ModifierPhase
@@ -97,8 +97,8 @@ def apply_post_hit_modifiers(
     results: list[HitResult] = []
     for mod in post_mods:
         ctx: dict[str, object] = {
-            "attacker": build_expr_context(state.entities[actor_id]),
-            "target": build_expr_context(state.entities[target_id]),
+            "attacker": build_effective_expr_context(state, actor_id),
+            "target": build_effective_expr_context(state, target_id),
             "damage_dealt": damage_dealt,
             "stack_count": mod.stack_count,
         }
@@ -108,10 +108,12 @@ def apply_post_hit_modifiers(
             case "vampirism":
                 actor = state.entities[actor_id]
                 heal = int(abs(value))
-                new_hp = min(actor.current_hp + heal, actor.major_stats.hp)
+                max_hp = int(get_effective_major_stat(state, actor_id, "hp"))
+                new_hp = min(actor.current_hp + heal, max_hp)
+                applied = max(0, new_hp - actor.current_hp)
                 new_entities = {**state.entities, actor_id: replace(actor, current_hp=new_hp)}
                 state = replace(state, entities=new_entities)
-                results.append(HitResult(target_id=actor_id, heal_amount=heal))
+                results.append(HitResult(target_id=actor_id, heal_amount=applied))
             case _:
                 pass  # other post-hit actions can be added here
 

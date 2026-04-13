@@ -49,7 +49,7 @@ name = "Annihilation"
 energy_cost = 35
 action_type = "action"
 cooldown = 5
-level_eligibility = [3, 15]
+level_eligibility = [1, 99]
 class_tags = ["mage"]
 hits = [
   { target_type = "single_enemy", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.9)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
@@ -60,9 +60,21 @@ name = "Singularity"
 energy_cost = 50
 action_type = "action"
 cooldown = 8
-level_eligibility = [6, 15]
+level_eligibility = [3, 99]
 class_tags = ["mage"]
 hits = [
   { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 1.1", base_power = 10, variance = 0.0 },
   { target_type = "all_enemies", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.25)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
+]
+
+[skills.enlightenment]
+name = "Enlightenment"
+energy_cost = 0
+action_type = "action"
+cooldown = 5
+level_eligibility = [3, 99]
+class_tags = ["mage"]
+hits = []
+self_effects = [
+  { effect = "enlightenment" },
 ]

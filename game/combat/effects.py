@@ -41,6 +41,24 @@ def build_expr_context(entity: BaseEntity) -> ExprContext:
     )
 
 
+def build_effective_expr_context(
+    state: CombatState,
+    entity_id: str,
+) -> ExprContext:
+    entity = state.entities[entity_id]
+    return ExprContext(
+        attack=get_effective_major_stat(state, entity_id, "attack"),
+        hp=get_effective_major_stat(state, entity_id, "hp"),
+        current_hp=entity.current_hp,
+        speed=get_effective_major_stat(state, entity_id, "speed"),
+        crit_chance=get_effective_major_stat(state, entity_id, "crit_chance"),
+        crit_dmg=get_effective_major_stat(state, entity_id, "crit_dmg"),
+        resistance=get_effective_major_stat(state, entity_id, "resistance"),
+        energy=get_effective_major_stat(state, entity_id, "energy"),
+        mastery=get_effective_major_stat(state, entity_id, "mastery"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Damage type numeric helpers (for condition expressions)
 # ---------------------------------------------------------------------------
@@ -72,11 +90,16 @@ def _check_condition(
     condition: str | None,
     entity: BaseEntity,
     extra_ctx: dict[str, Any] | None = None,
+    target_ctx: ExprContext | None = None,
+    attacker_ctx: ExprContext | None = None,
 ) -> bool:
     if not condition:
         return True
+    resolved_target = target_ctx or build_expr_context(entity)
+    resolved_attacker = attacker_ctx or resolved_target
     ctx: dict[str, Any] = {
-        "target": build_expr_context(entity),
+        "target": resolved_target,
+        "attacker": resolved_attacker,
         **_build_damage_type_constants(),
         **(extra_ctx or {}),
     }
@@ -104,6 +127,102 @@ _NON_TICKING_ACTIONS = frozenset({
     EffectActionType.DAMAGE_TAKEN_MULT,
     EffectActionType.STAT_MODIFY,
 })
+
+
+def _build_effect_context(
+    state: CombatState,
+    target_id: str,
+    source_id: str | None = None,
+    *,
+    use_effective_stats: bool,
+    extra_ctx: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    target_entity = state.entities[target_id]
+    target_ctx = (
+        build_effective_expr_context(state, target_id)
+        if use_effective_stats
+        else build_expr_context(target_entity)
+    )
+
+    if source_id and source_id in state.entities:
+        attacker_ctx = (
+            build_effective_expr_context(state, source_id)
+            if use_effective_stats
+            else build_expr_context(state.entities[source_id])
+        )
+    else:
+        attacker_ctx = target_ctx
+
+    return {
+        "target": target_ctx,
+        "attacker": attacker_ctx,
+        **_build_damage_type_constants(),
+        **(extra_ctx or {}),
+    }
+
+
+def _apply_heal_or_energy_gain(
+    state: CombatState,
+    entity_id: str,
+    action_type: EffectActionType,
+    amount: int,
+) -> tuple[CombatState, int]:
+    entity = state.entities[entity_id]
+
+    if action_type == EffectActionType.HEAL:
+        max_hp = int(get_effective_major_stat(state, entity_id, "hp"))
+        new_hp = min(max_hp, entity.current_hp + amount)
+        applied = max(0, new_hp - entity.current_hp)
+        return _update_entity(state, entity_id, current_hp=new_hp), applied
+
+    max_energy = int(get_effective_major_stat(state, entity_id, "energy"))
+    new_energy = min(max_energy, entity.current_energy + amount)
+    applied = max(0, new_energy - entity.current_energy)
+    return _update_entity(state, entity_id, current_energy=new_energy), applied
+
+
+def _apply_on_apply_actions(
+    state: CombatState,
+    target_id: str,
+    inst: StatusEffectInstance,
+) -> CombatState:
+    effect_def = load_effect(inst.effect_id)
+    if effect_def.trigger != TriggerType.ON_APPLY:
+        return state
+
+    current_entity = state.entities[target_id]
+    effective_ctx = _build_effect_context(
+        state,
+        target_id,
+        inst.source_id,
+        use_effective_stats=True,
+    )
+    if not _check_condition(
+        effect_def.tick_condition,
+        current_entity,
+        target_ctx=effective_ctx["target"],
+        attacker_ctx=effective_ctx["attacker"],
+    ):
+        return state
+
+    for action in effect_def.actions:
+        if action.action_type not in {
+            EffectActionType.HEAL,
+            EffectActionType.GRANT_ENERGY,
+        }:
+            continue
+
+        value = evaluate_expr(action.expr, effective_ctx)
+        stack_mult = inst.stack_count if action.scales_with_stacks else 1
+        amount = int(abs(value) * stack_mult)
+        state, _ = _apply_heal_or_energy_gain(
+            state,
+            target_id,
+            action.action_type,
+            amount,
+        )
+
+    return state
 
 
 # ---------------------------------------------------------------------------
@@ -140,17 +259,23 @@ def apply_effect(
                 )
             else:
                 existing[i] = replace(inst, remaining_duration=effect_def.duration)
-            return _update_entity(state, target_id, active_effects=tuple(existing))
+            updated_state = _update_entity(
+                state,
+                target_id,
+                active_effects=tuple(existing),
+            )
+            return _apply_on_apply_actions(updated_state, target_id, existing[i])
 
     new_inst = StatusEffectInstance(
         effect_id=effect_id,
         source_id=source_id,
         remaining_duration=effect_def.duration,
     )
-    return _update_entity(
+    updated_state = _update_entity(
         state, target_id,
         active_effects=entity.active_effects + (new_inst,),
     )
+    return _apply_on_apply_actions(updated_state, target_id, new_inst)
 
 
 # ---------------------------------------------------------------------------
@@ -172,13 +297,19 @@ def tick_effects(
             continue
 
         current_entity = state.entities[entity_id]
-        if not _check_condition(effect_def.tick_condition, current_entity):
+        ctx = _build_effect_context(
+            state,
+            entity_id,
+            inst.source_id,
+            use_effective_stats=True,
+        )
+        if not _check_condition(
+            effect_def.tick_condition,
+            current_entity,
+            target_ctx=ctx["target"],
+            attacker_ctx=ctx["attacker"],
+        ):
             continue
-
-        target_ctx = build_expr_context(current_entity)
-        source = state.entities.get(inst.source_id)
-        attacker_ctx = build_expr_context(source) if source else target_ctx
-        ctx: dict[str, Any] = {"target": target_ctx, "attacker": attacker_ctx}
 
         for action in effect_def.actions:
             if action.action_type in _NON_TICKING_ACTIONS:
@@ -205,21 +336,25 @@ def tick_effects(
 
                 case EffectActionType.HEAL:
                     heal = int(abs(value) * stack_mult)
-                    current_entity = state.entities[entity_id]
-                    max_hp = current_entity.major_stats.hp
-                    new_hp = min(max_hp, current_entity.current_hp + heal)
-                    state = _update_entity(state, entity_id, current_hp=new_hp)
+                    state, applied = _apply_heal_or_energy_gain(
+                        state,
+                        entity_id,
+                        EffectActionType.HEAL,
+                        heal,
+                    )
                     results.append(HitResult(
                         target_id=entity_id,
-                        heal_amount=heal,
+                        heal_amount=applied,
                     ))
 
                 case EffectActionType.GRANT_ENERGY:
                     amount = int(abs(value) * stack_mult)
-                    current_entity = state.entities[entity_id]
-                    max_energy = current_entity.major_stats.energy
-                    new_energy = min(max_energy, current_entity.current_energy + amount)
-                    state = _update_entity(state, entity_id, current_energy=new_energy)
+                    state, _ = _apply_heal_or_energy_gain(
+                        state,
+                        entity_id,
+                        EffectActionType.GRANT_ENERGY,
+                        amount,
+                    )
 
     return state, results
 
@@ -267,12 +402,24 @@ def get_damage_multiplier(
         effect_def = load_effect(inst.effect_id)
         if effect_def.trigger != TriggerType.ON_DAMAGE_CALC:
             continue
-        if not _check_condition(effect_def.tick_condition, attacker, dt_ctx):
+        ctx = _build_effect_context(
+            state,
+            attacker_id,
+            inst.source_id,
+            use_effective_stats=True,
+            extra_ctx=dt_ctx,
+        )
+        if not _check_condition(
+            effect_def.tick_condition,
+            attacker,
+            dt_ctx,
+            target_ctx=ctx["target"],
+            attacker_ctx=ctx["attacker"],
+        ):
             continue
         for action in effect_def.actions:
             if action.action_type != EffectActionType.DAMAGE_DEALT_MULT:
                 continue
-            ctx: dict[str, Any] = {"target": build_expr_context(attacker)}
             stack_mult = inst.stack_count if action.scales_with_stacks else 1
             val = evaluate_expr(action.expr, ctx)
             multiplier *= val ** stack_mult if val != 0 else 1
@@ -283,12 +430,24 @@ def get_damage_multiplier(
         effect_def = load_effect(inst.effect_id)
         if effect_def.trigger != TriggerType.ON_DAMAGE_CALC:
             continue
-        if not _check_condition(effect_def.tick_condition, defender, dt_ctx):
+        ctx = _build_effect_context(
+            state,
+            defender_id,
+            inst.source_id,
+            use_effective_stats=True,
+            extra_ctx=dt_ctx,
+        )
+        if not _check_condition(
+            effect_def.tick_condition,
+            defender,
+            dt_ctx,
+            target_ctx=ctx["target"],
+            attacker_ctx=ctx["attacker"],
+        ):
             continue
         for action in effect_def.actions:
             if action.action_type != EffectActionType.DAMAGE_TAKEN_MULT:
                 continue
-            ctx = {"target": build_expr_context(defender)}
             stack_mult = inst.stack_count if action.scales_with_stacks else 1
             val = evaluate_expr(action.expr, ctx)
             multiplier *= val ** stack_mult if val != 0 else 1
@@ -330,9 +489,19 @@ def get_effective_major_stat(
                 continue
             if action.stat != stat_name:
                 continue
-            if not _check_condition(effect_def.tick_condition, entity):
+            ctx = _build_effect_context(
+                state,
+                entity_id,
+                inst.source_id,
+                use_effective_stats=False,
+            )
+            if not _check_condition(
+                effect_def.tick_condition,
+                entity,
+                target_ctx=ctx["target"],
+                attacker_ctx=ctx["attacker"],
+            ):
                 continue
-            ctx: dict[str, Any] = {"target": build_expr_context(entity)}
             modifier = evaluate_expr(action.expr, ctx)
             stack_mult = inst.stack_count if action.scales_with_stacks else 1
             base_value += modifier * stack_mult
@@ -359,9 +528,19 @@ def get_effective_minor_stat(
                 continue
             if action.stat != stat_key:
                 continue
-            if not _check_condition(effect_def.tick_condition, entity):
+            ctx = _build_effect_context(
+                state,
+                entity_id,
+                inst.source_id,
+                use_effective_stats=False,
+            )
+            if not _check_condition(
+                effect_def.tick_condition,
+                entity,
+                target_ctx=ctx["target"],
+                attacker_ctx=ctx["attacker"],
+            ):
                 continue
-            ctx: dict[str, Any] = {"target": build_expr_context(entity)}
             modifier = evaluate_expr(action.expr, ctx)
             stack_mult = inst.stack_count if action.scales_with_stacks else 1
             base_value += modifier * stack_mult

@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from game.character.base_entity import BaseEntity
-from game.combat.effects import build_expr_context, get_effective_minor_stat
+from game.combat.effects import (
+    build_effective_expr_context,
+    build_expr_context,
+    get_effective_major_stat,
+    get_effective_minor_stat,
+)
 from game.combat.models import CombatState, DamageResult
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType
@@ -26,10 +31,35 @@ def resolve_damage(
     effect_multiplier: float = 1.0,
     state: CombatState | None = None,
 ) -> DamageResult:
+    if state is not None:
+        attacker_ctx = build_effective_expr_context(state, attacker.entity_id)
+        defender_ctx = build_effective_expr_context(state, defender.entity_id)
+        resistance = get_effective_major_stat(
+            state,
+            defender.entity_id,
+            "resistance",
+        )
+        crit_chance = get_effective_major_stat(
+            state,
+            attacker.entity_id,
+            "crit_chance",
+        )
+        crit_dmg = get_effective_major_stat(
+            state,
+            attacker.entity_id,
+            "crit_dmg",
+        )
+    else:
+        attacker_ctx = build_expr_context(attacker)
+        defender_ctx = build_expr_context(defender)
+        resistance = defender.major_stats.resistance
+        crit_chance = attacker.major_stats.crit_chance
+        crit_dmg = attacker.major_stats.crit_dmg
+
     ctx: dict[str, object] = {
         "base_power": base_power,
-        "attacker": build_expr_context(attacker),
-        "target": build_expr_context(defender),
+        "attacker": attacker_ctx,
+        "target": defender_ctx,
     }
 
     raw = evaluate_expr(formula_expr, ctx)
@@ -37,7 +67,7 @@ def resolve_damage(
     for mod in modifiers:
         raw += evaluate_expr(mod.expr, ctx) * mod.stack_count
 
-    after_def = raw * (200 / (200 + defender.major_stats.resistance))
+    after_def = raw * (200 / (200 + resistance))
 
     # Type scaling — use effective minor stats if state is available
     if state is not None:
@@ -57,9 +87,9 @@ def resolve_damage(
         * (1.0 - def_def_pct)
     )
 
-    is_crit = rng.random_float() < attacker.major_stats.crit_chance
+    is_crit = rng.random_float() < crit_chance
     if is_crit:
-        after_type *= attacker.major_stats.crit_dmg
+        after_type *= crit_dmg
 
     var = variance if variance is not None else constants.get("default_variance", 0)
     after_var = after_type * rng.uniform(1.0 - var, 1.0 + var)

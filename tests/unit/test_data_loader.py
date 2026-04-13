@@ -53,17 +53,39 @@ def test_load_effect_fortify():
     assert e.actions[0].expr == "0.75"
 
 
+def test_load_effect_enlightenment():
+    e = load_effect("enlightenment")
+    assert e.trigger == TriggerType.ON_APPLY
+    assert e.duration == 3
+    assert e.actions[0].action_type == EffectActionType.STAT_MODIFY
+    assert e.actions[0].stat == "mastery"
+    assert e.actions[0].expr == "10 + 2 * target.mastery"
+    assert e.actions[1].action_type == EffectActionType.GRANT_ENERGY
+    assert e.actions[1].expr == "target.energy * 0.1"
+
+
 def test_load_skill_slash():
     s = load_skill("slash")
     assert s.skill_id == "slash"
     assert s.name == "Slash"
-    assert s.target_type == TargetType.SINGLE_ENEMY
     assert s.energy_cost == 0
     assert s.action_type == ActionType.ACTION
-    assert s.damage_type == DamageType.SLASHING
     assert len(s.hits) == 1
+    assert s.hits[0].target_type == TargetType.SINGLE_ENEMY
+    assert s.hits[0].damage_type == DamageType.SLASHING
     assert "attacker.attack" in s.hits[0].formula
     assert s.hits[0].base_power == 10
+
+
+def test_load_skill_enlightenment():
+    s = load_skill("enlightenment")
+    assert s.skill_id == "enlightenment"
+    assert s.name == "Enlightenment"
+    assert s.energy_cost == 0
+    assert s.action_type == ActionType.ACTION
+    assert s.hits == ()
+    assert len(s.self_effects) == 1
+    assert s.self_effects[0].effect_id == "enlightenment"
 
 
 def test_load_class_warrior():
@@ -73,6 +95,11 @@ def test_load_class_warrior():
     assert c.major_stats["attack"] == 12
     assert c.major_stats["hp"] == 125
     assert c.minor_stats.get("slashing_dmg_pct") == 0.1
+
+
+def test_load_class_mage_starts_with_enlightenment():
+    c = load_class("mage")
+    assert "enlightenment" in c.starting_skills
 
 
 def test_load_enemy_goblin():

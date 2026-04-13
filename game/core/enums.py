@@ -25,6 +25,7 @@ class ActionType(Enum):
 
 
 class TriggerType(Enum):
+    ON_APPLY = "on_apply"
     ON_TURN_START = "on_turn_start"
     ON_TURN_END = "on_turn_end"
     ON_CAST = "on_cast"
