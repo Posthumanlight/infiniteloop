@@ -5,9 +5,8 @@ Handles skill selection (g:sk:*), target selection (g:tg:*), and skip (g:skip).
 
 import asyncpg
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, FSInputFile
+from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
-import asyncio
 
 from bot.bot_state import GameStates
 from bot.tools.combat_renderer import (
@@ -21,6 +20,7 @@ from bot.tools.exploration_renderer import (
     render_modifier_notice,
     render_run_summary,
 )
+from bot.tools.combat_image import send_combat_image
 from bot.tools.keyboards import (
     location_keyboard,
     modifier_choice_keyboard,
@@ -32,7 +32,6 @@ from db.queries.users_namespace import UserСharactersData
 from game.combat.models import ActionRequest
 from game.core.enums import ActionType, SessionPhase, TargetType
 from game_service import GameService
-from resources.merger import generate_battle_scene
 
 router = Router(name="combat_router")
 
@@ -358,7 +357,7 @@ async def _render_batch_and_prompt(
         whose_turn = batch.whose_turn
         if whose_turn is not None and whose_turn in batch.entities:
             # Відправляємо оновлену картинку з актуальним HP перед наступним ходом
-            await _send_combat_image(callback, game_service, session_id)
+            await send_combat_image(callback, game_service, session_id)
             
             turn_snap = batch.entities[whose_turn]
             skills = game_service.get_available_skills(session_id, whose_turn)
@@ -425,38 +424,3 @@ async def _restore_skill_prompt(
         prompt,
         reply_markup=skill_keyboard(skills, turn_snap.current_energy),
     )
-
-
-async def _send_combat_image(
-    callback: CallbackQuery,
-    game_service: GameService,
-    session_id: str,
-) -> None:
-    """Збирає дані про мобів, генерує картинку та відправляє її в чат."""
-    try:
-        enemies_snaps = game_service.get_alive_enemies(session_id)
-        enemies_data = [
-            {
-                "entity_id": e.entity_id,
-                "name": e.name,
-                "current_hp": e.current_hp,
-                "max_hp": e.max_hp
-            }
-            for e in enemies_snaps
-        ]
-        
-        # Отримуємо номер кімнати. Використовувати round_number не можна, бо він міняється щоходу.
-        # Спробуємо дістати кількість пройдених кімнат з run_stats, або за замовчуванням 1
-        session = game_service._get_session(session_id)
-        try:
-            room_number = session.state.run_stats.locations_visited
-        except AttributeError:
-            room_number = 1
-        
-        image_path = await asyncio.to_thread(
-            generate_battle_scene, session_id, room_number, enemies_data
-        )
-        
-        await callback.message.answer_photo(photo=FSInputFile(image_path))
-    except Exception as e:
-        print(f"Помилка під час генерації або відправки картинки бою: {e}")
