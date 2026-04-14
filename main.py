@@ -60,6 +60,68 @@ config = uvicorn.Config(app, host="0.0.0.0", port=port)
 server = uvicorn.Server(config)  
 
 
+def _trim_log_value(value: str | None, limit: int = 500) -> str:
+    if not value:
+        return ""
+    value = value.replace("\n", "\\n")
+    return value if len(value) <= limit else f"{value[:limit]}..."
+
+
+def _telegram_user_label(user) -> str:
+    if user is None:
+        return "unknown"
+
+    username = f"@{user.username}" if getattr(user, "username", None) else "no_username"
+    full_name = getattr(user, "full_name", "") or ""
+    return f"{user.id} {username} {full_name}".strip()
+
+
+def _telegram_chat_label(chat) -> str:
+    if chat is None:
+        return "unknown"
+
+    title = getattr(chat, "title", None) or getattr(chat, "full_name", None) or ""
+    return f"{chat.id} {chat.type} {title}".strip()
+
+
+def log_telegram_update(update: Update) -> None:
+    message = update.message or update.edited_message
+    if message is not None:
+        user = _telegram_user_label(message.from_user)
+        chat = _telegram_chat_label(message.chat)
+        message_type = getattr(message, "content_type", "unknown")
+        text = _trim_log_value(message.text or message.caption)
+        logger.info(
+            "Telegram message: update_id=%s message_id=%s type=%s user=%s chat=%s text=%r",
+            update.update_id,
+            message.message_id,
+            message_type,
+            user,
+            chat,
+            text,
+        )
+        return
+
+    if update.callback_query is not None:
+        callback = update.callback_query
+        user = _telegram_user_label(callback.from_user)
+        message_id = callback.message.message_id if callback.message else "unknown"
+        chat = _telegram_chat_label(callback.message.chat) if callback.message else "unknown"
+        data = _trim_log_value(callback.data)
+        logger.info(
+            "Telegram callback: update_id=%s callback_id=%s message_id=%s user=%s chat=%s data=%r",
+            update.update_id,
+            callback.id,
+            message_id,
+            user,
+            chat,
+            data,
+        )
+        return
+
+    logger.info("Telegram update: update_id=%s type=other", update.update_id)
+
+
 def log_update_task_error(task: asyncio.Task) -> None:
     try:
         exc = task.exception()
@@ -73,6 +135,7 @@ def log_update_task_error(task: asyncio.Task) -> None:
 @app.post(settings.telegram_webhook_path)
 async def telegram_webhook(request: Request):
     update = Update.model_validate(await request.json())
+    log_telegram_update(update)
     task = asyncio.create_task(dp.feed_update(bot, update))
     task.add_done_callback(log_update_task_error)
     return {"ok": True}
