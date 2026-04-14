@@ -23,6 +23,7 @@ from bot.handlers.exploration import router as exploration_router
 #Telegram bot
 BOT_TOKEN = settings.telegram_bot_token
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -58,9 +59,29 @@ port = int(os.getenv("PORT", 8000))
 config = uvicorn.Config(app, host="0.0.0.0", port=port)
 server = uvicorn.Server(config)  
 
+
+def log_update_task_error(task: asyncio.Task) -> None:
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        logger.info("Update task was cancelled")
+        return
+
+    if exc is not None:
+        logger.error("Unhandled error in update task", exc_info=(type(exc), exc, exc.__traceback__))
+
 @app.post(settings.telegram_webhook_path)
 async def telegram_webhook(request: Request):
     update = Update.model_validate(await request.json())
     task = asyncio.create_task(dp.feed_update(bot, update))
-    task.add_done_callback(lambda t: t.exception() and logging.error("Unhandled error in update task", exc_info=t.exception()))
+    task.add_done_callback(log_update_task_error)
     return {"ok": True}
+
+
+if __name__ == "__main__":
+    try:
+        logger.info("Starting uvicorn on 0.0.0.0:%s", port)
+        server.run()
+    except Exception:
+        logger.exception("Application crashed during startup/runtime")
+        raise
