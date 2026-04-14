@@ -102,9 +102,10 @@ def class_select_keyboard(classes: dict[str, ClassData]) -> InlineKeyboardMarkup
 def location_keyboard(options: tuple[LocationOption, ...]) -> InlineKeyboardMarkup:
     from game.core.enums import LocationType
     icons = {LocationType.COMBAT: "\u2694\ufe0f", LocationType.EVENT: "\U0001f4dc"}
+    unknown_icon = "\u2753"
     rows = [
         [InlineKeyboardButton(
-            text=f"{icons.get(opt.location_type, '\u2753')} {location_display_label(opt)}",
+            text=f"{icons.get(opt.location_type, unknown_icon)} {location_display_label(opt)}",
             callback_data=f"g:loc:{i}",
         )]
         for i, opt in enumerate(options)
