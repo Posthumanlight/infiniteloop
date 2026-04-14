@@ -7,7 +7,17 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from bot.bot_state import GameStates
 from bot.tools.combat_renderer import render_status
 from bot.tools.exploration_renderer import render_exploration_choices, render_run_summary
-from bot.tools.keyboards import class_select_keyboard, lobby_keyboard, location_keyboard
+from bot.tools.keyboards import (
+    class_select_keyboard,
+    lobby_keyboard,
+    location_keyboard,
+    save_decision_keyboard,
+)
+from bot.tools.save_flow import (
+    clear_save_flow,
+    get_save_flow,
+    start_save_flow,
+)
 from db.queries.users_namespace import UserCharactersData
 from game.session.lobby_manager import LobbyManager, LobbyPlayer, LobbySelectionMode, LobbySession
 from game_service import GameService
@@ -52,7 +62,8 @@ def _player_status(player: LobbyPlayer, class_names: dict[str, str]) -> str:
         if selected is None:
             return "choosing character..."
         class_name = class_names.get(selected.class_id, selected.class_id)
-        return f"saved: {class_name} Lv.{selected.level}"
+        save_name = selected.character_name or f"#{selected.character_id}"
+        return f"saved: {save_name} ({class_name} Lv.{selected.level})"
 
     if player.selection_mode == LobbySelectionMode.NEW:
         if player.selected_class_id is None:
@@ -80,8 +91,9 @@ def _render_character_prompt(player: LobbyPlayer, class_names: dict[str, str]) -
         for char in player.available_characters:
             class_name = class_names.get(char.class_id, char.class_id)
             marker = " [selected]" if player.selected_character_id == char.character_id else ""
+            save_name = char.character_name or f"#{char.character_id}"
             lines.append(
-                f"  - #{char.character_id}: {class_name} Lv.{char.level} (XP {char.xp}){marker}",
+                f"  - {save_name}: {class_name} Lv.{char.level} (XP {char.xp}){marker}",
             )
     else:
         lines.append("No saved characters found.")
@@ -103,9 +115,10 @@ def _character_choice_keyboard(
     rows: list[list[InlineKeyboardButton]] = []
     for char in player.available_characters:
         class_name = class_names.get(char.class_id, char.class_id)
+        save_name = char.character_name or f"#{char.character_id}"
         rows.append([
             InlineKeyboardButton(
-                text=f"Load {class_name} Lv.{char.level}",
+                text=f"Load {save_name} ({class_name} Lv.{char.level})",
                 callback_data=f"g:char:{char.character_id}",
             ),
         ])
@@ -137,6 +150,47 @@ async def _send_character_prompt(
         _render_character_prompt(player, class_names),
         reply_markup=_character_choice_keyboard(player, class_names),
     )
+
+
+async def start_victory_save_flow(
+    message: Message,
+    game_service: GameService,
+    session_id: str,
+) -> None:
+    if get_save_flow(session_id) is not None:
+        return
+
+    flow = start_save_flow(game_service, session_id)
+    for choice in flow.choices.values():
+        if choice.is_transient:
+            prompt = (
+                f"{choice.display_name}, do you want to save this character "
+                f"({choice.class_id})?"
+            )
+        else:
+            saved_name = choice.source_character_name or f"#{choice.source_character_id}"
+            prompt = (
+                f"{choice.display_name}, save updates for {saved_name} "
+                f"({choice.class_id})?"
+            )
+        await message.answer(
+            prompt,
+            reply_markup=save_decision_keyboard(choice.entity_id),
+        )
+
+
+async def _finalize_save_flow_if_ready(
+    message: Message,
+    game_service: GameService,
+    session_id: str,
+) -> None:
+    flow = get_save_flow(session_id)
+    if flow is None or not flow.all_resolved():
+        return
+
+    clear_save_flow(session_id)
+    game_service.remove_session(session_id)
+    await message.answer("All save choices resolved. Session closed.")
 
 
 @router.message(Command("run"))
@@ -384,6 +438,162 @@ async def cb_start(
     await _start_run(callback.message, game_service, state, db_pool)
 
 
+@router.callback_query(F.data.startswith("g:save:"))
+async def cb_save_decision(
+    callback: CallbackQuery,
+    game_service: GameService,
+    state: FSMContext,
+    db_pool: asyncpg.Pool,
+) -> None:
+    sid = _session_id(callback.message.chat.id)
+    if not game_service.has_session(sid):
+        await callback.answer("No active run to save.", show_alert=True)
+        clear_save_flow(sid)
+        return
+
+    flow = get_save_flow(sid)
+    if flow is None:
+        await callback.answer("No pending save prompt.", show_alert=True)
+        return
+
+    parts = callback.data.split(":", 3)
+    if len(parts) != 4:
+        await callback.answer("Invalid save action.", show_alert=True)
+        return
+    decision = parts[2]
+    entity_id = parts[3]
+    choice = flow.choices.get(entity_id)
+    if choice is None:
+        await callback.answer("Save prompt expired.", show_alert=True)
+        return
+
+    if callback.from_user.id != choice.tg_user_id:
+        await callback.answer("This save prompt is not for you.", show_alert=True)
+        return
+    if choice.resolved:
+        await callback.answer("Your save choice is already submitted.")
+        return
+
+    if decision == "no":
+        choice.wants_save = False
+        choice.awaiting_name = False
+        choice.resolved = True
+        await callback.answer("Character not saved.")
+        await callback.message.answer(f"{choice.display_name} chose not to save.")
+        await state.set_state(GameStates.run_ended)
+        await _finalize_save_flow_if_ready(callback.message, game_service, sid)
+        return
+
+    if decision != "yes":
+        await callback.answer("Invalid save action.", show_alert=True)
+        return
+
+    choice.wants_save = True
+    choice.awaiting_name = True
+    await callback.answer("Send a character name in chat.")
+    await callback.message.answer(
+        f"{choice.display_name}, send the character name to save:",
+    )
+    await state.set_state(GameStates.save_name)
+
+
+@router.message(GameStates.save_name)
+async def msg_save_name(
+    message: Message,
+    game_service: GameService,
+    state: FSMContext,
+    db_pool: asyncpg.Pool,
+) -> None:
+    sid = _session_id(message.chat.id)
+    if not game_service.has_session(sid):
+        clear_save_flow(sid)
+        await message.answer("No active run to save.")
+        await state.set_state(GameStates.run_ended)
+        return
+
+    flow = get_save_flow(sid)
+    if flow is None:
+        await message.answer("No pending save prompt.")
+        await state.set_state(GameStates.run_ended)
+        return
+
+    choice = flow.choice_for_user(message.from_user.id)
+    if choice is None or not choice.awaiting_name:
+        await message.answer("You do not have a pending name prompt.")
+        return
+
+    raw_name = message.text or ""
+    character_name = raw_name.strip()
+    if not character_name:
+        await message.answer("Name cannot be empty. Send a character name:")
+        return
+
+    chars_db = UserCharactersData(pool=db_pool)
+    exists = await chars_db.character_name_exists(
+        character_name,
+        exclude_character_id=choice.source_character_id,
+    )
+    if exists:
+        await message.answer("That name is already used globally. Send another name:")
+        return
+
+    session = game_service._get_session(sid)
+    if session.state is None:
+        await message.answer("Run state is unavailable; save aborted.")
+        choice.awaiting_name = False
+        choice.resolved = True
+        await state.set_state(GameStates.run_ended)
+        await _finalize_save_flow_if_ready(message, game_service, sid)
+        return
+
+    player = next(
+        (p for p in session.state.players if p.entity_id == choice.entity_id),
+        None,
+    )
+    if player is None:
+        await message.answer("Character state not found; save aborted.")
+        choice.awaiting_name = False
+        choice.resolved = True
+        await state.set_state(GameStates.run_ended)
+        await _finalize_save_flow_if_ready(message, game_service, sid)
+        return
+
+    if choice.is_transient:
+        await chars_db.create_saved_character(
+            tg_id=choice.tg_user_id,
+            character_name=character_name,
+            class_id=player.player_class,
+            skills=player.skills,
+            level=player.level,
+            xp=player.xp,
+            skill_modifiers=player.skill_modifiers,
+            inventory=dict(player.inventory.content),
+        )
+    else:
+        if choice.source_character_id is None:
+            await message.answer("Invalid save target; save aborted.")
+            choice.awaiting_name = False
+            choice.resolved = True
+            await state.set_state(GameStates.run_ended)
+            await _finalize_save_flow_if_ready(message, game_service, sid)
+            return
+        await chars_db.save_character_progress(
+            character_id=choice.source_character_id,
+            character_name=character_name,
+            level=player.level,
+            xp=player.xp,
+            skills=player.skills,
+            skill_modifiers=player.skill_modifiers,
+        )
+
+    choice.source_character_name = character_name
+    choice.awaiting_name = False
+    choice.resolved = True
+    await message.answer(f"{choice.display_name} saved as '{character_name}'.")
+    await state.set_state(GameStates.run_ended)
+    await _finalize_save_flow_if_ready(message, game_service, sid)
+
+
 @router.message(Command("combat"))
 async def cmd_status(
     message: Message,
@@ -415,6 +625,12 @@ async def cmd_flee(
 
     if not game_service.has_session(sid):
         await message.answer("No active game.")
+        return
+
+    if get_save_flow(sid) is not None:
+        clear_save_flow(sid)
+        game_service.remove_session(sid)
+        await message.answer("Pending save prompts were closed. Unsaved choices were discarded.")
         return
 
     stats = game_service.get_run_stats(sid) if game_service.get_session_phase(sid) is not None else None

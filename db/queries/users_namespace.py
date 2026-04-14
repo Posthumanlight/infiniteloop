@@ -147,6 +147,7 @@ class UserCharactersData(UserData):
         sql = """
             SELECT
                 gc.character_id AS character_id,
+                gc.character_name AS character_name,
                 gcd.class AS class_id,
                 gcd.level AS level,
                 gcd.xp AS xp,
@@ -167,6 +168,11 @@ class UserCharactersData(UserData):
         return [
             SavedCharacterSummary(
                 character_id=int(row["character_id"]),
+                character_name=(
+                    str(row["character_name"])
+                    if row["character_name"] is not None
+                    else None
+                ),
                 class_id=str(row["class_id"]),
                 level=int(row["level"]),
                 xp=int(row["xp"] or 0),
@@ -179,6 +185,7 @@ class UserCharactersData(UserData):
             SELECT
                 gc.tg_id AS tg_id,
                 gc.character_id AS character_id,
+                gc.character_name AS character_name,
                 gcd.class AS class_id,
                 gcd.level AS level,
                 gcd.xp AS xp,
@@ -218,6 +225,11 @@ class UserCharactersData(UserData):
         return CharacterRecord(
             character_id=int(row["character_id"]),
             tg_id=int(row["tg_id"]),
+            character_name=(
+                str(row["character_name"])
+                if row["character_name"] is not None
+                else None
+            ),
             class_id=str(row["class_id"]),
             level=int(row["level"]),
             xp=int(row["xp"] or 0),
@@ -226,18 +238,20 @@ class UserCharactersData(UserData):
             inventory=inventory,
         )
 
-    async def create_character(
+    async def create_saved_character(
         self,
         tg_id: int,
+        character_name: str,
         class_id: str,
         skills: tuple[str, ...],
         level: int = 1,
         xp: int = 0,
+        skill_modifiers: tuple[ModifierInstance, ...] = (),
         inventory: dict[str, int] | None = None,
     ) -> CharacterRecord:
         inventory = inventory or {}
         skills_json = json.dumps(list(skills))
-        modifiers_json = self._serialize_modifiers(())
+        modifiers_json = self._serialize_modifiers(skill_modifiers)
 
         sql_insert_data = """
             INSERT INTO public.game_characters_data (class, level, xp, skills, modifiers)
@@ -245,8 +259,8 @@ class UserCharactersData(UserData):
             RETURNING character_id
         """
         sql_insert_character = """
-            INSERT INTO public.game_characters (tg_id, character_id)
-            VALUES ($1, $2)
+            INSERT INTO public.game_characters (tg_id, character_id, character_name)
+            VALUES ($1, $2, $3)
             ON CONFLICT (character_id) DO NOTHING
         """
         sql_insert_inventory = """
@@ -268,27 +282,62 @@ class UserCharactersData(UserData):
                     if row is None:
                         raise RuntimeError("Failed to create character data row")
                     character_id = int(row["character_id"])
-                    await conn.execute(sql_insert_character, tg_id, int(character_id))
+                    await conn.execute(
+                        sql_insert_character,
+                        tg_id,
+                        int(character_id),
+                        character_name,
+                    )
                     for item_id, amount in inventory.items():
                         await conn.execute(sql_insert_inventory, int(character_id), item_id, amount)
         except Exception as exc:
-            logger.error(f"DB error in create_character for tg_id={tg_id}: {exc}")
+            logger.error(
+                f"DB error in create_saved_character for tg_id={tg_id}: {exc}",
+            )
             raise
 
         return CharacterRecord(
             character_id=character_id,
             tg_id=tg_id,
+            character_name=character_name,
             class_id=class_id,
             level=level,
             xp=xp,
             skills=tuple(skills),
-            skill_modifiers=(),
+            skill_modifiers=tuple(skill_modifiers),
             inventory=dict(inventory),
         )
+
+    async def character_name_exists(
+        self,
+        character_name: str,
+        exclude_character_id: int | None = None,
+    ) -> bool:
+        sql = """
+            SELECT 1
+            FROM public.game_characters
+            WHERE lower(character_name) = lower($1)
+        """
+        params: list[object] = [character_name]
+        if exclude_character_id is not None:
+            sql += " AND character_id <> $2"
+            params.append(int(exclude_character_id))
+        sql += " LIMIT 1"
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(sql, *params)
+        except Exception as exc:
+            logger.error(
+                "DB error in character_name_exists "
+                f"for character_name={character_name}: {exc}",
+            )
+            raise
+        return row is not None
 
     async def save_character_progress(
         self,
         character_id: int,
+        character_name: str,
         level: int,
         xp: int,
         skills: tuple[str, ...],
@@ -296,7 +345,7 @@ class UserCharactersData(UserData):
     ) -> None:
         skills_json = json.dumps(list(skills))
         modifiers_json = self._serialize_modifiers(skill_modifiers)
-        sql = """
+        sql_update_data = """
             UPDATE public.game_characters_data
             SET level = $2,
                 xp = $3,
@@ -304,16 +353,27 @@ class UserCharactersData(UserData):
                 modifiers = $5
             WHERE character_id = $1
         """
+        sql_update_meta = """
+            UPDATE public.game_characters
+            SET character_name = $2
+            WHERE character_id = $1
+        """
         try:
             async with self.pool.acquire() as conn:
-                await conn.execute(
-                    sql,
-                    int(character_id),
-                    int(level),
-                    int(xp),
-                    skills_json,
-                    modifiers_json,
-                )
+                async with conn.transaction():
+                    await conn.execute(
+                        sql_update_data,
+                        int(character_id),
+                        int(level),
+                        int(xp),
+                        skills_json,
+                        modifiers_json,
+                    )
+                    await conn.execute(
+                        sql_update_meta,
+                        int(character_id),
+                        character_name,
+                    )
         except Exception as exc:
             logger.error(
                 "DB error in save_character_progress "

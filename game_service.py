@@ -46,6 +46,7 @@ class _ActiveSession:
     players: dict[str, PlayerInfo]  # entity_id -> PlayerInfo
     manager: SessionManager
     state: SessionState | None
+    save_origins: dict[str, object] | None = None
 class GameService:
     """In-memory game orchestrator. One instance per server process.
 
@@ -69,6 +70,7 @@ class GameService:
             players={creator.entity_id: creator},
             manager=manager,
             state=None,
+            save_origins={},
         )
 
     def launch_session(
@@ -76,11 +78,19 @@ class GameService:
         session_id: str,
         player_infos: list[PlayerInfo],
         players: list[PlayerCharacter],
+        save_origins: list[object] | None = None,
     ) -> None:
         if session_id in self._sessions:
             raise ValueError("Session already exists for this chat")
         if not player_infos or not players:
             raise ValueError("Cannot launch session without players")
+
+        origins_map: dict[str, object] = {}
+        if save_origins is not None:
+            for origin in save_origins:
+                entity_id = getattr(origin, "entity_id", None)
+                if isinstance(entity_id, str):
+                    origins_map[entity_id] = origin
 
         manager = SessionManager(seed=hash(session_id) & 0x7FFFFFFF)
         self._sessions[session_id] = _ActiveSession(
@@ -88,6 +98,7 @@ class GameService:
             players={info.entity_id: info for info in player_infos},
             manager=manager,
             state=None,
+            save_origins=origins_map,
         )
         session = self._sessions[session_id]
         session.state = session.manager.start_run(session_id, players)

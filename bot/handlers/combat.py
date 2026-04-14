@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from bot.bot_state import GameStates
+from bot.handlers.game import start_victory_save_flow
 from bot.tools.combat_renderer import (
     render_turn_batch,
     render_turn_prompt,
@@ -26,7 +27,6 @@ from bot.tools.keyboards import (
     skill_keyboard,
     target_keyboard,
 )
-from bot.tools.run_persistence import persist_victory_progress
 from bot.tools.session_lookup import entity_id_for_tg_user
 from game.combat.models import ActionRequest
 from game.core.enums import ActionType, SessionEndReason, SessionPhase, TargetType
@@ -349,9 +349,16 @@ async def _render_batch_and_prompt(
             session = game_service._get_session(session_id)
             victory = session.state.end_reason == SessionEndReason.MAX_DEPTH
             await callback.message.answer(render_run_summary(stats, victory))
-            await persist_victory_progress(game_service, session_id, db_pool)
-            game_service.remove_session(session_id)
-            await state.set_state(GameStates.run_ended)
+            if victory:
+                await start_victory_save_flow(
+                    callback.message,
+                    game_service,
+                    session_id,
+                )
+                await state.set_state(GameStates.save_decision)
+            else:
+                game_service.remove_session(session_id)
+                await state.set_state(GameStates.run_ended)
         else:
             game_service.remove_session(session_id)
     else:

@@ -9,7 +9,7 @@ from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats
 from game.core.data_loader import load_classes, load_progression
 from game.core.game_models import PlayerInfo
-from game.session.factories import build_player_from_saved
+from game.session.factories import build_player, build_player_from_saved
 
 if TYPE_CHECKING:
     from game_service import GameService
@@ -24,6 +24,7 @@ class LobbySelectionMode(Enum):
 @dataclass(frozen=True)
 class SavedCharacterSummary:
     character_id: int
+    character_name: str | None
     class_id: str
     level: int
     xp: int
@@ -33,6 +34,7 @@ class SavedCharacterSummary:
 class CharacterRecord:
     character_id: int
     tg_id: int
+    character_name: str | None
     class_id: str
     level: int
     xp: int
@@ -70,19 +72,28 @@ class CharacterRepository(Protocol):
 
     async def get_character(self, character_id: int) -> CharacterRecord: ...
 
-    async def create_character(
+    async def create_saved_character(
         self,
         tg_id: int,
+        character_name: str,
         class_id: str,
         skills: tuple[str, ...],
         level: int = 1,
         xp: int = 0,
+        skill_modifiers: tuple[ModifierInstance, ...] = (),
         inventory: dict[str, int] | None = None,
     ) -> CharacterRecord: ...
+
+    async def character_name_exists(
+        self,
+        character_name: str,
+        exclude_character_id: int | None = None,
+    ) -> bool: ...
 
     async def save_character_progress(
         self,
         character_id: int,
+        character_name: str,
         level: int,
         xp: int,
         skills: tuple[str, ...],
@@ -94,6 +105,19 @@ class CharacterRepository(Protocol):
 class LaunchPayload:
     player_infos: tuple[PlayerInfo, ...]
     players: tuple[PlayerCharacter, ...]
+    save_origins: tuple["PlayerSaveOrigin", ...]
+
+
+@dataclass(frozen=True)
+class PlayerSaveOrigin:
+    tg_user_id: int
+    entity_id: str
+    character_id: int | None = None
+    character_name: str | None = None
+
+    @property
+    def is_transient(self) -> bool:
+        return self.character_id is None
 
 
 def _build_base_stats_map() -> dict[str, MajorStats]:
@@ -252,6 +276,7 @@ class LobbyManager:
 
         player_infos: list[PlayerInfo] = []
         players: list[PlayerCharacter] = []
+        save_origins: list[PlayerSaveOrigin] = []
 
         for tg_user_id, lobby_player in lobby.players.items():
             if lobby_player.selection_mode == LobbySelectionMode.SAVED:
@@ -260,37 +285,47 @@ class LobbyManager:
                 record = await self._chars_db.get_character(
                     lobby_player.selected_character_id,
                 )
+                runtime_player = build_player_from_saved(
+                    record,
+                    self._progression,
+                    self._base_stats,
+                )
+                runtime_entity_id = runtime_player.entity_id
+                save_origins.append(PlayerSaveOrigin(
+                    tg_user_id=tg_user_id,
+                    entity_id=runtime_entity_id,
+                    character_id=record.character_id,
+                    character_name=record.character_name,
+                ))
+                class_id = record.class_id
             elif lobby_player.selection_mode == LobbySelectionMode.NEW:
                 if lobby_player.selected_class_id is None:
                     raise ValueError("New character class is not selected")
-                cls = load_classes()[lobby_player.selected_class_id]
-                record = await self._chars_db.create_character(
-                    tg_id=tg_user_id,
-                    class_id=lobby_player.selected_class_id,
-                    skills=tuple(cls.starting_skills),
-                    level=1,
-                    xp=0,
-                    inventory={},
+                runtime_entity_id = f"tmp:{tg_user_id}"
+                runtime_player = build_player(
+                    lobby_player.selected_class_id,
+                    entity_id=runtime_entity_id,
                 )
+                save_origins.append(PlayerSaveOrigin(
+                    tg_user_id=tg_user_id,
+                    entity_id=runtime_entity_id,
+                ))
+                class_id = lobby_player.selected_class_id
             else:
                 raise ValueError("Player has not selected a character")
 
-            runtime_player = build_player_from_saved(
-                record,
-                self._progression,
-                self._base_stats,
-            )
             player_infos.append(PlayerInfo(
-                entity_id=str(record.character_id),
+                entity_id=runtime_entity_id,
                 tg_user_id=tg_user_id,
                 display_name=lobby_player.display_name,
-                class_id=record.class_id,
+                class_id=class_id,
             ))
             players.append(runtime_player)
 
         return LaunchPayload(
             player_infos=tuple(player_infos),
             players=tuple(players),
+            save_origins=tuple(save_origins),
         )
 
     async def launch_game(
@@ -311,6 +346,7 @@ class LobbyManager:
             session_id=session_id,
             player_infos=list(payload.player_infos),
             players=list(payload.players),
+            save_origins=list(payload.save_origins),
         )
 
     @staticmethod

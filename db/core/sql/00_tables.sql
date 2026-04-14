@@ -26,6 +26,7 @@ create table public.game_characters (
   character_id bigint not null,
   created_at timestamp with time zone not null default now(),
   currently_active text not null default 'False'::text,
+  character_name text null,
   constraint game_characters_pkey primary key (character_id)
 ) TABLESPACE pg_default;
 

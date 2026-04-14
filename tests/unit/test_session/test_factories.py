@@ -77,6 +77,7 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
     record = CharacterRecord(
         character_id=42,
         tg_id=1001,
+        character_name="Aragorn",
         class_id="warrior",
         level=3,
         xp=250,

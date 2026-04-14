@@ -134,3 +134,18 @@ def reward_choice_keyboard(
         for offer in offers
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def save_decision_keyboard(entity_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(
+                text="Save",
+                callback_data=f"g:save:yes:{entity_id}",
+            ),
+            InlineKeyboardButton(
+                text="Don't Save",
+                callback_data=f"g:save:no:{entity_id}",
+            ),
+        ]],
+    )
