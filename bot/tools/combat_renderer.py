@@ -63,7 +63,8 @@ def render_combat_start(
 
     # Turn order
     names = [snapshot.entities[eid].name for eid in snapshot.turn_order]
-    lines.append(f"\nTurn order: {' \u2192 '.join(names)}")
+    turn_separator = " \u2192 "
+    lines.append(f"\nTurn order: {turn_separator.join(names)}")
 
     return "\n".join(lines)
 
