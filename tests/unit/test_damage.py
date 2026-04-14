@@ -3,11 +3,12 @@
 import pytest
 
 from game.combat.damage import resolve_damage
+from game.combat.effects import apply_effect
 from game.core.data_loader import clear_cache
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType
 
-from tests.unit.conftest import make_goblin, make_warrior
+from tests.unit.conftest import make_combat_state, make_goblin, make_warrior
 
 
 @pytest.fixture(autouse=True)
@@ -21,7 +22,6 @@ CONSTANTS = {"min_damage": 0}
 
 
 def test_damage_positive():
-    """Warrior slash should deal positive damage to goblin."""
     rng = SeededRNG(42)
     result = resolve_damage(
         attacker=make_warrior(),
@@ -39,7 +39,6 @@ def test_damage_positive():
 
 
 def test_damage_deterministic():
-    """Same seed produces same damage."""
     kwargs = dict(
         attacker=make_warrior(),
         defender=make_goblin(),
@@ -56,15 +55,6 @@ def test_damage_deterministic():
 
 
 def test_damage_manual_calculation():
-    """Verify damage math with a known non-crit RNG seed.
-
-    Pipeline:
-    raw = 10 + 15*1.5 + 5*0.0 = 32.5
-    after_def = 32.5 - 3*0.5 = 31.0
-    after_type = 31.0 * (1 + 0.1) * (1 - 0.0) = 34.1
-    Then: crit check, variance, floor.
-    """
-    # Find a seed that doesn't crit (crit_chance = 0.05, most seeds won't)
     for seed in range(100):
         rng = SeededRNG(seed)
         result = resolve_damage(
@@ -78,7 +68,6 @@ def test_damage_manual_calculation():
             constants=CONSTANTS,
         )
         if not result.is_crit:
-            # After variance (±10%), result should be in range [30, 37]
             assert 28 <= result.amount <= 38, f"seed={seed}, amount={result.amount}"
             break
     else:
@@ -86,7 +75,6 @@ def test_damage_manual_calculation():
 
 
 def test_damage_with_effect_multiplier():
-    """Effect multiplier scales final damage."""
     rng1 = SeededRNG(42)
     base = resolve_damage(
         attacker=make_warrior(),
@@ -115,7 +103,6 @@ def test_damage_with_effect_multiplier():
 
 
 def test_damage_min_floor():
-    """Damage should not go below min_damage."""
     rng = SeededRNG(42)
     result = resolve_damage(
         attacker=make_goblin(),
@@ -128,3 +115,33 @@ def test_damage_min_floor():
         constants={"min_damage": 0},
     )
     assert result.amount >= 0
+
+
+def test_effective_mastery_buff_changes_damage_formula():
+    state = make_combat_state()
+    buffed_state = apply_effect(state, "p1", "enlightenment", "p1")
+
+    base_damage = resolve_damage(
+        attacker=state.entities["p1"],
+        defender=state.entities["e1"],
+        formula_expr="attacker.mastery",
+        base_power=0,
+        damage_type=DamageType.ARCANE,
+        rng=SeededRNG(7),
+        effect_multiplier=1.0,
+        constants=CONSTANTS,
+        state=state,
+    )
+    buffed_damage = resolve_damage(
+        attacker=buffed_state.entities["p1"],
+        defender=buffed_state.entities["e1"],
+        formula_expr="attacker.mastery",
+        base_power=0,
+        damage_type=DamageType.ARCANE,
+        rng=SeededRNG(7),
+        effect_multiplier=1.0,
+        constants=CONSTANTS,
+        state=buffed_state,
+    )
+
+    assert buffed_damage.amount > base_damage.amount

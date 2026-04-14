@@ -17,3 +17,5 @@ class GameStates(StatesGroup):
     combat_target = State()
     event_voting = State()
     run_ended = State()
+    save_decision = State()
+    save_name = State()

@@ -14,7 +14,7 @@ from game.world.models import (
 
 class WorldManager():
     def __init__(self, seed : int = 0):
-        self.generator = WorldGenerator()
+        self.generator = WorldGenerator(seed=seed)
         self.rng = SeededRNG(seed)
 
 

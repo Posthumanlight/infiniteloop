@@ -6,23 +6,36 @@ action_type = "action"
 hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack+base_power", base_power = 0, variance = 0.25 },
 ]
+
 #warrior
 [skills.slash]
 name = "Slash"
 energy_cost = 0
 action_type = "action"
 hits = [
-  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 10, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
 ]
 
 [skills.cleave]
 name = "Cleave"
 energy_cost = 10
 action_type = "action"
+level_eligibility = [3, 15]
+class_tags = ["warrior"]
 hits = [
   { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.0 },
 ]
 
+[skills.brutalize]
+name = "Brutalize"
+energy_cost = 10
+action_type = "action"
+cooldown = 5
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = [
+  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun", chance = 1.0}]}
+]
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"
@@ -47,6 +60,8 @@ name = "Annihilation"
 energy_cost = 35
 action_type = "action"
 cooldown = 5
+level_eligibility = [1, 99]
+class_tags = ["mage"]
 hits = [
   { target_type = "single_enemy", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.9)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
 ]
@@ -56,7 +71,21 @@ name = "Singularity"
 energy_cost = 50
 action_type = "action"
 cooldown = 8
+level_eligibility = [3, 99]
+class_tags = ["mage"]
 hits = [
   { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 1.1", base_power = 10, variance = 0.0 },
   { target_type = "all_enemies", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.25)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
+]
+
+[skills.enlightenment]
+name = "Enlightenment"
+energy_cost = 0
+action_type = "action"
+cooldown = 5
+level_eligibility = [3, 99]
+class_tags = ["mage"]
+hits = []
+self_effects = [
+  { effect = "enlightenment" },
 ]

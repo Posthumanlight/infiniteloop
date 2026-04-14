@@ -17,3 +17,25 @@ outcomes = [
 label = "Leave it undisturbed"
 description = "Not every fight needs to be fought."
 outcomes = []
+
+[events.river_with_surprise]
+name = "River with surprise"
+description = "The stream of water blocks your path forward. While searching for crossing, murky green silhouette emerges from below."
+event_type = "multiplayer"
+min_depth = 2
+max_depth = 100
+weight = 5
+
+[[events.river_with_surprise.choices]]
+label = "It`s crocodiles!"
+description = "It`s goddamn crocodiles!"
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["bandit"]},
+]
+
+[[events.river_with_surprise.choices]]
+label = "It`s goblins!"
+description = "It`s goddamn goblins!"
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+]

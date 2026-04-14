@@ -7,6 +7,7 @@ async def create_db_pool(dsn: str) -> asyncpg.Pool:
         max_size=10,
         command_timeout=30.0,
         timeout=10.0,
+        statement_cache_size=0,
         server_settings={
             "search_path": "public",
             "application_name": "infiniteloop",

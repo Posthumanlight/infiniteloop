@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from bot.bot_state import GameStates
+from bot.handlers.game import start_victory_save_flow
 from bot.tools.combat_renderer import (
     render_turn_batch,
     render_turn_prompt,
@@ -16,21 +17,20 @@ from bot.tools.combat_renderer import (
 )
 from bot.tools.exploration_renderer import (
     render_exploration_choices,
-    render_modifier_choices,
-    render_modifier_notice,
+    render_reward_choices,
+    render_reward_notice,
     render_run_summary,
 )
 from bot.tools.combat_image import send_combat_image
 from bot.tools.keyboards import (
     location_keyboard,
-    modifier_choice_keyboard,
+    reward_choice_keyboard,
     skill_keyboard,
     target_keyboard,
 )
 from bot.tools.session_lookup import entity_id_for_tg_user
-from db.queries.users_namespace import UserСharactersData
 from game.combat.models import ActionRequest
-from game.core.enums import ActionType, SessionPhase, TargetType
+from game.core.enums import ActionType, SessionEndReason, SessionPhase, TargetType
 from game_service import GameService
 
 router = Router(name="combat_router")
@@ -49,6 +49,7 @@ async def cb_skill(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
@@ -98,7 +99,7 @@ async def cb_skill(
             skill_id=skill_id,
             target_ids=(),
         )
-        await _submit_action(callback, game_service, sid, action, state)
+        await _submit_action(callback, game_service, sid, action, state, db_pool)
         return
 
     # Need target selection — store skill_id and show target picker for first pending hit
@@ -138,6 +139,7 @@ async def cb_target(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
@@ -213,7 +215,7 @@ async def cb_target(
     await state.update_data(
         pending_skill=None, pending_hit_queue=[], collected_targets=[],
     )
-    await _submit_action(callback, game_service, sid, action, state)
+    await _submit_action(callback, game_service, sid, action, state, db_pool)
 
 
 # ------------------------------------------------------------------
@@ -225,6 +227,7 @@ async def cb_skip(
     callback: CallbackQuery,
     game_service: GameService,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
     actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
@@ -240,52 +243,49 @@ async def cb_skip(
     batch = game_service.skip_player_turn(sid, actor_id)
     players = {p.entity_id: p for p in game_service.get_session_players(sid)}
 
-    await _render_batch_and_prompt(callback, game_service, sid, batch, players, state)
+    await _render_batch_and_prompt(
+        callback,
+        game_service,
+        sid,
+        batch,
+        players,
+        state,
+        db_pool,
+    )
 
 
 # ------------------------------------------------------------------
 # Shared helpers
 # ------------------------------------------------------------------
 
-async def _persist_characters(
-    game_service: GameService, session_id: str, db_pool: asyncpg.Pool,
-) -> None:
-    """Save all session players to game_characters after a run ends."""
-    if not game_service.has_session(session_id):
-        return
-    chars_db = UserСharactersData(pool=db_pool)
-    for player in game_service.get_session_players(session_id):
-        await chars_db.add_user_character(
-            tg_id=player.tg_user_id, character_id=player.entity_id,
-        )
-
-
-async def _send_modifier_prompts(
+async def _send_reward_prompts(
     callback: CallbackQuery,
     game_service: GameService,
     session_id: str,
 ) -> None:
     players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
 
-    for notice in game_service.consume_modifier_choice_notices(session_id):
+    for notice in game_service.consume_reward_notices(session_id):
         player_name = (
             players[notice.player_id].display_name
             if notice.player_id in players
             else notice.player_id
         )
         await callback.message.answer(
-            render_modifier_notice(player_name, notice.skipped_count),
+            render_reward_notice(player_name, notice.reward_type, notice.skipped_count),
         )
 
-    for pending in game_service.get_pending_modifier_choices(session_id):
+    for pending in game_service.get_pending_rewards(session_id):
         player_name = (
             players[pending.player_id].display_name
             if pending.player_id in players
             else pending.player_id
         )
         await callback.message.answer(
-            render_modifier_choices(player_name, pending.pending_count, pending.offers),
-            reply_markup=modifier_choice_keyboard(pending.offers),
+            render_reward_choices(
+                player_name, pending.reward_type, pending.pending_count, pending.offers,
+            ),
+            reply_markup=reward_choice_keyboard(pending.offers),
         )
 
 
@@ -295,6 +295,7 @@ async def _submit_action(
     session_id: str,
     action: ActionRequest,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     """Submit action, render results, prompt next turn."""
     try:
@@ -306,7 +307,7 @@ async def _submit_action(
     players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
 
     await _render_batch_and_prompt(
-        callback, game_service, session_id, batch, players, state,
+        callback, game_service, session_id, batch, players, state, db_pool,
     )
 
 
@@ -317,6 +318,7 @@ async def _render_batch_and_prompt(
     batch,
     players: dict,
     state: FSMContext,
+    db_pool: asyncpg.Pool,
 ) -> None:
     """Render turn batch results and either prompt next turn or show combat end."""
     await _clear_pending_combat_selection(state)
@@ -341,15 +343,23 @@ async def _render_batch_and_prompt(
                 render_exploration_choices(options, (), players),
                 reply_markup=location_keyboard(options),
             )
-            await _send_modifier_prompts(callback, game_service, session_id)
+            await _send_reward_prompts(callback, game_service, session_id)
             await state.set_state(GameStates.exploring)
         elif phase == SessionPhase.ENDED:
             stats = game_service.get_run_stats(session_id)
             session = game_service._get_session(session_id)
-            victory = any(p.current_hp > 0 for p in session.state.players)
+            victory = session.state.end_reason == SessionEndReason.MAX_DEPTH
             await callback.message.answer(render_run_summary(stats, victory))
-            game_service.remove_session(session_id)
-            await state.set_state(GameStates.run_ended)
+            if victory:
+                await start_victory_save_flow(
+                    callback.message,
+                    game_service,
+                    session_id,
+                )
+                await state.set_state(GameStates.save_decision)
+            else:
+                game_service.remove_session(session_id)
+                await state.set_state(GameStates.run_ended)
         else:
             game_service.remove_session(session_id)
     else:

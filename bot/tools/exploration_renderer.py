@@ -7,14 +7,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from game.core.enums import LocationType
+from bot.tools.location_labels import location_display_label
+from game.core.enums import LevelRewardType, LocationType
 
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption
     from game.events.models import EventState
     from game.session.models import RunStats, SessionState
     from game.world.models import LocationVote
-    from game.core.game_models import ModifierOfferInfo, PlayerInfo
+    from game.core.game_models import PlayerInfo, RewardOfferInfo
 
 
 def render_class_prompt(
@@ -51,7 +52,8 @@ def render_exploration_choices(
     for i, opt in enumerate(options):
         icon = icons.get(opt.location_type, "\u2753")
         vote_count = sum(1 for v in votes if v.location_index == i)
-        lines.append(f"  {icon} {i + 1}. {opt.name} [{vote_count} votes]")
+        label = location_display_label(opt)
+        lines.append(f"  {icon} {i + 1}. {label} [{vote_count} votes]")
 
     voted_ids = {v.player_id for v in votes}
     waiting = [
@@ -96,27 +98,38 @@ def render_event(
     return "\n".join(lines)
 
 
-def render_modifier_choices(
+def render_reward_choices(
     player_name: str,
+    reward_type: LevelRewardType,
     pending_count: int,
-    offers: tuple[ModifierOfferInfo, ...],
+    offers: tuple[RewardOfferInfo, ...],
 ) -> str:
-    """Show level-up modifier choices for a single player."""
+    """Show level-up reward choices for a single player."""
+    if reward_type == LevelRewardType.SKILL:
+        header_label = "new skill"
+    else:
+        header_label = "modifier"
     lines = [
         f"\u2b50 Level-up reward for {player_name}",
-        f"Pick 1 modifier ({pending_count} pick(s) remaining):",
+        f"Pick 1 {header_label} ({pending_count} pick(s) remaining):",
         "",
     ]
     for i, offer in enumerate(offers, start=1):
-        lines.append(f"  {i}. {offer.name}")
+        if offer.description:
+            lines.append(f"  {i}. {offer.name} — {offer.description}")
+        else:
+            lines.append(f"  {i}. {offer.name}")
     return "\n".join(lines)
 
 
-def render_modifier_notice(player_name: str, skipped_count: int) -> str:
+def render_reward_notice(
+    player_name: str, reward_type: LevelRewardType, skipped_count: int,
+) -> str:
     suffix = "pick" if skipped_count == 1 else "picks"
+    pool_label = "skills" if reward_type == LevelRewardType.SKILL else "modifiers"
     return (
         f"\u2139\ufe0f {player_name}: {skipped_count} level-up {suffix} "
-        "had no eligible modifiers and was skipped."
+        f"had no eligible {pool_label} and was skipped."
     )
 
 

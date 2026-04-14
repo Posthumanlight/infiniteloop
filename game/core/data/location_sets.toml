@@ -3,6 +3,7 @@
 [[sets.dark_cave_intro.locations]]
 type = "combat"
 name = "Goblin Ambush"
+combat_type = "normal"
 enemies = ["goblin", "goblin"]
 statuses = ["dim_light"]
 tags = ["cave", "dark"]
@@ -10,6 +11,13 @@ tags = ["cave", "dark"]
 [[sets.dark_cave_intro.locations]]
 type = "combat"
 name = "Skeleton Guard"
+combat_type = "normal"
 enemies = ["skeleton"]
 statuses = []
 tags = ["cave", "undead"]
+
+[[sets.dark_cave_intro.locations]]
+type = "event"
+name = "Shrine in the Hollow"
+event_id = "cursed_shrine"
+tags = ["cave", "dark"]

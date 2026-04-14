@@ -1,5 +1,7 @@
 [progression]
 xp_thresholds = [0, 100, 250, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000]
+skill_reward_levels = [3, 6, 9, 12]
+skill_reward_offer_size = 2
 
 # Per-class level scaling — only stats that scale need to be listed.
 # Absent keys mean the stat does not scale for that class.

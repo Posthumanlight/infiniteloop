@@ -1,8 +1,10 @@
+#races
 [enemies.goblin]
 name = "Goblin"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 15
+combat_type = "normal"
 tags = ["forest", "cave"]
 [enemies.goblin.major_stats]
 attack = 3
@@ -15,12 +17,50 @@ energy = 50
 mastery = 2
 [enemies.goblin.minor_stats]
 
+[enemies.goblin_boss]
+name = "Bayayamshiks"
+skills = ["generic_enemy_attack"]
+passives = []
+xp_reward = 100
+combat_type = "boss"
+tags = ["forest", "cave"]
+[enemies.goblin_boss.major_stats]
+attack = 10
+hp = 200
+speed = 14
+crit_chance = 0.00
+crit_dmg = 1.3
+resistance = 75
+energy = 50
+mastery = 2
+[enemies.goblin_boss.minor_stats]
 
+
+[enemies.bandit]
+name = "Bandit"
+skills = ["generic_enemy_attack"]
+passives = []
+xp_reward = 16
+combat_type = "normal"
+tags = ["forest", "road", "ruins"]
+[enemies.bandit.major_stats]
+attack = 8
+hp = 45
+speed = 11
+crit_chance = 0.00
+crit_dmg = 1.2
+resistance = 4
+energy = 55
+mastery = 3
+[enemies.bandit.minor_stats]
+
+#undead
 [enemies.skeleton]
 name = "Skeleton"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 18
+combat_type = "normal"
 tags = ["undead", "cave", "ruins"]
 [enemies.skeleton.major_stats]
 attack = 5
@@ -34,12 +74,13 @@ mastery = 3
 [enemies.skeleton.minor_stats]
 slashing_def_pct = 0.1
 
-
+#beasts
 [enemies.wolf]
 name = "Wolf"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 12
+combat_type = "normal"
 tags = ["forest", "wild"]
 [enemies.wolf.major_stats]
 attack = 7
@@ -52,12 +93,13 @@ energy = 60
 mastery = 1
 [enemies.wolf.minor_stats]
 
-
+#demons
 [enemies.fire_imp]
 name = "Fire Imp"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 20
+combat_type = "elite"
 tags = ["fire", "cave"]
 [enemies.fire_imp.major_stats]
 attack = 12
@@ -71,20 +113,3 @@ mastery = 6
 [enemies.fire_imp.minor_stats]
 fire_dmg_pct = 0.15
 
-
-[enemies.bandit]
-name = "Bandit"
-skills = ["generic_enemy_attack"]
-passives = []
-xp_reward = 16
-tags = ["forest", "road", "ruins"]
-[enemies.bandit.major_stats]
-attack = 8
-hp = 45
-speed = 11
-crit_chance = 0.00
-crit_dmg = 1.2
-resistance = 4
-energy = 55
-mastery = 3
-[enemies.bandit.minor_stats]

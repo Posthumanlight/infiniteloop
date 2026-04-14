@@ -34,3 +34,13 @@ max_stacks = 10
 actions = [
   { type = "stat_modify", stat = "arcane_dmg_pct", expr = "0.1", scales_with_stacks = true },
 ]
+
+[effects.enlightenment]
+name = "Enlightenment"
+trigger = "on_apply"
+duration = 3
+stackable = false
+actions = [
+  { type = "stat_modify", stat = "mastery", expr = "10 + 2 * target.mastery", scales_with_stacks = false },
+  { type = "grant_energy", expr = "target.energy * 0.2", scales_with_stacks = false },
+]

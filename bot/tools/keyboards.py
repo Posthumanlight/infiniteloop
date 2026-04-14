@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, WebAppInfo
+from bot.tools.location_labels import location_display_label
 
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
     from game.events.models import ChoiceDef
-    from game.core.game_models import EntitySnapshot, ModifierOfferInfo
+    from game.core.game_models import EntitySnapshot, RewardOfferInfo
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -101,9 +102,10 @@ def class_select_keyboard(classes: dict[str, ClassData]) -> InlineKeyboardMarkup
 def location_keyboard(options: tuple[LocationOption, ...]) -> InlineKeyboardMarkup:
     from game.core.enums import LocationType
     icons = {LocationType.COMBAT: "\u2694\ufe0f", LocationType.EVENT: "\U0001f4dc"}
+    unknown_icon = "\u2753"
     rows = [
         [InlineKeyboardButton(
-            text=f"{icons.get(opt.location_type, '\u2753')} {opt.name}",
+            text=f"{icons.get(opt.location_type, unknown_icon)} {location_display_label(opt)}",
             callback_data=f"g:loc:{i}",
         )]
         for i, opt in enumerate(options)
@@ -122,14 +124,29 @@ def event_choice_keyboard(choices: tuple[ChoiceDef, ...]) -> InlineKeyboardMarku
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def modifier_choice_keyboard(
-    offers: tuple[ModifierOfferInfo, ...],
+def reward_choice_keyboard(
+    offers: tuple[RewardOfferInfo, ...],
 ) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(
             text=offer.name,
-            callback_data=f"g:mod:{offer.modifier_id}",
+            callback_data=f"g:rwd:{offer.reward_id}",
         )]
         for offer in offers
     ]
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def save_decision_keyboard(entity_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(
+                text="Save",
+                callback_data=f"g:save:yes:{entity_id}",
+            ),
+            InlineKeyboardButton(
+                text="Don't Save",
+                callback_data=f"g:save:no:{entity_id}",
+            ),
+        ]],
+    )

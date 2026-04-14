@@ -8,7 +8,7 @@ from game.core.data_loader import (
     load_location_status,
     load_location_statuses,
 )
-from game.core.enums import LocationType
+from game.core.enums import CombatLocationType, EnemyCombatType, LocationType
 
 
 @pytest.fixture(autouse=True)
@@ -19,7 +19,7 @@ def _fresh_cache():
 
 
 # ---------------------------------------------------------------------------
-# Enemy tags
+# Enemy tags / combat types
 # ---------------------------------------------------------------------------
 
 def test_enemies_have_tags():
@@ -29,8 +29,14 @@ def test_enemies_have_tags():
     assert "cave" in goblin.tags
 
 
-def test_enemy_without_tags_gets_empty():
-    """All current enemies have tags, but the loader handles missing gracefully."""
+def test_enemies_parse_combat_type():
+    enemies = load_enemies()
+    assert enemies["goblin"].combat_type == EnemyCombatType.NORMAL
+    assert enemies["fire_imp"].combat_type == EnemyCombatType.ELITE
+    assert enemies["goblin_boss"].combat_type == EnemyCombatType.BOSS
+
+
+def test_enemy_tags_are_tuples():
     enemies = load_enemies()
     for enemy in enemies.values():
         assert isinstance(enemy.tags, tuple)
@@ -64,8 +70,8 @@ def test_unknown_status_raises():
 # ---------------------------------------------------------------------------
 
 def test_load_sets():
-    sets = load_location_sets()
-    assert "dark_cave_intro" in sets
+    sets_ = load_location_sets()
+    assert "dark_cave_intro" in sets_
 
 
 def test_set_locations():
@@ -76,18 +82,20 @@ def test_set_locations():
     assert LocationType.EVENT in types
 
 
-def test_set_combat_location_has_enemies():
+def test_set_combat_locations_have_enemies_and_optional_combat_type():
     loc_set = load_location_set("dark_cave_intro")
-    combat_locs = [l for l in loc_set.locations if l.location_type == LocationType.COMBAT]
-    assert len(combat_locs) >= 1
-    assert len(combat_locs[0].enemy_ids) > 0
+    combat_locs = [loc for loc in loc_set.locations if loc.location_type == LocationType.COMBAT]
+    assert len(combat_locs) == 2
+    assert all(loc.enemy_ids for loc in combat_locs)
+    assert all(loc.combat_type == CombatLocationType.NORMAL for loc in combat_locs)
 
 
-def test_set_event_location_has_event_id():
+def test_set_event_location_has_event_id_and_no_combat_type():
     loc_set = load_location_set("dark_cave_intro")
-    event_locs = [l for l in loc_set.locations if l.location_type == LocationType.EVENT]
-    assert len(event_locs) >= 1
-    assert event_locs[0].event_id is not None
+    event_locs = [loc for loc in loc_set.locations if loc.location_type == LocationType.EVENT]
+    assert len(event_locs) == 1
+    assert event_locs[0].event_id == "cursed_shrine"
+    assert event_locs[0].combat_type is None
 
 
 def test_unknown_set_raises():

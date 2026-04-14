@@ -25,6 +25,7 @@ class ActionType(Enum):
 
 
 class TriggerType(Enum):
+    ON_APPLY = "on_apply"
     ON_TURN_START = "on_turn_start"
     ON_TURN_END = "on_turn_end"
     ON_CAST = "on_cast"
@@ -92,6 +93,20 @@ class LocationType(Enum):
     EVENT = "event"
 
 
+class EnemyCombatType(Enum):
+    NORMAL = "normal"
+    ELITE = "elite"
+    BOSS = "boss"
+
+
+class CombatLocationType(Enum):
+    NORMAL = "normal"
+    ELITE = "elite"
+    SWARM = "swarm"
+    SOLO_BOSS = "solo_boss"
+    BOSS_GROUP = "boss_group"
+
+
 class ExplorationPhase(Enum):
     CHOOSING = "choosing"
     RESOLVING = "resolving"
@@ -128,3 +143,8 @@ class PassiveAction(Enum):
 class ModifierPhase(Enum):
     PRE_HIT = "pre_hit"
     POST_HIT = "post_hit"
+
+
+class LevelRewardType(Enum):
+    MODIFIER = "modifier"
+    SKILL = "skill"

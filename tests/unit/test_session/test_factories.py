@@ -1,8 +1,17 @@
 import pytest
 
+from game.combat.skill_modifiers import ModifierInstance
+from game.core.data_loader import load_classes, load_progression
 from game.core.data_loader import clear_cache
 from game.core.enums import EntityType
-from game.session.factories import build_enemy, build_enemies, build_player
+from game.session.factories import (
+    build_enemy,
+    build_enemies,
+    build_player,
+    build_player_from_saved,
+)
+from game.session.lobby_manager import CharacterRecord
+from game.character.stats import MajorStats
 
 
 @pytest.fixture(autouse=True)
@@ -47,3 +56,47 @@ def test_build_player_from_toml():
     assert player.player_class == "warrior"
     assert player.current_hp == player.major_stats.hp
     assert "slash" in player.skills
+
+
+def test_build_player_from_saved_restores_progression_and_modifiers():
+    classes = load_classes()
+    progression = load_progression()
+    base_stats = {
+        class_id: MajorStats(
+            attack=int(cls.major_stats["attack"]),
+            hp=int(cls.major_stats["hp"]),
+            speed=int(cls.major_stats["speed"]),
+            crit_chance=cls.major_stats["crit_chance"],
+            crit_dmg=cls.major_stats["crit_dmg"],
+            resistance=int(cls.major_stats.get("resistance", 0)),
+            energy=int(cls.major_stats.get("energy", 50)),
+            mastery=int(cls.major_stats.get("mastery", 0)),
+        )
+        for class_id, cls in classes.items()
+    }
+    record = CharacterRecord(
+        character_id=42,
+        tg_id=1001,
+        character_name="Aragorn",
+        class_id="warrior",
+        level=3,
+        xp=250,
+        skills=("slash", "cleave", "battle_cry"),
+        skill_modifiers=(
+            ModifierInstance("slash_power", 2),
+            ModifierInstance("battle_hardened", 1),
+        ),
+        inventory={"potion": 2},
+    )
+
+    player = build_player_from_saved(record, progression, base_stats)
+
+    assert player.entity_id == "42"
+    assert player.level == 3
+    assert player.xp == 250
+    assert player.skills == ("slash", "cleave", "battle_cry")
+    assert [(mod.modifier_id, mod.stack_count) for mod in player.skill_modifiers] == [
+        ("slash_power", 2),
+        ("battle_hardened", 1),
+    ]
+    assert player.inventory.content == {"potion": 2}

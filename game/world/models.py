@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from game.core.enums import ExplorationPhase, LocationType
+from game.core.enums import CombatLocationType, ExplorationPhase, LocationType
 
 
 @dataclass(frozen=True)
@@ -12,6 +12,15 @@ class GenerationConfig:
     count_max: int = 5
     combat_weight: float = 0.6
     predetermined_set_id: str | None = None
+    combat_type_weights: dict[CombatLocationType, float] = field(
+        default_factory=lambda: {
+            CombatLocationType.NORMAL: 10.0,
+            CombatLocationType.ELITE: 3.0,
+            CombatLocationType.SWARM: 2.0,
+            CombatLocationType.SOLO_BOSS: 1.0,
+            CombatLocationType.BOSS_GROUP: 1.0,
+        },
+    )
 
 
 @dataclass(frozen=True)

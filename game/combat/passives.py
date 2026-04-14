@@ -4,13 +4,18 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from game.combat.cooldowns import is_on_cooldown, put_on_cooldown
-from game.combat.effects import apply_effect, build_expr_context, reset_effect_stacks
+from game.combat.effects import (
+    apply_effect,
+    build_effective_expr_context,
+    reset_effect_stacks,
+    get_effective_major_stat,
+)
 from game.combat.models import CombatState, DamageResult, HitResult
 from game.combat.targeting import get_enemies
 from game.core.data_loader import PassiveSkillData, load_passive, load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, PassiveAction, TriggerType, UsageLimit
-from game.core.formula_eval import evaluate_expr
+from game.core.formula_eval import ZeroDefaultNamespace, evaluate_expr
 
 
 @dataclass(frozen=True)
@@ -122,9 +127,11 @@ def _execute_passive_action(
         case PassiveAction.HEAL:
             value = int(abs(evaluate_expr(passive.expr, ctx)))
             entity = state.entities[entity_id]
-            new_hp = min(entity.current_hp + value, entity.major_stats.hp)
+            max_hp = int(get_effective_major_stat(state, entity_id, "hp"))
+            new_hp = min(entity.current_hp + value, max_hp)
+            applied = max(0, new_hp - entity.current_hp)
             state = _update_entity(state, entity_id, current_hp=new_hp)
-            return state, [HitResult(target_id=entity_id, heal_amount=value)]
+            return state, [HitResult(target_id=entity_id, heal_amount=applied)]
 
         case PassiveAction.CAST_SKILL:
             if passive.cast_skill_id is None or rng is None or constants is None:
@@ -134,8 +141,13 @@ def _execute_passive_action(
             target_ids = get_enemies(state, entity_id)
             if not target_ids:
                 return state, []
+            selected_targets = {
+                hit_index: target_ids[0]
+                for hit_index, hit in enumerate(skill.hits)
+                if hit.target_type.value in {"single_enemy", "single_ally"}
+            }
             state, hits = resolve_skill(
-                state, entity_id, skill, target_ids, rng, constants,
+                state, entity_id, skill, selected_targets, rng, constants,
             )
             return state, hits
 
@@ -169,10 +181,10 @@ def check_passives(
     if "damage_type" in ctx_extra:
         ctx_extra["damage_type"] = _normalize_damage_type(ctx_extra["damage_type"])
 
-    # Inject effect stack counts so conditions can reference them
-    stack_ctx: dict[str, int] = {}
-    for eff in entity.active_effects:
-        stack_ctx[f"{eff.effect_id}_stacks"] = eff.stack_count
+    stack_ctx = ZeroDefaultNamespace({
+        eff.effect_id: eff.stack_count
+        for eff in entity.active_effects
+    })
 
     for passive_id in entity.passive_skills:
         passive = load_passive(passive_id)
@@ -187,9 +199,9 @@ def check_passives(
             continue
 
         ctx: dict[str, Any] = {
-            "attacker": build_expr_context(entity),
+            "attacker": build_effective_expr_context(state, entity_id),
+            "stacks": stack_ctx,
             **_build_damage_type_constants(),
-            **stack_ctx,
             **ctx_extra,
         }
         if passive.condition and not evaluate_expr(passive.condition, ctx):

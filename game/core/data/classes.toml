@@ -20,15 +20,15 @@ slashing_dmg_pct = 0.1
 [classes.mage]
 name = "Mage"
 description = "Spellcaster"
-starting_skills = ["arcane_bolt", "annihilation", "singularity"]
+starting_skills = ["arcane_bolt", "enlightenment"]
 starting_passives = ["arcane_prowess", "arcane_rupture" ]
 
 [classes.mage.major_stats]
 attack = 15
 hp = 75
 speed = 8
-crit_chance = 0.20
-crit_dmg = 1.35
+crit_chance = 0.10
+crit_dmg = 1.25
 resistance = 15
 energy = 150
 mastery = 2

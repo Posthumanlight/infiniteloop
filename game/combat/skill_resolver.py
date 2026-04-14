@@ -1,7 +1,11 @@
 from dataclasses import replace
 
 from game.combat.damage import resolve_damage
-from game.combat.effects import apply_effect, build_expr_context, get_damage_multiplier
+from game.combat.effects import (
+    apply_effect,
+    build_effective_expr_context,
+    get_damage_multiplier,
+)
 from game.combat.models import CombatState, HitResult
 from game.combat.passives import check_passives
 from game.combat.skill_modifiers import apply_post_hit_modifiers, collect_modifiers
@@ -111,7 +115,7 @@ def resolve_skill(
             if new_hp <= 0:
                 state, kill_results = check_passives(
                     state, actor_id, TriggerType.ON_KILL,
-                    {"killed": build_expr_context(defender)},
+                    {"killed": build_effective_expr_context(state, target_id)},
                 )
                 all_hits.extend(kill_results)
 
