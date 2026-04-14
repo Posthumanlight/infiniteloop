@@ -4,13 +4,16 @@ import uvicorn
 import os
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import logging
+from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 
 from config import settings
 from db.core.pool import create_db_pool
 from game_service import GameService
+from webapp import router as webapp_router
 
 from bot.bot import router as bot_router, set_bot_commands, onboarding_router as bot_onboarding_router
 from bot.handlers.game import router as game_router
@@ -54,6 +57,16 @@ async def lifespan(app: FastAPI):
 
 #FastAPI app
 app = FastAPI(lifespan=lifespan)
+app.include_router(webapp_router)
+app.mount(
+    "/webapp",
+    StaticFiles(
+        directory=str(Path(__file__).parent / "frontend" / "build"),
+        html=True,
+        check_dir=False,
+    ),
+    name="webapp",
+)
 port = int(os.getenv("PORT", 8000))
 config = uvicorn.Config(app, host="0.0.0.0", port=port)
 server = uvicorn.Server(config)  
