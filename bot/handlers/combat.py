@@ -21,6 +21,7 @@ from bot.tools.exploration_renderer import (
     render_reward_notice,
     render_run_summary,
 )
+from bot.tools.combat_image import send_combat_image
 from bot.tools.keyboards import (
     location_keyboard,
     reward_choice_keyboard,
@@ -365,6 +366,9 @@ async def _render_batch_and_prompt(
         # Prompt next player
         whose_turn = batch.whose_turn
         if whose_turn is not None and whose_turn in batch.entities:
+            # Відправляємо оновлену картинку з актуальним HP перед наступним ходом
+            await send_combat_image(callback, game_service, session_id)
+            
             turn_snap = batch.entities[whose_turn]
             skills = game_service.get_available_skills(session_id, whose_turn)
             prompt = render_turn_prompt(whose_turn, turn_snap, players)

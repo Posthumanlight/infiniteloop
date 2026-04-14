@@ -25,6 +25,7 @@ from bot.tools.keyboards import (
     reward_choice_keyboard,
     skill_keyboard,
 )
+from bot.tools.combat_image import send_combat_image
 from bot.tools.session_lookup import entity_id_for_tg_user
 from game.core.enums import SessionEndReason, SessionPhase
 from game_service import GameService
@@ -221,6 +222,9 @@ async def _handle_phase_transition(
             snapshot = game_service.get_combat_snapshot(session_id)
             text = render_combat_start(snapshot, players)
             await callback.message.answer(text)
+            
+            # Надсилаємо першу генерацію картинки бою для поточної кімнати
+            await send_combat_image(callback, game_service, session_id)
 
             whose_turn = game_service.get_whose_turn(session_id)
             if whose_turn is not None:
