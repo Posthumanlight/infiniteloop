@@ -1,6 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
+from game.combat.skill_modifiers import ModifierInstance
 from game.character.enemy import Enemy
 from game.character.inventory import Inventory
 from game.character.player_character import PlayerCharacter
@@ -102,8 +103,13 @@ def build_player_from_saved(
         skills=record.skills,
         passive_skills=player.passive_skills,
         active_effects=player.active_effects,
-        cooldowns=player.cooldowns,
-        skill_modifiers=player.skill_modifiers,
+        skill_modifiers=tuple(
+            ModifierInstance(
+                modifier_id=modifier.modifier_id,
+                stack_count=modifier.stack_count,
+            )
+            for modifier in record.skill_modifiers
+        ),
         inventory=Inventory(content=dict(record.inventory)),
         level=record.level,
         xp=record.xp,

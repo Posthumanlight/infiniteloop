@@ -4,6 +4,7 @@ import logging
 import asyncpg
 
 from db.core.crud_operations import safe_get_db_data, safe_execute, SupabaseOperation
+from game.combat.skill_modifiers import ModifierInstance
 from game.session.lobby_manager import CharacterRecord, SavedCharacterSummary
 
 logger = logging.getLogger(__name__)
@@ -95,6 +96,53 @@ class UserCharactersData(UserData):
             return tuple(str(skill) for skill in raw_skills)
         return ()
 
+    @staticmethod
+    def _parse_modifiers(raw_modifiers) -> tuple[ModifierInstance, ...]:
+        if raw_modifiers is None:
+            return ()
+        if isinstance(raw_modifiers, str):
+            try:
+                decoded = json.loads(raw_modifiers)
+            except json.JSONDecodeError:
+                return ()
+        elif isinstance(raw_modifiers, (list, tuple)):
+            decoded = raw_modifiers
+        else:
+            return ()
+
+        result: list[ModifierInstance] = []
+        for item in decoded:
+            if not isinstance(item, dict):
+                continue
+            modifier_id = item.get("modifier_id")
+            if modifier_id is None:
+                continue
+            stack_count = item.get("stack_count", 1)
+            try:
+                parsed_stack_count = int(stack_count)
+            except (TypeError, ValueError):
+                parsed_stack_count = 1
+            result.append(
+                ModifierInstance(
+                    modifier_id=str(modifier_id),
+                    stack_count=max(1, parsed_stack_count),
+                ),
+            )
+        return tuple(result)
+
+    @staticmethod
+    def _serialize_modifiers(
+        modifiers: tuple[ModifierInstance, ...],
+    ) -> str:
+        payload = [
+            {
+                "modifier_id": modifier.modifier_id,
+                "stack_count": modifier.stack_count,
+            }
+            for modifier in modifiers
+        ]
+        return json.dumps(payload)
+
     async def get_user_characters(self, tg_id: int) -> list[SavedCharacterSummary]:
         sql = """
             SELECT
@@ -134,7 +182,8 @@ class UserCharactersData(UserData):
                 gcd.class AS class_id,
                 gcd.level AS level,
                 gcd.xp AS xp,
-                gcd.skills AS skills
+                gcd.skills AS skills,
+                gcd.modifiers AS modifiers
             FROM public.game_characters gc
             JOIN public.game_characters_data gcd
               ON gc.character_id = gcd.character_id
@@ -173,6 +222,7 @@ class UserCharactersData(UserData):
             level=int(row["level"]),
             xp=int(row["xp"] or 0),
             skills=self._parse_skills(row["skills"]),
+            skill_modifiers=self._parse_modifiers(row["modifiers"]),
             inventory=inventory,
         )
 
@@ -187,10 +237,11 @@ class UserCharactersData(UserData):
     ) -> CharacterRecord:
         inventory = inventory or {}
         skills_json = json.dumps(list(skills))
+        modifiers_json = self._serialize_modifiers(())
 
         sql_insert_data = """
-            INSERT INTO public.game_characters_data (class, level, xp, skills)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO public.game_characters_data (class, level, xp, skills, modifiers)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING character_id
         """
         sql_insert_character = """
@@ -206,7 +257,14 @@ class UserCharactersData(UserData):
         try:
             async with self.pool.acquire() as conn:
                 async with conn.transaction():
-                    row = await conn.fetchrow(sql_insert_data, class_id, level, xp, skills_json)
+                    row = await conn.fetchrow(
+                        sql_insert_data,
+                        class_id,
+                        level,
+                        xp,
+                        skills_json,
+                        modifiers_json,
+                    )
                     if row is None:
                         raise RuntimeError("Failed to create character data row")
                     character_id = int(row["character_id"])
@@ -224,8 +282,44 @@ class UserCharactersData(UserData):
             level=level,
             xp=xp,
             skills=tuple(skills),
+            skill_modifiers=(),
             inventory=dict(inventory),
         )
+
+    async def save_character_progress(
+        self,
+        character_id: int,
+        level: int,
+        xp: int,
+        skills: tuple[str, ...],
+        skill_modifiers: tuple[ModifierInstance, ...],
+    ) -> None:
+        skills_json = json.dumps(list(skills))
+        modifiers_json = self._serialize_modifiers(skill_modifiers)
+        sql = """
+            UPDATE public.game_characters_data
+            SET level = $2,
+                xp = $3,
+                skills = $4,
+                modifiers = $5
+            WHERE character_id = $1
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute(
+                    sql,
+                    int(character_id),
+                    int(level),
+                    int(xp),
+                    skills_json,
+                    modifiers_json,
+                )
+        except Exception as exc:
+            logger.error(
+                "DB error in save_character_progress "
+                f"for character_id={character_id}: {exc}",
+            )
+            raise
 
     async def add_user_character(self, tg_id: int, character_id: str | int) -> None:
         sql = """
@@ -250,5 +344,3 @@ class UserCharactersData(UserData):
         return result[0] if result else None
 
 
-UserСharactersData = UserCharactersData
-UserРЎharactersData = UserCharactersData

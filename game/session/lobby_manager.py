@@ -4,13 +4,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Protocol
 
-from game.character.inventory import Inventory
+from game.combat.skill_modifiers import ModifierInstance
 from game.character.player_character import PlayerCharacter
-from game.character.progression import _apply_stat_gains
 from game.character.stats import MajorStats
 from game.core.data_loader import load_classes, load_progression
 from game.core.game_models import PlayerInfo
-from game.session.factories import build_player
+from game.session.factories import build_player_from_saved
 
 if TYPE_CHECKING:
     from game_service import GameService
@@ -38,6 +37,7 @@ class CharacterRecord:
     level: int
     xp: int
     skills: tuple[str, ...]
+    skill_modifiers: tuple[ModifierInstance, ...]
     inventory: dict[str, int]
 
 
@@ -80,6 +80,15 @@ class CharacterRepository(Protocol):
         inventory: dict[str, int] | None = None,
     ) -> CharacterRecord: ...
 
+    async def save_character_progress(
+        self,
+        character_id: int,
+        level: int,
+        xp: int,
+        skills: tuple[str, ...],
+        skill_modifiers: tuple[ModifierInstance, ...],
+    ) -> None: ...
+
 
 @dataclass(frozen=True)
 class LaunchPayload:
@@ -102,39 +111,6 @@ def _build_base_stats_map() -> dict[str, MajorStats]:
             mastery=int(cls.major_stats.get("mastery", 0)),
         )
     return result
-
-
-def _build_player_from_saved(
-    record: CharacterRecord,
-    progression,
-    base_stats: dict[str, MajorStats],
-) -> PlayerCharacter:
-    player = build_player(record.class_id, entity_id=str(record.character_id))
-    scaling = progression.level_scaling.get(record.class_id)
-    stat_gains = scaling.stat_gains if scaling else {}
-    scaled_major = _apply_stat_gains(
-        base_stats[record.class_id],
-        stat_gains,
-        max(0, record.level - 1),
-    )
-
-    return PlayerCharacter(
-        entity_id=player.entity_id,
-        entity_name=player.entity_name,
-        entity_type=player.entity_type,
-        major_stats=scaled_major,
-        minor_stats=player.minor_stats,
-        current_hp=scaled_major.hp,
-        current_energy=scaled_major.energy,
-        player_class=player.player_class,
-        skills=record.skills,
-        passive_skills=player.passive_skills,
-        active_effects=player.active_effects,
-        skill_modifiers=player.skill_modifiers,
-        inventory=Inventory(content=dict(record.inventory)),
-        level=record.level,
-        xp=record.xp,
-    )
 
 
 class LobbyManager:
@@ -299,7 +275,7 @@ class LobbyManager:
             else:
                 raise ValueError("Player has not selected a character")
 
-            runtime_player = _build_player_from_saved(
+            runtime_player = build_player_from_saved(
                 record,
                 self._progression,
                 self._base_stats,

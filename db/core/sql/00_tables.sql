@@ -34,7 +34,8 @@ create table public.game_characters_data (
   class text null,
   level bigint not null,
   xp bigint null,
-  skills json null,
+  skills jsonb null,
+  modifiers jsonb null,
   constraint game_characters_data_pkey primary key (character_id)
 ) TABLESPACE pg_default;
 

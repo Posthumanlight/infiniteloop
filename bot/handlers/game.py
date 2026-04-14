@@ -1,4 +1,4 @@
-﻿import asyncpg
+import asyncpg
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -8,7 +8,7 @@ from bot.bot_state import GameStates
 from bot.tools.combat_renderer import render_status
 from bot.tools.exploration_renderer import render_exploration_choices, render_run_summary
 from bot.tools.keyboards import class_select_keyboard, lobby_keyboard, location_keyboard
-from db.queries.users_namespace import UserРЎharactersData
+from db.queries.users_namespace import UserCharactersData
 from game.session.lobby_manager import LobbyManager, LobbyPlayer, LobbySelectionMode, LobbySession
 from game_service import GameService
 
@@ -24,7 +24,7 @@ def _get_lobby_manager(db_pool: asyncpg.Pool) -> LobbyManager:
     key = id(db_pool)
     manager = _LOBBY_MANAGERS.get(key)
     if manager is None:
-        manager = LobbyManager(UserРЎharactersData(pool=db_pool))
+        manager = LobbyManager(UserCharactersData(pool=db_pool))
         _LOBBY_MANAGERS[key] = manager
     return manager
 
@@ -137,21 +137,6 @@ async def _send_character_prompt(
         _render_character_prompt(player, class_names),
         reply_markup=_character_choice_keyboard(player, class_names),
     )
-
-
-async def _persist_characters(
-    game_service: GameService,
-    session_id: str,
-    db_pool: asyncpg.Pool,
-) -> None:
-    if not game_service.has_session(session_id):
-        return
-    chars_db = UserРЎharactersData(pool=db_pool)
-    for player in game_service.get_session_players(session_id):
-        await chars_db.add_user_character(
-            tg_id=player.tg_user_id,
-            character_id=player.entity_id,
-        )
 
 
 @router.message(Command("run"))
@@ -433,7 +418,6 @@ async def cmd_flee(
         return
 
     stats = game_service.get_run_stats(sid) if game_service.get_session_phase(sid) is not None else None
-    await _persist_characters(game_service, sid, db_pool)
     game_service.remove_session(sid)
 
     if stats is not None:

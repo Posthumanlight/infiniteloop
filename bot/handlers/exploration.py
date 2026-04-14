@@ -24,9 +24,9 @@ from bot.tools.keyboards import (
     reward_choice_keyboard,
     skill_keyboard,
 )
+from bot.tools.run_persistence import persist_victory_progress
 from bot.tools.session_lookup import entity_id_for_tg_user
-from db.queries.users_namespace import UserСharactersData
-from game.core.enums import SessionPhase
+from game.core.enums import SessionEndReason, SessionPhase
 from game_service import GameService
 
 router = Router(name="exploration_router")
@@ -205,19 +205,6 @@ async def _send_reward_prompts(
 # Shared phase transition handler
 # ------------------------------------------------------------------
 
-async def _persist_characters(
-    game_service: GameService, session_id: str, db_pool: asyncpg.Pool,
-) -> None:
-    """Save all session players to game_characters after a run ends."""
-    if not game_service.has_session(session_id):
-        return
-    chars_db = UserСharactersData(pool=db_pool)
-    for player in game_service.get_session_players(session_id):
-        await chars_db.add_user_character(
-            tg_id=player.tg_user_id, character_id=player.entity_id,
-        )
-
-
 async def _handle_phase_transition(
     callback: CallbackQuery,
     game_service: GameService,
@@ -263,13 +250,9 @@ async def _handle_phase_transition(
 
         case SessionPhase.ENDED:
             stats = game_service.get_run_stats(session_id)
-            victory = any(
-                p.class_id is not None for p in players.values()
-            )
-            # Check actual victory from session state
             session = game_service._get_session(session_id)
-            victory = any(p.current_hp > 0 for p in session.state.players)
+            victory = session.state.end_reason == SessionEndReason.MAX_DEPTH
             await callback.message.answer(render_run_summary(stats, victory))
-            await _persist_characters(game_service, session_id, db_pool)
+            await persist_victory_progress(game_service, session_id, db_pool)
             game_service.remove_session(session_id)
             await state.set_state(GameStates.run_ended)
