@@ -5,6 +5,7 @@ import logging
 from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger("telegram_bot")
+logger.setLevel(logging.DEBUG)
 
 def get_random_png(folder_path):
     logger.debug(f"Шукаю випадковий PNG файл у папці: '{folder_path}'")
@@ -137,6 +138,13 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(room_state, f, ensure_ascii=False, indent=4)
     logger.debug(f"[{session_id}] Стан кімнати успішно оновлено та записано у {state_file}")
+    
+    logger.info(f"[{session_id}] Використовується файл заднього фону: {room_state.get('bg_path')}")
+    for mob in mobs_to_spawn:
+        eid = mob["entity_id"]
+        pos_idx = room_state["entities"].get(eid, {}).get("pos_idx")
+        if pos_idx is not None:
+            logger.info(f"[{session_id}] Ворог '{mob['name']}' (ID: {eid}) отримав позицію {pos_idx} {placement_pool[pos_idx]}")
 
     # 4. Відкриваємо збережений фон
     background = Image.open(room_state["bg_path"]).convert("RGBA")

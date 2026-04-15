@@ -7,6 +7,7 @@ from game_service import GameService
 from resources.merger import generate_battle_scene
 
 logger = logging.getLogger("telegram_bot")
+logger.setLevel(logging.DEBUG)
 
 
 async def send_combat_image(
@@ -33,11 +34,11 @@ async def send_combat_image(
         # Спробуємо дістати кількість пройдених кімнат з run_stats, або за замовчуванням 1
         session = game_service._get_session(session_id)
         try:
-            room_number = session.state.run_stats.locations_visited
+            room_number = session.state.run_stats.rooms_explored + 1
             logger.debug(f"[{session_id}] Визначено номер поточної кімнати: {room_number}.")
         except AttributeError:
             room_number = 1
-            logger.debug(f"[{session_id}] Не вдалося отримати locations_visited, використано значення за замовчуванням (1).")
+            logger.debug(f"[{session_id}] Не вдалося отримати rooms_explored, використано значення за замовчуванням (1).")
         
         logger.info(f"[{session_id}] Передача процесу генерації у тредпул (generate_battle_scene)...")
         image_path = await asyncio.to_thread(
