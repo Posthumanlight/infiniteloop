@@ -112,18 +112,38 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "fire_imps", "size": (500, 500), "hp": hp, "max_hp": max_hp})
         elif "bandit" in name_lower or "бандит" in name_lower:
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "bandits", "size": (700, 700), "hp": hp, "max_hp": max_hp})
+        elif "bayayamshiks" in name_lower or "баяямшикс" in name_lower:
+            mobs_to_spawn.append({
+                "entity_id": entity_id, 
+                "name": name, 
+                "folder": "EXPLICIT_BOSS", 
+                "explicit_path": os.path.join(script_dir, "Mobs", "bosses", "Bayayamshiks.png"),
+                "size": (800, 800), 
+                "hp": hp, 
+                "max_hp": max_hp,
+                "is_boss": True
+            })
         else:
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "ERROR_TEXT", "size": (400, 400), "hp": hp, "max_hp": max_hp})
             logger.warning(f"[{session_id}] Невідомий тип моба '{name}', буде підставлено заглушку (ERROR_TEXT).")
             
     # Оновлюємо та зберігаємо стан кімнати
+    # Сортуємо: спочатку боси, щоб їм гарантовано дістались центральні позиції
+    mobs_to_spawn.sort(key=lambda m: not m.get("is_boss", False))
+    
     for mob in mobs_to_spawn:
         eid = mob["entity_id"]
         if eid not in room_state["entities"]:
             # Шукаємо вільну позицію
-            avail_pos = [i for i in range(len(placement_pool)) if i not in room_state["used_positions"]]
+            if mob.get("is_boss"):
+                avail_pos = [i for i in [1, 2, 3] if i not in room_state["used_positions"]]
+            else:
+                avail_pos = [i for i in range(len(placement_pool)) if i not in room_state["used_positions"]]
+                
             if not avail_pos:
-                avail_pos = [0] # Фолбек
+                avail_pos = [i for i in range(len(placement_pool)) if i not in room_state["used_positions"]]
+                if not avail_pos:
+                    avail_pos = [0] # Фолбек
             chosen_pos = random.choice(avail_pos)
             room_state["used_positions"].append(chosen_pos)
             
@@ -131,6 +151,9 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             if mob["folder"] == "ERROR_TEXT":
                 img_path = "NONE"
                 logger.debug(f"[{session_id}] Для моба '{mob['name']}' (ID: {eid}) встановлено відсутність картинки (NONE).")
+            elif mob["folder"] == "EXPLICIT_BOSS":
+                img_path = mob["explicit_path"]
+                logger.debug(f"[{session_id}] Для боса '{mob['name']}' (ID: {eid}) прив'язано картинку: {img_path}")
             else:
                 img_path = get_random_png(mob["folder"])
                 logger.debug(f"[{session_id}] Для моба '{mob['name']}' (ID: {eid}) прив'язано картинку: {img_path}")
@@ -171,6 +194,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
         
         # Змінюємо розмір згідно з типом моба
         width, height = mob["size"]
+        is_boss = mob.get("is_boss", False)
         
         if mob_img_path == "NONE":
             # Малюємо великий червоний текст ERROR замість картинки
@@ -201,7 +225,11 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             tw_name = 150
             
         nx = cx - tw_name // 2
-        ny = cy - (height // 2) - 50
+        
+        if is_boss:
+            ny = cy - (height // 2) - 150 # Піднімаємо ім'я вище, щоб вліз ХП бар
+        else:
+            ny = cy - (height // 2) - 50
         
         try:
             draw.text((nx, ny), name_text, font=font_name, fill="red", stroke_width=3, stroke_fill="black")
@@ -211,10 +239,14 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
         # ----------------------------------------------------
         # Малюємо смужку здоров'я (HP bar)
         # ----------------------------------------------------
-        bar_w = 160
-        bar_h = 24
-        bx = cx - bar_w // 2
-        by = cy + (height // 2)
+        if is_boss:
+            bar_w, bar_h = 300, 40
+            bx = cx - bar_w // 2
+            by = ny + 60 # Одразу під ім'ям
+        else:
+            bar_w, bar_h = 160, 24
+            bx = cx - bar_w // 2
+            by = cy + (height // 2)
         
         # Тло і обводка (біла)
         draw.rectangle([bx, by, bx + bar_w, by + bar_h], fill=(40, 40, 40), outline="white", width=3)
@@ -229,6 +261,18 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
         # Повторюємо обводку, щоб червона заливка не перекривала її
         draw.rectangle([bx, by, bx + bar_w, by + bar_h], outline="white", width=3)
         
+        if is_boss:
+            boss_bar_path = os.path.join(script_dir, "Mobs", "bosses", "Boss_bar.png")
+            if os.path.exists(boss_bar_path):
+                try:
+                    boss_bar_img = Image.open(boss_bar_path).convert("RGBA")
+                    boss_bar_img = boss_bar_img.resize((372, 267), Image.Resampling.LANCZOS)
+                    bb_x = cx - 372 // 2
+                    bb_y = by + bar_h // 2 - 267 // 2
+                    background.paste(boss_bar_img, (bb_x, bb_y), boss_bar_img)
+                except Exception as e:
+                    logger.error(f"[{session_id}] Failed to paste Boss_bar: {e}")
+
         # ----------------------------------------------------
         # Малюємо текст ХП
         # ----------------------------------------------------
