@@ -5,8 +5,9 @@ from aiogram.types import CallbackQuery, FSInputFile
 
 from game_service import GameService
 from resources.merger import generate_battle_scene
+from bot.logging.bot_log import setup_telegram_logging
 
-logger = logging.getLogger("telegram_bot")
+logger, _ = setup_telegram_logging()
 logger.setLevel(logging.DEBUG)
 
 

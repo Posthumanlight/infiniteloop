@@ -3,8 +3,9 @@ import random
 import json
 import logging
 from PIL import Image, ImageDraw, ImageFont
+from bot.logging.bot_log import setup_telegram_logging
 
-logger = logging.getLogger("telegram_bot")
+logger, _ = setup_telegram_logging()
 logger.setLevel(logging.DEBUG)
 
 def get_random_png(folder_path):
