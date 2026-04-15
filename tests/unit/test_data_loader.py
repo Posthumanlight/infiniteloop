@@ -65,6 +65,16 @@ def test_load_effect_enlightenment():
     assert e.actions[1].expr == "target.energy * 0.2"
 
 
+def test_load_effect_berserker_skill_access():
+    e = load_effect("berserker")
+
+    assert e.trigger == TriggerType.ON_DAMAGE_CALC
+    assert e.actions[2].action_type == EffectActionType.GRANT_SKILL
+    assert e.actions[2].skill_id == "rampage"
+    assert e.actions[3].action_type == EffectActionType.BLOCK_SKILL
+    assert e.actions[3].skill_id == "slash"
+
+
 def test_load_skill_slash():
     s = load_skill("slash")
     assert s.skill_id == "slash"

@@ -48,6 +48,28 @@ hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 0.5", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]}
 ]
 
+[skills.berserker]
+name = "Berserker"
+energy_cost = 50
+action_type = "action"
+cooldown = 10
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = []
+self_effects = [
+  { effect = "berserker" },
+]
+
+[skills.rampage]
+name = "Rampage"
+energy_cost = 0
+action_type = "action"
+hits = [
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 }
+]
+
 
 #mage
 [skills.arcane_bolt]

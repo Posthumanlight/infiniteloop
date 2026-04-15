@@ -15,7 +15,12 @@
     {#each skills as skill}
       <article class="row">
         <div>
-          <h3>{skill.name}</h3>
+          <h3>
+            {skill.name}
+            {#if skill.temporary}
+              <span class="badge">Temporary</span>
+            {/if}
+          </h3>
           <p>
             {#if skill.hits.length === 0}
               Utility skill
@@ -52,6 +57,19 @@
   .row h3 {
     margin: 0 0 0.25rem;
     font-size: 0.98rem;
+  }
+
+  .badge {
+    display: inline-flex;
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(255, 201, 107, 0.16);
+    color: #ffdca1;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    vertical-align: middle;
   }
 
   .row p {

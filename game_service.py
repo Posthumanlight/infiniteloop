@@ -1,6 +1,10 @@
 from dataclasses import dataclass, replace
 
-from game.combat.effects import get_effective_major_stat, get_effective_minor_stat
+from game.combat.effects import (
+    get_effective_major_stat,
+    get_effective_minor_stat,
+    get_effective_skill_access,
+)
 from game.combat.models import ActionRequest, ActionResult
 from game.core.data_loader import (
     ClassData,
@@ -465,9 +469,19 @@ class GameService:
                 minor_stats[key] = val
 
         # Skills
-        skill_ids = player.skills
+        if combat_state is not None:
+            access = get_effective_skill_access(entity, combat_state)
+            granted_set = set(access.granted)
+            skill_ids = access.available
+        else:
+            granted_set = set()
+            skill_ids = player.skills
         skills = tuple(
-            self._build_skill_info(sid) for sid in skill_ids
+            self._build_skill_info(
+                sid,
+                temporary=(sid in granted_set),
+            )
+            for sid in skill_ids
         )
 
         # Passives
@@ -542,7 +556,11 @@ class GameService:
         )
 
     @staticmethod
-    def _build_skill_info(skill_id: str) -> SkillInfo:
+    def _build_skill_info(
+        skill_id: str,
+        *,
+        temporary: bool = False,
+    ) -> SkillInfo:
         data = load_skill(skill_id)
         return SkillInfo(
             skill_id=data.skill_id,
@@ -555,6 +573,7 @@ class GameService:
                 )
                 for hit in data.hits
             ),
+            temporary=temporary,
         )
 
     @staticmethod
@@ -611,15 +630,30 @@ class GameService:
             EffectActionType.HEAL,
             EffectActionType.STAT_MODIFY,
             EffectActionType.GRANT_ENERGY,
+            EffectActionType.GRANT_SKILL,
             EffectActionType.DAMAGE_DEALT_MULT,
         })
         is_buff = all(a.action_type in _BUFF_ACTIONS for a in data.actions)
+        granted_skills = tuple(
+            action.skill_id
+            for action in data.actions
+            if action.action_type == EffectActionType.GRANT_SKILL
+            and action.skill_id is not None
+        )
+        blocked_skills = tuple(
+            action.skill_id
+            for action in data.actions
+            if action.action_type == EffectActionType.BLOCK_SKILL
+            and action.skill_id is not None
+        )
         return EffectInfo(
             effect_id=eff.effect_id,
             name=data.name,
             remaining_duration=eff.remaining_duration,
             stack_count=eff.stack_count,
             is_buff=is_buff,
+            granted_skills=granted_skills,
+            blocked_skills=blocked_skills,
         )
 
     # ------------------------------------------------------------------
@@ -671,7 +705,20 @@ class GameService:
             and self._current_entity_type(session) == EntityType.ENEMY
         ):
             enemy_action = self._build_enemy_action(session)
-            if results is not None:
+            if enemy_action is None:
+                current_id = self._current_turn_id(session)
+                skip_action = ActionRequest(
+                    actor_id=current_id,
+                    action_type=ActionType.ACTION,
+                    skill_id=None,
+                )
+                if results is not None:
+                    self._submit_and_capture(session, skip_action, results, skip=True)
+                else:
+                    session.state = session.manager.skip_combat_turn(
+                        session.state, current_id,
+                    )
+            elif results is not None:
                 self._submit_and_capture(session, enemy_action, results)
             else:
                 session.state = session.manager.submit_combat_action(
@@ -679,13 +726,15 @@ class GameService:
                 )
 
     @staticmethod
-    def _build_enemy_action(session: _ActiveSession) -> ActionRequest:
+    def _build_enemy_action(session: _ActiveSession) -> ActionRequest | None:
         """MVP enemy AI: first skill, first alive player/ally per single-target hit."""
         combat = session.state.combat
         current_id = combat.turn_order[combat.current_turn_index]
-        enemy = combat.entities[current_id]
-        skill_id = enemy.skills[0]
-        skill = load_skill(skill_id)
+        available = session.manager.get_combat_actions(session.state, current_id)
+        if not available:
+            return None
+        skill, _ = available[0]
+        skill_id = skill.skill_id
 
         alive_players = [
             eid

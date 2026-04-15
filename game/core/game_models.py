@@ -74,6 +74,7 @@ class SkillInfo:
     name: str
     energy_cost: int
     hits: tuple[SkillHitInfo, ...]
+    temporary: bool = False
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,8 @@ class EffectInfo:
     remaining_duration: int
     stack_count: int
     is_buff: bool
+    granted_skills: tuple[str, ...] = ()
+    blocked_skills: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

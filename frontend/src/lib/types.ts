@@ -8,6 +8,7 @@ export interface Skill {
   name: string;
   energy_cost: number;
   hits: SkillHit[];
+  temporary: boolean;
 }
 
 export interface Passive {
@@ -29,6 +30,8 @@ export interface ActiveEffect {
   remaining_duration: number;
   stack_count: number;
   is_buff: boolean;
+  granted_skills: string[];
+  blocked_skills: string[];
 }
 
 export interface CharacterSheet {

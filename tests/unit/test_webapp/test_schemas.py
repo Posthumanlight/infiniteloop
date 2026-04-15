@@ -30,6 +30,7 @@ def test_character_sheet_out_serializes_nested_domain_objects():
                 name="Slash",
                 energy_cost=0,
                 hits=(SkillHitInfo(target_type=TargetType.SINGLE_ENEMY, damage_type="slashing"),),
+                temporary=True,
             ),
         ),
         passives=(
@@ -54,6 +55,8 @@ def test_character_sheet_out_serializes_nested_domain_objects():
                 remaining_duration=2,
                 stack_count=1,
                 is_buff=True,
+                granted_skills=("rampage",),
+                blocked_skills=("slash",),
             ),
         ),
         in_combat=True,
@@ -62,6 +65,9 @@ def test_character_sheet_out_serializes_nested_domain_objects():
     payload = CharacterSheetOut.from_domain(sheet)
 
     assert payload.skills[0].hits[0].target_type == "single_enemy"
+    assert payload.skills[0].temporary is True
     assert payload.passives[0].triggers == ["on_take_damage", "on_hit"]
     assert payload.modifiers[0].stack_count == 2
     assert payload.active_effects[0].is_buff is True
+    assert payload.active_effects[0].granted_skills == ["rampage"]
+    assert payload.active_effects[0].blocked_skills == ["slash"]

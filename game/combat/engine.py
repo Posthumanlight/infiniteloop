@@ -5,6 +5,7 @@ from game.character.base_entity import BaseEntity
 from game.character.enemy import Enemy
 from game.character.player_character import PlayerCharacter
 from game.combat.action_resolver import resolve_action
+from game.combat.effects import get_effective_skill_access
 from game.combat.initiative import build_turn_order
 from game.combat.models import ActionRequest, ActionResult, CombatState
 from game.combat.passives import PassiveEvent, check_passives
@@ -147,8 +148,9 @@ def get_available_actions(
     state: CombatState, actor_id: str,
 ) -> list[tuple[SkillData, int]]:
     entity = state.entities[actor_id]
+    access = get_effective_skill_access(entity, state)
     result: list[tuple[SkillData, int]] = []
-    for skill_id in entity.skills:
+    for skill_id in access.available:
         skill_data = load_skill(skill_id)
         cd = get_remaining_cooldown(state, actor_id, skill_id)
         result.append((skill_data, cd))

@@ -1,3 +1,4 @@
+#warrior
 [effects.bleed]
 name = "Bleed"
 trigger = "on_turn_start"
@@ -7,24 +8,19 @@ actions = [
   { type = "damage", expr = "attacker.attack * 0.33", damage_type = "slashing" },
 ]
 
-[effects.stun]
-name = "Stun"
-trigger = "on_turn_start"
-duration = 1
-stackable = false
-actions = [
-  { type = "skip_turn" },
-]
-
-[effects.fortify]
-name = "Fortify"
+[effects.berserker]
+name = "Berserker"
 trigger = "on_damage_calc"
-duration = 1
+duration = 3
 stackable = false
 actions = [
-  { type = "damage_taken_mult", expr = "0.75" },
+  { type = "damage_taken_mult", expr = "1.1" },
+  { type = "damage_dealt_mult", expr = "1.1" },
+  { type = "grant_skill", skill_id = "rampage" },
+  { type = "block_skill", skill_id = "slash" },
 ]
 
+#mage
 [effects.empowered_arcane]
 name = "Empowered Arcane"
 trigger = "on_damage_calc"
@@ -43,4 +39,24 @@ stackable = false
 actions = [
   { type = "stat_modify", stat = "mastery", expr = "10 + 2 * target.mastery", scales_with_stacks = false },
   { type = "grant_energy", expr = "target.energy * 0.2", scales_with_stacks = false },
+]
+
+#generics
+
+[effects.stun]
+name = "Stun"
+trigger = "on_turn_start"
+duration = 1
+stackable = false
+actions = [
+  { type = "skip_turn" },
+]
+
+[effects.fortify]
+name = "Fortify"
+trigger = "on_damage_calc"
+duration = 1
+stackable = false
+actions = [
+  { type = "damage_taken_mult", expr = "0.75" },
 ]

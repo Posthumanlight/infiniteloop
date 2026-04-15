@@ -19,6 +19,7 @@ class SkillOut(BaseModel):
     name: str
     energy_cost: int
     hits: list[SkillHitOut]
+    temporary: bool
 
 
 class PassiveOut(BaseModel):
@@ -40,6 +41,8 @@ class EffectOut(BaseModel):
     remaining_duration: int
     stack_count: int
     is_buff: bool
+    granted_skills: list[str]
+    blocked_skills: list[str]
 
 
 class CharacterSheetOut(BaseModel):
@@ -81,6 +84,7 @@ class CharacterSheetOut(BaseModel):
                     skill_id=skill.skill_id,
                     name=skill.name,
                     energy_cost=skill.energy_cost,
+                    temporary=skill.temporary,
                     hits=[
                         SkillHitOut(
                             target_type=hit.target_type.value,
@@ -115,6 +119,8 @@ class CharacterSheetOut(BaseModel):
                     remaining_duration=effect.remaining_duration,
                     stack_count=effect.stack_count,
                     is_buff=effect.is_buff,
+                    granted_skills=list(effect.granted_skills),
+                    blocked_skills=list(effect.blocked_skills),
                 )
                 for effect in sheet.active_effects
             ],

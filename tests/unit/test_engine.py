@@ -1,7 +1,10 @@
 """Tests for the combat engine public API."""
 
+from dataclasses import replace
+
 import pytest
 
+from game.combat.effects import expire_effects
 from game.combat.engine import get_available_actions, skip_turn, start_combat, submit_action
 from game.combat.models import ActionRequest
 from game.core.data_loader import clear_cache
@@ -51,14 +54,14 @@ def test_submit_action_slash():
             actor_id="p1",
             action_type=ActionType.ACTION,
             skill_id="slash",
-            target_id="e1",
+            target_ids=((0, "e1"),),
         )
     else:
         action = ActionRequest(
             actor_id="e1",
             action_type=ActionType.ACTION,
             skill_id="slash",
-            target_id="p1",
+            target_ids=((0, "p1"),),
         )
 
     new_state, result = submit_action(state, action)
@@ -80,15 +83,13 @@ def test_submit_action_wrong_turn_raises():
         actor_id=wrong_id,
         action_type=ActionType.ACTION,
         skill_id="slash",
-        target_id=current_id,
+        target_ids=((0, current_id),),
     )
     with pytest.raises(ValueError, match="Not .* turn"):
         submit_action(state, action)
 
 
 def test_submit_action_ended_raises():
-    from dataclasses import replace
-
     warrior = make_warrior()
     goblin = make_goblin()
     state = start_combat("s", [warrior], [goblin], seed=42)
@@ -98,7 +99,7 @@ def test_submit_action_ended_raises():
         actor_id="p1",
         action_type=ActionType.ACTION,
         skill_id="slash",
-        target_id="e1",
+        target_ids=((0, "e1"),),
     )
     with pytest.raises(ValueError, match="Combat has ended"):
         submit_action(state, action)
@@ -151,7 +152,7 @@ def test_full_combat_to_end():
             actor_id=current_id,
             action_type=ActionType.ACTION,
             skill_id="slash",
-            target_id=target,
+            target_ids=((0, target),),
         )
         state, result = submit_action(state, action)
     else:
@@ -163,3 +164,95 @@ def test_full_combat_to_end():
     p1_alive = state.entities["p1"].current_hp > 0
     e1_alive = state.entities["e1"].current_hp > 0
     assert not (p1_alive and e1_alive), "Both sides still alive after combat ended"
+
+
+def test_berserker_changes_available_actions_until_expire():
+    warrior = replace(make_warrior(), skills=("slash", "berserker"))
+    goblin = make_goblin()
+    state = start_combat("s", [warrior], [goblin], seed=42)
+    state = replace(state, current_turn_index=state.turn_order.index("p1"))
+
+    before = [skill.skill_id for skill, _ in get_available_actions(state, "p1")]
+    assert before == ["slash", "berserker"]
+
+    state, _ = submit_action(
+        state,
+        ActionRequest(
+            actor_id="p1",
+            action_type=ActionType.ACTION,
+            skill_id="berserker",
+            target_ids=(),
+        ),
+    )
+
+    during = [skill.skill_id for skill, _ in get_available_actions(state, "p1")]
+    assert "berserker" in during
+    assert "rampage" in during
+    assert "slash" not in during
+
+    for _ in range(3):
+        state = expire_effects(state, "p1")
+
+    after = [skill.skill_id for skill, _ in get_available_actions(state, "p1")]
+    assert after == ["slash", "berserker"]
+
+
+def test_submit_action_rejects_blocked_slash_during_berserker():
+    warrior = replace(make_warrior(), skills=("slash", "berserker"))
+    goblin = make_goblin()
+    state = start_combat("s", [warrior], [goblin], seed=42)
+    state = replace(state, current_turn_index=state.turn_order.index("p1"))
+
+    state, _ = submit_action(
+        state,
+        ActionRequest(
+            actor_id="p1",
+            action_type=ActionType.ACTION,
+            skill_id="berserker",
+            target_ids=(),
+        ),
+    )
+    state = replace(state, current_turn_index=state.turn_order.index("p1"))
+
+    with pytest.raises(ValueError, match="blocked by an active effect"):
+        submit_action(
+            state,
+            ActionRequest(
+                actor_id="p1",
+                action_type=ActionType.ACTION,
+                skill_id="slash",
+                target_ids=((0, "e1"),),
+            ),
+        )
+
+
+def test_submit_action_allows_granted_rampage_during_berserker():
+    warrior = replace(make_warrior(), skills=("slash", "berserker"))
+    goblin = replace(make_goblin(), current_hp=200)
+    state = start_combat("s", [warrior], [goblin], seed=42)
+    state = replace(state, current_turn_index=state.turn_order.index("p1"))
+
+    state, _ = submit_action(
+        state,
+        ActionRequest(
+            actor_id="p1",
+            action_type=ActionType.ACTION,
+            skill_id="berserker",
+            target_ids=(),
+        ),
+    )
+    state = replace(state, current_turn_index=state.turn_order.index("p1"))
+
+    new_state, result = submit_action(
+        state,
+        ActionRequest(
+            actor_id="p1",
+            action_type=ActionType.ACTION,
+            skill_id="rampage",
+            target_ids=((0, "e1"), (1, "e1"), (2, "e1")),
+        ),
+    )
+
+    assert result.actor_id == "p1"
+    assert len(result.hits) == 3
+    assert new_state.entities["e1"].current_hp < state.entities["e1"].current_hp

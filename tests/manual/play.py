@@ -9,7 +9,7 @@ from game.character.enemy import Enemy
 from game.character.inventory import Inventory
 from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats, MinorStats
-from game.combat.engine import get_available_actions, start_combat, submit_action
+from game.combat.engine import get_available_actions, skip_turn, start_combat, submit_action
 from game.combat.models import ActionRequest
 from game.core.data_loader import (
     LocationOption,
@@ -201,16 +201,18 @@ def player_turn(state, actor_id):
 
 def enemy_turn(state, actor_id):
     """AI: use first skill on a random alive player."""
-    entity = state.entities[actor_id]
+    available = get_available_actions(state, actor_id)
+    if not available:
+        return skip_turn(state, actor_id)
+
     players_alive = [
         eid for eid in state.turn_order
         if state.entities[eid].entity_type == EntityType.PLAYER
         and state.entities[eid].current_hp > 0
     ]
     target = players_alive[0]
-    skill_id = entity.skills[0] if entity.skills else "slash"
-    from game.core.data_loader import load_skill
-    skill_def = load_skill(skill_id)
+    skill_def, _ = available[0]
+    skill_id = skill_def.skill_id
     ai_pairs: list[tuple[int, str]] = []
     for hit_index, hit in enumerate(skill_def.hits):
         if hit.share_with is None and hit.target_type.value == "single_enemy":

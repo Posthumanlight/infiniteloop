@@ -46,6 +46,8 @@ class EffectActionType(Enum):
     DAMAGE_TAKEN_MULT = "damage_taken_mult"
     STAT_MODIFY = "stat_modify"
     GRANT_ENERGY = "grant_energy"
+    GRANT_SKILL = "grant_skill"
+    BLOCK_SKILL = "block_skill"
 
 
 class CombatPhase(Enum):

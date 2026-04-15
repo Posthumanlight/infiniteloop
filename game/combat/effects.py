@@ -23,6 +23,22 @@ class StatusEffectInstance:
     stack_count: int = 1
 
 
+@dataclass(frozen=True)
+class SkillAccessSnapshot:
+    base: tuple[str, ...]
+    granted: tuple[str, ...]
+    blocked: tuple[str, ...]
+    available: tuple[str, ...]
+
+    @property
+    def available_set(self) -> frozenset[str]:
+        return frozenset(self.available)
+
+    @property
+    def blocked_set(self) -> frozenset[str]:
+        return frozenset(self.blocked)
+
+
 # ---------------------------------------------------------------------------
 # Expression context builder
 # ---------------------------------------------------------------------------
@@ -126,7 +142,20 @@ _NON_TICKING_ACTIONS = frozenset({
     EffectActionType.DAMAGE_DEALT_MULT,
     EffectActionType.DAMAGE_TAKEN_MULT,
     EffectActionType.STAT_MODIFY,
+    EffectActionType.GRANT_SKILL,
+    EffectActionType.BLOCK_SKILL,
 })
+
+
+def _ordered_unique(values: list[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return tuple(ordered)
 
 
 def _build_effect_context(
@@ -467,6 +496,59 @@ def is_skipped(state: CombatState, entity_id: str) -> bool:
             if action.action_type == EffectActionType.SKIP_TURN:
                 return True
     return False
+
+
+def get_effective_skill_access(
+    entity: BaseEntity,
+    state: CombatState | None = None,
+) -> SkillAccessSnapshot:
+    base = tuple(getattr(entity, "skills", ()))
+    grants: list[str] = []
+    blocks: list[str] = []
+
+    for inst in entity.active_effects:
+        effect_def = load_effect(inst.effect_id)
+        if state is not None:
+            ctx = _build_effect_context(
+                state,
+                entity.entity_id,
+                inst.source_id,
+                use_effective_stats=True,
+            )
+            if not _check_condition(
+                effect_def.tick_condition,
+                entity,
+                target_ctx=ctx["target"],
+                attacker_ctx=ctx["attacker"],
+            ):
+                continue
+
+        for action in effect_def.actions:
+            if action.action_type == EffectActionType.GRANT_SKILL and action.skill_id:
+                grants.append(action.skill_id)
+            elif action.action_type == EffectActionType.BLOCK_SKILL and action.skill_id:
+                blocks.append(action.skill_id)
+
+    ordered_grants = _ordered_unique(grants)
+    ordered_blocks = _ordered_unique(blocks)
+    blocked_set = set(ordered_blocks)
+
+    available = tuple(
+        skill_id
+        for skill_id in _ordered_unique([*base, *ordered_grants])
+        if skill_id not in blocked_set
+    )
+    visible_grants = tuple(
+        skill_id for skill_id in ordered_grants
+        if skill_id not in blocked_set
+    )
+
+    return SkillAccessSnapshot(
+        base=base,
+        granted=visible_grants,
+        blocked=ordered_blocks,
+        available=available,
+    )
 
 
 # ---------------------------------------------------------------------------

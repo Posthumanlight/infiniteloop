@@ -34,7 +34,15 @@
     return sheet.active_effects.map((effect) => {
       const tag = effect.is_buff ? 'buff' : 'debuff';
       const stacks = effect.stack_count > 1 ? ` x${effect.stack_count}` : '';
-      return `${effect.name}${stacks} · ${effect.remaining_duration}t · ${tag}`;
+      const details: string[] = [];
+      if (effect.granted_skills.length > 0) {
+        details.push(`grants ${effect.granted_skills.join(', ')}`);
+      }
+      if (effect.blocked_skills.length > 0) {
+        details.push(`blocks ${effect.blocked_skills.join(', ')}`);
+      }
+      const suffix = details.length > 0 ? ` · ${details.join(' · ')}` : '';
+      return `${effect.name}${stacks} · ${effect.remaining_duration}t · ${tag}${suffix}`;
     });
   }
 
