@@ -227,7 +227,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
         nx = cx - tw_name // 2
         
         if is_boss:
-            ny = cy - (height // 2) - 150 # Піднімаємо ім'я вище, щоб вліз ХП бар
+            ny = cy - (height // 2) - 200 # Піднімаємо ім'я вище ще на 50px
         else:
             ny = cy - (height // 2) - 50
         
@@ -242,11 +242,13 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
         if is_boss:
             bar_w, bar_h = 300, 40
             bx = cx - bar_w // 2
-            by = ny + 60 # Одразу під ім'ям
+            by = ny + 94 # Смужку ХП піднято на 16px відносно старої позиції
+            frame_by = by + 16 # Зберігаємо стару Y координату, щоб рамка і текст не зсунулися
         else:
             bar_w, bar_h = 160, 24
             bx = cx - bar_w // 2
             by = cy + (height // 2)
+            frame_by = by
         
         # Тло і обводка (біла)
         draw.rectangle([bx, by, bx + bar_w, by + bar_h], fill=(40, 40, 40), outline="white", width=3)
@@ -268,7 +270,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
                     boss_bar_img = Image.open(boss_bar_path).convert("RGBA")
                     boss_bar_img = boss_bar_img.resize((372, 267), Image.Resampling.LANCZOS)
                     bb_x = cx - 372 // 2
-                    bb_y = by + bar_h // 2 - 267 // 2
+                    bb_y = frame_by + bar_h // 2 - 267 // 2
                     background.paste(boss_bar_img, (bb_x, bb_y), boss_bar_img)
                 except Exception as e:
                     logger.error(f"[{session_id}] Failed to paste Boss_bar: {e}")
@@ -284,7 +286,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             tw_hp = 80
             
         hx = cx - tw_hp // 2
-        hy = by + bar_h + 8
+        hy = frame_by + bar_h + 8
         
         try:
             draw.text((hx, hy), hp_text, font=font_hp, fill="white", stroke_width=2, stroke_fill="black")
