@@ -42,6 +42,7 @@ from game.session.models import (
     RewardNotice,
     SessionState,
 )
+from game.world.difficulty import RoomDifficultyModifier
 
 
 class NodeManager:
@@ -74,14 +75,16 @@ class NodeManager:
         self,
         state: SessionState,
         enemy_ids: tuple[str, ...],
+        room_difficulty: RoomDifficultyModifier | None = None,
     ) -> SessionState:
         """Build enemies from TOML and start a combat encounter."""
-        enemies = build_enemies(enemy_ids)
+        enemies = build_enemies(enemy_ids, room_difficulty=room_difficulty)
         combat_state = start_combat(
             session_id=state.session_id,
             players=list(state.players),
             enemies=enemies,
             seed=self._next_seed(),
+            room_difficulty=room_difficulty,
         )
         return replace(
             state,

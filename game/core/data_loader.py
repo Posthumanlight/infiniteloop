@@ -1,7 +1,7 @@
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from game.core.enums import (
     ActionType,
@@ -25,6 +25,9 @@ from game.events.models import (
     EventRequirements,
     OutcomeDef,
 )
+
+if TYPE_CHECKING:
+    from game.world.difficulty import RoomDifficultyModifier
 _DATA_DIR = Path(__file__).parent / "data"
 _cache: dict[str, Any] = {}
 
@@ -337,6 +340,10 @@ def load_restoration_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["restoration"]
 
 
+def load_world_difficulty_constants() -> dict[str, Any]:
+    return _load_toml("constants.toml")["world_difficulty"]
+
+
 # ---------------------------------------------------------------------------
 # Event definitions
 # ---------------------------------------------------------------------------
@@ -547,6 +554,7 @@ class LocationOption:
     combat_type: CombatLocationType | None = None
     # Event fields (populated when location_type == EVENT)
     event_id: str | None = None
+    room_difficulty: "RoomDifficultyModifier | None" = None
 
 
 @dataclass(frozen=True)

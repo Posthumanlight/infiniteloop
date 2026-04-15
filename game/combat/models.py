@@ -7,6 +7,7 @@ from game.core.enums import ActionType, CombatPhase, DamageType
 
 if TYPE_CHECKING:
     from game.combat.passives import PassiveTracker
+    from game.world.difficulty import RoomDifficultyModifier
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class CombatState:
     passive_trackers: dict[str, PassiveTracker] = ()  # type: ignore[assignment]
     cooldowns: dict[str, dict[str, int]] = ()  # type: ignore[assignment]
     rng_state: tuple | None = None
+    room_difficulty: "RoomDifficultyModifier | None" = None
 
     def __post_init__(self) -> None:
         if isinstance(self.passive_trackers, tuple):

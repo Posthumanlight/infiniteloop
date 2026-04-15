@@ -155,7 +155,11 @@ class SessionManager:
 
         match location.location_type:
             case LocationType.COMBAT:
-                return self._node.enter_combat(state, location.enemy_ids)
+                return self._node.enter_combat(
+                    state,
+                    location.enemy_ids,
+                    room_difficulty=location.room_difficulty,
+                )
             case LocationType.EVENT:
                 if location.event_id is None:
                     raise ValueError(

@@ -19,6 +19,7 @@ from game.combat.cooldowns import get_remaining_cooldown
 from game.core.data_loader import SkillData, load_constants, load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import ActionType, CombatPhase, TriggerType
+from game.world.difficulty import RoomDifficultyModifier
 
 
 def start_combat(
@@ -26,6 +27,7 @@ def start_combat(
     players: list[PlayerCharacter],
     enemies: list[Enemy],
     seed: int,
+    room_difficulty: RoomDifficultyModifier | None = None,
 ) -> CombatState:
     rng = SeededRNG(seed)
     constants = load_constants()
@@ -47,6 +49,7 @@ def start_combat(
         entities=entities,
         phase=CombatPhase.ACTING,
         rng_state=rng.get_state(),
+        room_difficulty=room_difficulty,
     )
 
     # Fire ON_COMBAT_START passives for all entities
