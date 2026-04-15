@@ -76,10 +76,13 @@ def setup_telegram_logging(
         logger.addHandler(file_handler)
 
     except Exception:
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
-        console_handler.setLevel(logging.DEBUG)
-        logger.addHandler(console_handler)
+        pass
+
+    # Завжди додаємо вивід у консоль
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
+    console_handler.setLevel(logging.DEBUG)
+    logger.addHandler(console_handler)
 
     # Circular buffer handler
     buffer_handler = CircularBufferHandler(max_size=1000)
