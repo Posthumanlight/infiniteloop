@@ -24,7 +24,7 @@ class SkillOut(BaseModel):
 class PassiveOut(BaseModel):
     skill_id: str
     name: str
-    trigger: str
+    triggers: list[str]
     action: str
 
 
@@ -95,7 +95,7 @@ class CharacterSheetOut(BaseModel):
                 PassiveOut(
                     skill_id=passive.skill_id,
                     name=passive.name,
-                    trigger=passive.trigger,
+                    triggers=list(passive.triggers),
                     action=passive.action,
                 )
                 for passive in sheet.passives

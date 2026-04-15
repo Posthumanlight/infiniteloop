@@ -36,7 +36,7 @@ def test_character_sheet_out_serializes_nested_domain_objects():
             PassiveInfo(
                 skill_id="last_stand",
                 name="Last Stand",
-                trigger="on_take_damage",
+                triggers=("on_take_damage", "on_hit"),
                 action="apply_effect",
             ),
         ),
@@ -62,6 +62,6 @@ def test_character_sheet_out_serializes_nested_domain_objects():
     payload = CharacterSheetOut.from_domain(sheet)
 
     assert payload.skills[0].hits[0].target_type == "single_enemy"
-    assert payload.passives[0].trigger == "on_take_damage"
+    assert payload.passives[0].triggers == ["on_take_damage", "on_hit"]
     assert payload.modifiers[0].stack_count == 2
     assert payload.active_effects[0].is_buff is True

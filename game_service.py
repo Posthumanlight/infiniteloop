@@ -563,7 +563,7 @@ class GameService:
         return PassiveInfo(
             skill_id=data.skill_id,
             name=data.name,
-            trigger=data.trigger.value,
+            triggers=tuple(trigger.value for trigger in data.triggers),
             action=data.action.value,
         )
 

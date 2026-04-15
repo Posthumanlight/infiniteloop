@@ -82,7 +82,7 @@ class PassiveInfo:
 
     skill_id: str
     name: str
-    trigger: str
+    triggers: tuple[str, ...]
     action: str
 
 

@@ -393,7 +393,7 @@ def load_event(event_id: str) -> EventDef:
 class PassiveSkillData:
     skill_id: str
     name: str
-    trigger: TriggerType
+    triggers: tuple[TriggerType, ...]
     condition: str
     action: PassiveAction
     expr: str
@@ -405,6 +405,26 @@ class PassiveSkillData:
     target_type: TargetType = TargetType.SELF
     cooldown: int = 0
 
+    @property
+    def trigger(self) -> TriggerType:
+        """Compatibility shim for older call sites/tests."""
+        return self.triggers[0]
+
+
+def _parse_passive_triggers(raw: str | list[str]) -> tuple[TriggerType, ...]:
+    if isinstance(raw, str):
+        return (TriggerType(raw),)
+    if isinstance(raw, list) and raw:
+        seen: set[TriggerType] = set()
+        ordered: list[TriggerType] = []
+        for item in raw:
+            trigger = TriggerType(item)
+            if trigger not in seen:
+                seen.add(trigger)
+                ordered.append(trigger)
+        return tuple(ordered)
+    raise ValueError("Passive trigger must be a trigger string or non-empty list")
+
 
 def load_passives() -> dict[str, PassiveSkillData]:
     raw = _load_toml("passives.toml").get("passives", {})
@@ -412,7 +432,7 @@ def load_passives() -> dict[str, PassiveSkillData]:
         pid: PassiveSkillData(
             skill_id=pid,
             name=pdata["name"],
-            trigger=TriggerType(pdata["trigger"]),
+            triggers=_parse_passive_triggers(pdata["trigger"]),
             condition=pdata.get("condition", ""),
             action=PassiveAction(pdata["action"]),
             expr=pdata.get("expr", "0"),

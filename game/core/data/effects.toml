@@ -1,10 +1,10 @@
-[effects.poison]
-name = "Poison"
+[effects.bleed]
+name = "Bleed"
 trigger = "on_turn_start"
 duration = 3
 stackable = true
 actions = [
-  { type = "damage", expr = "target.hp * 0.05", damage_type = "slashing" },
+  { type = "damage", expr = "attacker.attack * 0.33", damage_type = "slashing" },
 ]
 
 [effects.stun]

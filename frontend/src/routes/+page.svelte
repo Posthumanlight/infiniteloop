@@ -19,7 +19,9 @@
   }
 
   function passiveEntries(sheet: CharacterSheet): string[] {
-    return sheet.passives.map((passive) => `${passive.name} · ${passive.trigger.replaceAll('_', ' ')}`);
+    return sheet.passives.map(
+      (passive) => `${passive.name} · ${passive.triggers.map((trigger) => trigger.replaceAll('_', ' ')).join(', ')}`
+    );
   }
 
   function modifierEntries(sheet: CharacterSheet): string[] {

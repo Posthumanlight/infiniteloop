@@ -3,7 +3,7 @@ from dataclasses import replace
 from game.combat.cooldowns import is_on_cooldown, put_on_cooldown
 from game.combat.effects import is_skipped
 from game.combat.models import ActionRequest, ActionResult, CombatState
-from game.combat.passives import check_passives
+from game.combat.passives import PassiveEvent, check_passives
 from game.combat.skill_resolver import resolve_skill
 from game.core.data_loader import load_skill
 from game.core.dice import SeededRNG
@@ -69,9 +69,14 @@ def _resolve_skill_action(
 
     # Fire ON_CAST passives (e.g. arcane_rupture consuming stacks)
     state, cast_hits = check_passives(
-        state, action.actor_id, TriggerType.ON_CAST,
-        trigger_context={"skill_id": action.skill_id},
-        rng=rng, constants=constants,
+        state,
+        action.actor_id,
+        PassiveEvent(
+            trigger=TriggerType.ON_CAST,
+            payload={"skill_id": action.skill_id},
+        ),
+        rng=rng,
+        constants=constants,
     )
     hits.extend(cast_hits)
 

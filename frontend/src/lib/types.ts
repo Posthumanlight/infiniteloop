@@ -13,7 +13,7 @@ export interface Skill {
 export interface Passive {
   skill_id: string;
   name: string;
-  trigger: string;
+  triggers: string[];
   action: string;
 }
 

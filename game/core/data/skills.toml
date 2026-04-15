@@ -36,6 +36,19 @@ class_tags = ["warrior"]
 hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun", chance = 1.0}]}
 ]
+
+[skills.deep_wounds]
+name = "Deep Wounds"
+energy_cost = 10
+action_type = "action"
+cooldown = 2
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = [
+  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 0.5", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]}
+]
+
+
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"

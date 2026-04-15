@@ -7,7 +7,7 @@ from game.combat.effects import (
     get_damage_multiplier,
 )
 from game.combat.models import CombatState, HitResult
-from game.combat.passives import check_passives
+from game.combat.passives import PassiveEvent, check_passives
 from game.combat.skill_modifiers import apply_post_hit_modifiers, collect_modifiers
 from game.combat.targeting import get_allies, resolve_targets
 from game.core.data_loader import SkillData
@@ -101,28 +101,48 @@ def resolve_skill(
 
             # Passive triggers: ON_HIT
             state, _ = check_passives(
-                state, actor_id, TriggerType.ON_HIT,
-                {"damage_type": hit.damage_type},
+                state,
+                actor_id,
+                PassiveEvent(
+                    trigger=TriggerType.ON_HIT,
+                    payload={
+                        "damage_type": hit.damage_type,
+                        "damage_dealt": dmg_result.amount,
+                    },
+                ),
             )
 
             # Passive triggers: ON_TAKE_DAMAGE
             state, _ = check_passives(
-                state, target_id, TriggerType.ON_TAKE_DAMAGE,
-                {"damage_taken": dmg_result.amount},
+                state,
+                target_id,
+                PassiveEvent(
+                    trigger=TriggerType.ON_TAKE_DAMAGE,
+                    payload={
+                        "damage_type": hit.damage_type,
+                        "damage_taken": dmg_result.amount,
+                    },
+                ),
             )
 
             # Passive triggers: ON_KILL + ON_ALLY_DEATH
             if new_hp <= 0:
                 state, kill_results = check_passives(
-                    state, actor_id, TriggerType.ON_KILL,
-                    {"killed": build_effective_expr_context(state, target_id)},
+                    state,
+                    actor_id,
+                    PassiveEvent(
+                        trigger=TriggerType.ON_KILL,
+                        payload={"killed": build_effective_expr_context(state, target_id)},
+                    ),
                 )
                 all_hits.extend(kill_results)
 
                 for ally_id in get_allies(state, target_id):
                     if ally_id != target_id:
                         state, _ = check_passives(
-                            state, ally_id, TriggerType.ON_ALLY_DEATH,
+                            state,
+                            ally_id,
+                            PassiveEvent(trigger=TriggerType.ON_ALLY_DEATH),
                         )
 
     for self_effect in skill.self_effects:

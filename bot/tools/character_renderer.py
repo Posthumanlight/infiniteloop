@@ -97,8 +97,8 @@ def render_character_sheet(sheet: CharacterSheet) -> str:
     if sheet.passives:
         lines.append("-- Passives --")
         for ps in sheet.passives:
-            trigger = ps.trigger.replace("_", " ")
-            lines.append(f"{ps.name} - {trigger}")
+            triggers = ", ".join(trigger.replace("_", " ") for trigger in ps.triggers)
+            lines.append(f"{ps.name} - {triggers}")
         lines.append("")
 
     # Modifiers
