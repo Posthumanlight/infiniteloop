@@ -1,9 +1,13 @@
 import os
 import random
 import json
+import logging
 from PIL import Image, ImageDraw, ImageFont
 
+logger = logging.getLogger("telegram_bot")
+
 def get_random_png(folder_path):
+    logger.debug(f"Шукаю випадковий PNG файл у папці: '{folder_path}'")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Масив можливих шляхів пошуку
@@ -25,28 +29,37 @@ def get_random_png(folder_path):
             break
             
     if not actual_path:
+        logger.error(f"Папку '{folder_path}' не знайдено! Перевірені шляхи: {search_paths}")
         raise FileNotFoundError(f"Папку '{folder_path}' не знайдено!")
 
     png_files = [f for f in os.listdir(actual_path) if f.lower().endswith('.png')]
     if not png_files:
+        logger.error(f"У знайдений папці '{actual_path}' немає PNG файлів.")
         raise FileNotFoundError(f"У папці '{actual_path}' немає PNG файлів")
     
-    return os.path.join(actual_path, random.choice(png_files))
+    selected_png = random.choice(png_files)
+    logger.debug(f"Обрано файл: '{selected_png}' з директорії '{actual_path}'")
+    return os.path.join(actual_path, selected_png)
 
 def get_sekuya_font(size):
+    logger.debug(f"Спроба завантажити шрифт 'Sekuya' розміром {size}")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     font_dir = os.path.join(script_dir, "Fonts", "Sekuya")
     if os.path.exists(font_dir):
         for f in os.listdir(font_dir):
             if f.lower().endswith('.ttf') or f.lower().endswith('.otf'):
+                logger.debug(f"Шрифт знайдено і підвантажено: {f}")
                 return ImageFont.truetype(os.path.join(font_dir, f), size)
     
+    logger.warning(f"Шрифт Sekuya не знайдено в '{font_dir}', спроба підвантажити стандартний 'arial.ttf'")
     try:
         return ImageFont.truetype("arial.ttf", size)
     except IOError:
+        logger.warning("Шрифт 'arial.ttf' також не знайдено. Завантажено дефолтний шрифт PIL.")
         return ImageFont.load_default()
 
 def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[dict]) -> str:
+    logger.info(f"[{session_id}] Початок 'generate_battle_scene' (кімната {room_number}). Вхідна кількість ворогів: {len(enemies_data)}")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
     # 1. Налаштування позицій (центри) для 5 ворогів
@@ -55,22 +68,28 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
     # 2. Створення папки для поточної сесії та кімнати
     session_dir = os.path.join(script_dir, "sessions scenes", str(session_id), str(room_number))
     os.makedirs(session_dir, exist_ok=True)
+    logger.debug(f"[{session_id}] Директорію для сцени створено/перевірено: {session_dir}")
     
     # 3. Файл стану кімнати (зберігає фон і прив'язку мобів до їхніх картинок/позицій)
     state_file = os.path.join(session_dir, "room_state.json")
     room_state = {"bg_path": None, "entities": {}, "used_positions": []}
     
     if os.path.exists(state_file):
+        logger.debug(f"[{session_id}] Виявлено файл стану кімнати: {state_file}")
         try:
             with open(state_file, "r", encoding="utf-8") as f:
                 loaded_state = json.load(f)
                 if isinstance(loaded_state, dict):
                     room_state.update(loaded_state)
         except json.JSONDecodeError:
+            logger.warning(f"[{session_id}] Помилка декодування JSON із файлу стану кімнати. Буде використано порожній стан.")
             pass # Fallback to default room_state if the file is corrupted
             
     if not room_state.get("bg_path"):
         room_state["bg_path"] = get_random_png("cave")
+        logger.debug(f"[{session_id}] Згенеровано новий фон: {room_state['bg_path']}")
+    else:
+        logger.debug(f"[{session_id}] Використовується збережений фон: {room_state['bg_path']}")
     
     mobs_to_spawn = []
     
@@ -93,6 +112,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "bandits", "size": (700, 700), "hp": hp, "max_hp": max_hp})
         else:
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "ERROR_TEXT", "size": (400, 400), "hp": hp, "max_hp": max_hp})
+            logger.warning(f"[{session_id}] Невідомий тип моба '{name}', буде підставлено заглушку (ERROR_TEXT).")
             
     # Оновлюємо та зберігаємо стан кімнати
     for mob in mobs_to_spawn:
@@ -108,12 +128,15 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             # Обираємо випадкову картинку для цього моба на весь бій
             if mob["folder"] == "ERROR_TEXT":
                 img_path = "NONE"
+                logger.debug(f"[{session_id}] Для моба '{mob['name']}' (ID: {eid}) встановлено відсутність картинки (NONE).")
             else:
                 img_path = get_random_png(mob["folder"])
+                logger.debug(f"[{session_id}] Для моба '{mob['name']}' (ID: {eid}) прив'язано картинку: {img_path}")
             room_state["entities"][eid] = {"pos_idx": chosen_pos, "img_path": img_path}
             
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(room_state, f, ensure_ascii=False, indent=4)
+    logger.debug(f"[{session_id}] Стан кімнати успішно оновлено та записано у {state_file}")
 
     # 4. Відкриваємо збережений фон
     background = Image.open(room_state["bg_path"]).convert("RGBA")
@@ -122,13 +145,14 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
     font_name = get_sekuya_font(40)
     font_hp = get_sekuya_font(30)
     
-    print(f"Генерація бою для: {[m['folder'] for m in mobs_to_spawn]}")
+    logger.info(f"[{session_id}] Генерація візуалу бою для мобів: {[m['folder'] for m in mobs_to_spawn]}")
 
     # 5. Проходимо по мобах, беремо їх збережені позиції і картинки
     for mob in mobs_to_spawn:
         eid = mob["entity_id"]
         saved_data = room_state["entities"].get(eid)
         if not saved_data:
+            logger.error(f"[{session_id}] Моб із ID {eid} не знайдений у стані кімнати, пропускаємо відмальовку!")
             continue
             
         cx, cy = placement_pool[saved_data["pos_idx"]]
@@ -149,7 +173,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             except AttributeError:
                 tw_err, th_err = 250, 80
             draw.text((cx - tw_err // 2, cy - th_err // 2), "ERROR", font=font_error, fill="red", stroke_width=4, stroke_fill="black")
-            print(f"Увага: Згенеровано невідомого моба {mob.get('name')}! Намальовано ERROR.")
+            logger.warning(f"[{session_id}] Увага: Не вдалося знайти зображення для моба '{mob.get('name')}'. Намальовано ERROR.")
         else:
             overlay = Image.open(mob_img_path).convert("RGBA")
             overlay = overlay.resize((width, height), Image.Resampling.LANCZOS)
@@ -214,6 +238,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
         except TypeError:
             draw.text((hx, hy), hp_text, font=font_hp, fill="white")
 
+    logger.debug(f"[{session_id}] Усіх мобів та елементи інтерфейсу відмальовано. Перетворення кольорів та збереження...")
     # 5. Збереження
     final_result = background.convert("RGB")
     
@@ -226,7 +251,7 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
     output_name = f"{session_id}_{room_number}_{next_index}.jpg"
     output_path = os.path.join(session_dir, output_name)
     final_result.save(output_path)
-    print(f"Готово! Файл збережено як {output_path}")
+    logger.info(f"[{session_id}] Готово! Картинку сцени бою збережено як {output_path}")
     return output_path
 
 if __name__ == "__main__":
