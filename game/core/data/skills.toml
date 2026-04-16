@@ -1,3 +1,4 @@
+#ENEMIES
 #generics
 [skills.generic_enemy_attack]
 name = "Attack"
@@ -7,6 +8,18 @@ hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack+base_power", base_power = 0, variance = 0.25 },
 ]
 
+#draugr
+[skills.draugr_chilling_wind]
+name = "Chilling Wind"
+energy_cost = 0
+action_type = "action"
+cooldown = 4
+hits = [
+{target_type = "all_enemies", damage_type = "ice", formula = "attacker.attack+base_power", base_power = 5, variance = 0.25}
+]
+
+
+#PLAYERS
 #warrior
 [skills.slash]
 name = "Slash"

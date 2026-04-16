@@ -1,11 +1,13 @@
 from dataclasses import dataclass, replace
 
+from game.combat.enemy_ai import build_enemy_action as build_enemy_ai_action
 from game.combat.effects import (
     get_effective_major_stat,
     get_effective_minor_stat,
     get_effective_skill_access,
 )
 from game.combat.models import ActionRequest, ActionResult
+from game.core.dice import SeededRNG
 from game.core.data_loader import (
     ClassData,
     load_class,
@@ -21,7 +23,6 @@ from game.core.enums import (
     EntityType,
     LevelRewardType,
     SessionPhase,
-    TargetType,
 )
 from game.character.player_character import PlayerCharacter
 from game.session.factories import build_player
@@ -727,44 +728,16 @@ class GameService:
 
     @staticmethod
     def _build_enemy_action(session: _ActiveSession) -> ActionRequest | None:
-        """MVP enemy AI: first skill, first alive player/ally per single-target hit."""
         combat = session.state.combat
         current_id = combat.turn_order[combat.current_turn_index]
-        available = session.manager.get_combat_actions(session.state, current_id)
-        if not available:
-            return None
-        skill, _ = available[0]
-        skill_id = skill.skill_id
-
-        alive_players = [
-            eid
-            for eid in combat.turn_order
-            if combat.entities[eid].entity_type == EntityType.PLAYER
-            and combat.entities[eid].current_hp > 0
-        ]
-        alive_allies = [
-            eid
-            for eid in combat.turn_order
-            if eid != current_id
-            and combat.entities[eid].entity_type == EntityType.ENEMY
-            and combat.entities[eid].current_hp > 0
-        ]
-
-        pairs: list[tuple[int, str]] = []
-        for hit_index, hit in enumerate(skill.hits):
-            if hit.share_with is not None:
-                continue
-            if hit.target_type == TargetType.SINGLE_ENEMY and alive_players:
-                pairs.append((hit_index, alive_players[0]))
-            elif hit.target_type == TargetType.SINGLE_ALLY and alive_allies:
-                pairs.append((hit_index, alive_allies[0]))
-
-        return ActionRequest(
-            actor_id=current_id,
-            action_type=ActionType.ACTION,
-            skill_id=skill_id,
-            target_ids=tuple(pairs),
+        rng = SeededRNG(0)
+        rng.set_state(combat.rng_state)
+        action = build_enemy_ai_action(combat, current_id, rng)
+        session.state = replace(
+            session.state,
+            combat=replace(combat, rng_state=rng.get_state()),
         )
+        return action
 
     @staticmethod
     def _current_turn_id(session: _ActiveSession) -> str | None:
