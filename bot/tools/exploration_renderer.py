@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Renders exploration, class selection, events, and run summary into Telegram messages.
 
 Pure functions — no aiogram imports. Takes service-layer DTOs, returns strings.
