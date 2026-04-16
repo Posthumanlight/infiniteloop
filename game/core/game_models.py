@@ -197,3 +197,32 @@ class InventorySnapshot:
     equipment_slots: tuple[EquipmentSlotInfo, ...]
     can_manage_equipment: bool
     equipment_lock_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class LootRollInfo:
+    player_id: str
+    roll: int
+
+
+@dataclass(frozen=True)
+class LootRoundInfo:
+    round_index: int
+    rolls: tuple[LootRollInfo, ...]
+
+
+@dataclass(frozen=True)
+class LootAwardInfo:
+    source_enemy_id: str
+    item_blueprint_id: str
+    item_name: str
+    quality: int
+    winner_id: str
+    winner_item_instance_id: str
+    copy_number: int
+    rounds: tuple[LootRoundInfo, ...]
+
+
+@dataclass(frozen=True)
+class LootResolutionSnapshot:
+    awards: tuple[LootAwardInfo, ...]

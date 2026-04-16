@@ -14,6 +14,7 @@ from bot.tools.combat_renderer import (
     render_turn_batch,
     render_turn_prompt,
     render_combat_end,
+    render_loot_resolution,
 )
 from bot.tools.exploration_renderer import (
     render_exploration_choices,
@@ -333,6 +334,15 @@ async def _render_batch_and_prompt(
         # Show combat end summary
         end_text = render_combat_end(batch, players)
         await callback.message.answer(end_text)
+
+        loot = game_service.consume_pending_loot(session_id)
+        if loot is not None and loot.awards:
+            player_names = {
+                player.entity_id: player.display_name
+                for player in game_service.get_session_players(session_id)
+            }
+            for text in render_loot_resolution(loot, player_names):
+                await callback.message.answer(text)
 
         # Check what comes next in the exploration loop
         phase = game_service.get_session_phase(session_id)

@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState
+from game.core.game_models import LootResolutionSnapshot
 from game.core.enums import LevelRewardType, SessionEndReason, SessionPhase
 from game.events.models import EventState
 from game.world.models import ExplorationState
@@ -66,6 +67,7 @@ class SessionState:
     event: EventState | None = None
     pending_rewards: dict[str, PendingRewardQueue] = field(default_factory=dict)
     reward_notices: tuple[RewardNotice, ...] = ()
+    pending_loot: LootResolutionSnapshot | None = None
     run_stats: RunStats = RunStats()
     end_reason: SessionEndReason | None = None
     max_depth: int = 10

@@ -43,6 +43,7 @@ from game.core.game_models import (
     InventorySnapshot,
     ItemEffectInfo,
     ItemInfo,
+    LootResolutionSnapshot,
     ModifierInfo,
     PendingRewardInfo,
     PassiveInfo,
@@ -349,6 +350,17 @@ class GameService:
             )
             for notice in notices
         )
+
+    def consume_pending_loot(
+        self,
+        session_id: str,
+    ) -> LootResolutionSnapshot | None:
+        session = self._get_session(session_id)
+        if session.state is None:
+            return None
+        pending = session.state.pending_loot
+        session.state = replace(session.state, pending_loot=None)
+        return pending
 
     def get_session_phase(self, session_id: str) -> SessionPhase | None:
         session = self._sessions.get(session_id)

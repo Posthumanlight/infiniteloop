@@ -8,7 +8,9 @@ from game.core.data_loader import (
     load_constants,
     load_effect,
     load_enemy,
+    load_enemy_loot,
     load_item_blueprint,
+    load_loot_constants,
     load_modifier,
     load_passive,
     load_skill,
@@ -161,9 +163,26 @@ def test_load_item_blueprint_long_sword():
     assert item.effects[0].expr == "10 + quality"
 
 
-def test_load_item_blueprint_battle_charm():
-    item = load_item_blueprint("battle_charm")
+def test_load_item_blueprint_sealed_talisman():
+    item = load_item_blueprint("sealed_talisman")
 
     assert item.item_type == ItemType.RELIC
-    assert item.effects[0].effect_type == ItemEffect.GRANT_SKILL
-    assert item.effects[0].skill_id == "rampage"
+    assert item.effects[0].effect_type == ItemEffect.BLOCK_SKILL
+    assert item.effects[0].skill_id == "slash"
+
+
+def test_load_loot_constants():
+    loot = load_loot_constants()
+
+    assert loot["item_quality_formula"] == "room_difficulty_scalar"
+
+
+def test_load_enemy_loot_goblin_boss():
+    loot = load_enemy_loot("goblin_boss")
+
+    assert len(loot) == 1
+    assert loot[0].enemy_id == "goblin_boss"
+    assert loot[0].item_id == "long_sword"
+    assert loot[0].min_quantity == 1
+    assert loot[0].max_quantity == 1
+    assert loot[0].drop_rate == 1.0

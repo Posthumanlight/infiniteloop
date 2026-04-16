@@ -347,6 +347,59 @@ def load_world_difficulty_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["world_difficulty"]
 
 
+def load_loot_constants() -> dict[str, Any]:
+    return _load_toml("constants.toml")["loot"]
+
+
+# ---------------------------------------------------------------------------
+# Loot tables
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LootDropData:
+    enemy_id: str
+    item_id: str
+    min_quantity: int
+    max_quantity: int
+    drop_rate: float
+
+
+def load_loot_table() -> dict[str, tuple[LootDropData, ...]]:
+    raw = _load_toml("loot_table.toml").get("drops", [])
+    grouped: dict[str, list[LootDropData]] = {}
+
+    for row in raw:
+        min_quantity = int(row["min_quantity"])
+        max_quantity = int(row["max_quantity"])
+        drop_rate = float(row["drop_rate"])
+
+        if min_quantity < 0:
+            raise ValueError("loot min_quantity must be >= 0")
+        if max_quantity < min_quantity:
+            raise ValueError("loot max_quantity must be >= min_quantity")
+        if not 0.0 <= drop_rate <= 1.0:
+            raise ValueError("loot drop_rate must be between 0.0 and 1.0")
+
+        entry = LootDropData(
+            enemy_id=str(row["enemy_id"]),
+            item_id=str(row["item_id"]),
+            min_quantity=min_quantity,
+            max_quantity=max_quantity,
+            drop_rate=drop_rate,
+        )
+        grouped.setdefault(entry.enemy_id, []).append(entry)
+
+    return {
+        enemy_id: tuple(entries)
+        for enemy_id, entries in grouped.items()
+    }
+
+
+def load_enemy_loot(enemy_id: str) -> tuple[LootDropData, ...]:
+    return load_loot_table().get(enemy_id, ())
+
+
 # ---------------------------------------------------------------------------
 # Item definitions
 # ---------------------------------------------------------------------------

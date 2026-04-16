@@ -36,6 +36,7 @@ def build_enemy(
     minor = MinorStats(values=dict(data.minor_stats))
     return Enemy(
         entity_id=f"{enemy_id}_{uuid.uuid4().hex[:8]}",
+        enemy_template_id=enemy_id,
         entity_name=data.name,
         entity_type=EntityType.ENEMY,
         major_stats=major,
