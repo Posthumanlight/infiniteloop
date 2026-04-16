@@ -21,7 +21,9 @@ def get_random_png(folder_path):
         os.path.join(script_dir, "Mobs", "wolfs"),
         os.path.join(script_dir, "Mobs", "skeletons"),
         os.path.join(script_dir, "Mobs", "fire_imps"),
-        os.path.join(script_dir, "Mobs", "bandits")
+        os.path.join(script_dir, "Mobs", "bandits"),
+        os.path.join(script_dir, "Mobs", "crocodile"),
+        os.path.join(script_dir, "Mobs", "draugrs")
     ]
     
     actual_path = None
@@ -112,6 +114,10 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "fire_imps", "size": (500, 500), "hp": hp, "max_hp": max_hp})
         elif "bandit" in name_lower or "бандит" in name_lower:
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "bandits", "size": (700, 700), "hp": hp, "max_hp": max_hp})
+        elif "crocodile" in name_lower or "крокодил" in name_lower:
+            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "crocodile", "size": (710, 532), "hp": hp, "max_hp": max_hp})
+        elif "draugr" in name_lower or "драугр" in name_lower:
+            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "draugrs", "size": (700, 700), "hp": hp, "max_hp": max_hp})
         elif "bayayamshiks" in name_lower or "баяямшикс" in name_lower:
             mobs_to_spawn.append({
                 "entity_id": entity_id, 
