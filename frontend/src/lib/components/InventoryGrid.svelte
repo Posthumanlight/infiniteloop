@@ -2,55 +2,60 @@
   import ItemCard from '$components/ItemCard.svelte';
   import type { Item } from '$lib/types';
 
-  type DragSource =
-    | { kind: 'inventory'; instanceId: string }
-    | { kind: 'equipment'; instanceId: string; slotType: 'weapon' | 'armor' | 'relic'; slotIndex: number | null };
-
   let {
     items,
-    dragActive,
-    hoveredDropId,
+    selectedInstanceId,
+    inventoryTargetActive,
     canManageEquipment,
-    isValidDrop,
-    onItemPointerDown,
-    onItemPointerMove,
-    onItemPointerUp
+    onItemTap,
+    onInventoryTap
   }: {
     items: Item[];
-    dragActive: boolean;
-    hoveredDropId: string | null;
+    selectedInstanceId: string | null;
+    inventoryTargetActive: boolean;
     canManageEquipment: boolean;
-    isValidDrop: (dropId: string) => boolean;
-    onItemPointerDown: (event: PointerEvent, source: DragSource, item: Item) => void;
-    onItemPointerMove: (event: PointerEvent) => void;
-    onItemPointerUp: (event: PointerEvent) => void;
+    onItemTap: (item: Item) => void;
+    onInventoryTap: () => void | Promise<void>;
   } = $props();
 </script>
 
 <section
-  class:drag-active={dragActive}
-  class:hover-valid={hoveredDropId === 'inventory' && isValidDrop('inventory')}
-  class:hover-invalid={hoveredDropId === 'inventory' && !isValidDrop('inventory')}
+  role="button"
+  tabindex={canManageEquipment ? 0 : -1}
+  aria-disabled={!canManageEquipment}
+  class:target={inventoryTargetActive}
   class="grid-shell"
-  data-drop-id="inventory"
+  onclick={() => onInventoryTap()}
+  onkeydown={(event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onInventoryTap();
+    }
+  }}
 >
   {#if items.length === 0}
-    <p class="empty">No unequipped items right now.</p>
+    <p class="empty">
+      {#if inventoryTargetActive}
+        Tap here to unequip the selected item.
+      {:else}
+        No unequipped items right now.
+      {/if}
+    </p>
   {:else}
     <div class="grid">
       {#each items as item}
-        <div
-          role="button"
-          tabindex="-1"
-          class:draggable={canManageEquipment}
-          class="drag-anchor"
-          onpointerdown={(event) => onItemPointerDown(event, { kind: 'inventory', instanceId: item.instance_id }, item)}
-          onpointermove={onItemPointerMove}
-          onpointerup={onItemPointerUp}
-          onpointercancel={onItemPointerUp}
+        <button
+          type="button"
+          class:selected={selectedInstanceId === item.instance_id}
+          class="item-button"
+          onclick={(event) => {
+            event.stopPropagation();
+            onItemTap(item);
+          }}
+          disabled={!canManageEquipment}
         >
           <ItemCard {item} />
-        </div>
+        </button>
       {/each}
     </div>
   {/if}
@@ -67,18 +72,9 @@
       background 120ms ease;
   }
 
-  .grid-shell.drag-active {
-    background: rgba(255, 255, 255, 0.02);
-  }
-
-  .grid-shell.hover-valid {
+  .grid-shell.target {
     border-color: rgba(122, 255, 179, 0.68);
     background: rgba(71, 181, 119, 0.14);
-  }
-
-  .grid-shell.hover-invalid {
-    border-color: rgba(255, 122, 122, 0.72);
-    background: rgba(168, 56, 56, 0.14);
   }
 
   .grid {
@@ -86,12 +82,29 @@
     gap: 0.85rem;
   }
 
-  .drag-anchor {
-    touch-action: none;
+  .item-button {
+    border: 0;
+    width: 100%;
+    padding: 0;
+    border-radius: 18px;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    color: inherit;
   }
 
-  .drag-anchor.draggable {
-    cursor: grab;
+  .item-button.selected {
+    outline: 2px solid rgba(122, 193, 255, 0.72);
+    outline-offset: 2px;
+  }
+
+  .item-button:disabled {
+    opacity: 0.72;
+  }
+
+  .item-button:not(:disabled),
+  .grid-shell.target {
+    cursor: pointer;
   }
 
   .empty {

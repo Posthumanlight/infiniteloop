@@ -2,45 +2,41 @@
   import ItemCard from '$components/ItemCard.svelte';
   import type { EquipmentSlot, Item } from '$lib/types';
 
-  type DragSource =
-    | { kind: 'inventory'; instanceId: string }
-    | { kind: 'equipment'; instanceId: string; slotType: 'weapon' | 'armor' | 'relic'; slotIndex: number | null };
-
   let {
     slots,
-    dragActive,
-    hoveredDropId,
+    selectedInstanceId,
     canManageEquipment,
-    isValidDrop,
-    onItemPointerDown,
-    onItemPointerMove,
-    onItemPointerUp
+    isTargetSlot,
+    onItemTap,
+    onSlotTap
   }: {
     slots: EquipmentSlot[];
-    dragActive: boolean;
-    hoveredDropId: string | null;
+    selectedInstanceId: string | null;
     canManageEquipment: boolean;
-    isValidDrop: (dropId: string) => boolean;
-    onItemPointerDown: (event: PointerEvent, source: DragSource, item: Item) => void;
-    onItemPointerMove: (event: PointerEvent) => void;
-    onItemPointerUp: (event: PointerEvent) => void;
+    isTargetSlot: (
+      slotType: 'weapon' | 'armor' | 'relic',
+      slotIndex: number | null,
+      acceptsItemType: string,
+    ) => boolean;
+    onItemTap: (
+      item: Item,
+      slotType: 'weapon' | 'armor' | 'relic',
+      slotIndex: number | null,
+    ) => void;
+    onSlotTap: (
+      slotType: 'weapon' | 'armor' | 'relic',
+      slotIndex: number | null,
+      acceptsItemType: string,
+    ) => void | Promise<void>;
   } = $props();
-
-  function dropId(slot: EquipmentSlot): string {
-    return slot.slot_type === 'relic' ? `relic:${slot.slot_index}` : slot.slot_type;
-  }
 </script>
 
 <div class="board">
   {#each slots as slot}
-    {@const slotDropId = dropId(slot)}
     <section
-      class:drag-active={dragActive}
-      class:hover-valid={hoveredDropId === slotDropId && isValidDrop(slotDropId)}
-      class:hover-invalid={hoveredDropId === slotDropId && !isValidDrop(slotDropId)}
+      class:target={isTargetSlot(slot.slot_type, slot.slot_index, slot.accepts_item_type)}
       class:occupied={slot.item !== null}
       class="slot"
-      data-drop-id={slotDropId}
     >
       <header>
         <p>{slot.label}</p>
@@ -49,30 +45,24 @@
 
       {#if slot.item}
         {@const equippedItem = slot.item}
-        <div
-          role="button"
-          tabindex="-1"
-          class:draggable={canManageEquipment}
-          class="drag-anchor"
-          onpointerdown={(event) =>
-            onItemPointerDown(
-              event,
-              {
-                kind: 'equipment',
-                instanceId: equippedItem.instance_id,
-                slotType: slot.slot_type,
-                slotIndex: slot.slot_index
-              },
-              equippedItem
-            )}
-          onpointermove={onItemPointerMove}
-          onpointerup={onItemPointerUp}
-          onpointercancel={onItemPointerUp}
+        <button
+          type="button"
+          class:selected={selectedInstanceId === equippedItem.instance_id}
+          class="slot-button"
+          onclick={() => onItemTap(equippedItem, slot.slot_type, slot.slot_index)}
+          disabled={!canManageEquipment}
         >
           <ItemCard item={equippedItem} />
-        </div>
+        </button>
       {:else}
-        <div class="placeholder">Drop {slot.accepts_item_type} here.</div>
+        <button
+          type="button"
+          class="placeholder"
+          onclick={() => onSlotTap(slot.slot_type, slot.slot_index, slot.accepts_item_type)}
+          disabled={!canManageEquipment}
+        >
+          Tap to equip {slot.accepts_item_type}.
+        </button>
       {/if}
     </section>
   {/each}
@@ -98,18 +88,9 @@
       transform 120ms ease;
   }
 
-  .slot.drag-active {
-    transform: translateY(-1px);
-  }
-
-  .slot.hover-valid {
+  .slot.target {
     border-color: rgba(122, 255, 179, 0.68);
     background: rgba(71, 181, 119, 0.14);
-  }
-
-  .slot.hover-invalid {
-    border-color: rgba(255, 122, 122, 0.72);
-    background: rgba(168, 56, 56, 0.14);
   }
 
   .slot.occupied {
@@ -140,6 +121,26 @@
     letter-spacing: 0.12em;
   }
 
+  .slot-button,
+  .placeholder {
+    border: 0;
+    width: 100%;
+    font: inherit;
+    text-align: left;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  .slot-button {
+    border-radius: 18px;
+  }
+
+  .slot-button.selected {
+    outline: 2px solid rgba(122, 193, 255, 0.72);
+    outline-offset: 2px;
+  }
+
   .placeholder {
     align-content: center;
     min-height: 4.6rem;
@@ -151,12 +152,14 @@
     text-align: center;
   }
 
-  .drag-anchor {
-    touch-action: none;
+  .slot-button:disabled,
+  .placeholder:disabled {
+    opacity: 0.72;
   }
 
-  .drag-anchor.draggable {
-    cursor: grab;
+  .slot-button:not(:disabled),
+  .placeholder:not(:disabled) {
+    cursor: pointer;
   }
 
   @media (min-width: 760px) {
