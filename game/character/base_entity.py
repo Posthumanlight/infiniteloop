@@ -19,4 +19,4 @@ class BaseEntity:
     current_energy: int
     active_effects: tuple = ()  # tuple[StatusEffectInstance, ...] — forward ref
     passive_skills: tuple[str, ...] = ()
-    skill_modifiers: tuple[ModifierInstance, ...] = ()  # type: ignore[type-arg]
+    skill_modifiers: tuple["ModifierInstance", ...] = ()  # type: ignore[type-arg]
