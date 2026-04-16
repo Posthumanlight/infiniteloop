@@ -633,6 +633,7 @@ class SkillModifierData:
     class_tags: tuple[str, ...] = ()
     damage_type_filter: str | None = None
     damage_type_override: str | None = None
+    effect_id: str | None = None
 
 
 def load_modifiers() -> dict[str, SkillModifierData]:
@@ -650,6 +651,7 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             class_tags=tuple(mdata.get("class_tags", [])),
             damage_type_filter=mdata.get("damage_type_filter"),
             damage_type_override=mdata.get("damage_type_override"),
+            effect_id=mdata.get("effect_id"),
         )
         for mid, mdata in raw.items()
     }

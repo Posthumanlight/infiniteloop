@@ -264,6 +264,27 @@ def test_modifier_context_sees_effective_major_stats(monkeypatch):
     assert state.entities["p1"].current_hp == 75
 
 
+def test_butcher_adds_extra_bleed_stack_to_deep_wounds():
+    warrior = replace(
+        make_warrior(),
+        skills=("deep_wounds",),
+        skill_modifiers=(ModifierInstance("butcher"),),
+    )
+    state = make_combat_state(players=[warrior])
+    skill = load_skill("deep_wounds")
+
+    state, hits = resolve_skill(state, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
+
+    bleed = [
+        effect
+        for effect in state.entities["e1"].active_effects
+        if effect.effect_id == "bleed"
+    ]
+    assert len(bleed) == 1
+    assert bleed[0].stack_count == 2
+    assert any(hit.effects_applied == ("bleed",) for hit in hits)
+
+
 def test_multi_trigger_passive_grants_energy_on_hit_and_on_take_damage():
     warrior = replace(
         make_warrior(),

@@ -35,3 +35,13 @@ class_tags = ["warrior"]
 expr = "0"
 action = "change_type"
 damage_type_override = "fire"
+
+[modifiers.butcher]
+name = "Butcher"
+phase = "post_hit"
+stackable = true
+skill_filter = "deep_wounds"
+class_tags = ["warrior"]
+expr = "1"
+action = "apply_effect"
+effect_id = "bleed"

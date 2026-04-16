@@ -40,12 +40,12 @@ hits = [
 
 [skills.cleave]
 name = "Cleave"
-energy_cost = 10
+energy_cost = 15
 action_type = "action"
-level_eligibility = [3, 15]
+level_eligibility = [3, 99]
 class_tags = ["warrior"]
 hits = [
-  { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.0 },
+  { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 2, variance = 0.0 },
 ]
 
 [skills.brutalize]
