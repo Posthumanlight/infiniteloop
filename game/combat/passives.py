@@ -1,5 +1,7 @@
+from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Iterable
+
 
 from game.combat.cooldowns import is_on_cooldown, put_on_cooldown
 from game.combat.effects import (
