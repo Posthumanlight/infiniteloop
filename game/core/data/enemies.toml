@@ -117,7 +117,7 @@ mastery = 1
 
 [enemies.crocodile]
 name = "Crocodile"
-skills = ["crocodile_death_roll", generic_enemy_attack"]
+skills = ["crocodile_death_roll", "generic_enemy_attack"]
 passives = []
 xp = 40
 combat_type = "elite"

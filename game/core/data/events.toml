@@ -54,7 +54,7 @@ description = "Take what is inside."
 outcomes = [
   { action = "give_item", target = "voter", item_id = "long_sword" },
   { action = "give_item", target = "voter", item_id = "iron_armor" },
-  { action = "give_item", target = "voter", item_id = "sealed_talisman" }
+  { action = "give_item", target = "voter", item_id = "sealed_talisman" },
 ]
 
 [[events.mysterious_cache.choices]]
