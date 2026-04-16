@@ -8,12 +8,12 @@ class_tags = ["warrior"]
 expr = "10"
 action = "bonus_damage"
 
-#Stackable: vampirism — heal for 7% of damage dealt per stack
+#Stackable: vampirism — heal for 2% of damage dealt per stack
 [modifiers.vampiric]
 name = "Vampiric"
 phase = "post_hit"
 stackable = true
-expr = "damage_dealt * 0.07"
+expr = "damage_dealt * 0.02"
 action = "vampirism"
 class_tags=["warrior", "mage"]
 

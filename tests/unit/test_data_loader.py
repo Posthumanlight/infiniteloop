@@ -8,6 +8,7 @@ from game.core.data_loader import (
     load_constants,
     load_effect,
     load_enemy,
+    load_item_blueprint,
     load_modifier,
     load_passive,
     load_skill,
@@ -16,6 +17,8 @@ from game.core.enums import (
     ActionType,
     DamageType,
     EffectActionType,
+    ItemEffect,
+    ItemType,
     TargetType,
     TriggerType,
 )
@@ -146,3 +149,21 @@ def test_load_passive_multi_trigger():
     )
     assert passive.trigger == TriggerType.ON_HIT
     assert passive.action.value == "grant_energy"
+
+
+def test_load_item_blueprint_long_sword():
+    item = load_item_blueprint("long_sword")
+
+    assert item.blueprint_id == "long_sword"
+    assert item.item_type == ItemType.WEAPON
+    assert item.effects[0].effect_type == ItemEffect.MODIFY_STAT
+    assert item.effects[0].stat == "attack"
+    assert item.effects[0].expr == "10 + quality"
+
+
+def test_load_item_blueprint_battle_charm():
+    item = load_item_blueprint("battle_charm")
+
+    assert item.item_type == ItemType.RELIC
+    assert item.effects[0].effect_type == ItemEffect.GRANT_SKILL
+    assert item.effects[0].skill_id == "rampage"

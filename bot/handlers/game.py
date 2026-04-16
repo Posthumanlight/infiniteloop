@@ -567,7 +567,7 @@ async def msg_save_name(
             level=player.level,
             xp=player.xp,
             skill_modifiers=player.skill_modifiers,
-            inventory=dict(player.inventory.content),
+            inventory=player.inventory,
         )
     else:
         if choice.source_character_id is None:
@@ -584,6 +584,7 @@ async def msg_save_name(
             xp=player.xp,
             skills=player.skills,
             skill_modifiers=player.skill_modifiers,
+            inventory=player.inventory,
         )
 
     choice.source_character_name = character_name

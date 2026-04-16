@@ -15,10 +15,13 @@ from game.core.enums import (
     OutcomeAction,
     OutcomeTarget,
     PassiveAction,
+    ItemEffect,
+    ItemType,
     TargetType,
     TriggerType,
     UsageLimit,
 )
+from game.items.items import ItemBlueprint, ItemBlueprintEffect
 from game.events.models import (
     ChoiceDef,
     EventDef,
@@ -342,6 +345,88 @@ def load_restoration_constants() -> dict[str, Any]:
 
 def load_world_difficulty_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["world_difficulty"]
+
+
+# ---------------------------------------------------------------------------
+# Item definitions
+# ---------------------------------------------------------------------------
+
+_ITEM_STAT_EFFECTS = {ItemEffect.MODIFY_STAT}
+_ITEM_SKILL_EFFECTS = {
+    ItemEffect.GRANT_SKILL,
+    ItemEffect.BLOCK_SKILL,
+}
+_ITEM_PASSIVE_EFFECTS = {
+    ItemEffect.GRANT_PASSIVE,
+    ItemEffect.BLOCK_PASSIVE,
+}
+
+
+def _parse_item_effect(raw: dict[str, Any]) -> ItemBlueprintEffect:
+    effect_type = ItemEffect(raw["type"])
+    stat = raw.get("stat")
+    expr = raw.get("expr")
+    skill_id = raw.get("skill_id")
+    passive_id = raw.get("passive_id")
+
+    if effect_type in _ITEM_STAT_EFFECTS:
+        if stat is None or expr is None:
+            raise ValueError(
+                f"Item effect '{effect_type.value}' requires stat and expr",
+            )
+        if skill_id is not None or passive_id is not None:
+            raise ValueError(
+                f"Item effect '{effect_type.value}' does not accept skill_id/passive_id",
+            )
+    elif effect_type in _ITEM_SKILL_EFFECTS:
+        if skill_id is None:
+            raise ValueError(
+                f"Item effect '{effect_type.value}' requires skill_id",
+            )
+        if stat is not None or expr is not None or passive_id is not None:
+            raise ValueError(
+                f"Item effect '{effect_type.value}' only accepts skill_id",
+            )
+    elif effect_type in _ITEM_PASSIVE_EFFECTS:
+        if passive_id is None:
+            raise ValueError(
+                f"Item effect '{effect_type.value}' requires passive_id",
+            )
+        if stat is not None or expr is not None or skill_id is not None:
+            raise ValueError(
+                f"Item effect '{effect_type.value}' only accepts passive_id",
+            )
+
+    return ItemBlueprintEffect(
+        effect_type=effect_type,
+        stat=stat,
+        expr=expr,
+        skill_id=skill_id,
+        passive_id=passive_id,
+    )
+
+
+def load_item_blueprints() -> dict[str, ItemBlueprint]:
+    raw = _load_toml("items.toml").get("items", {})
+    return {
+        item_id: ItemBlueprint(
+            blueprint_id=item_id,
+            name=item_data["name"],
+            item_type=ItemType(item_data["item_type"]),
+            effects=tuple(
+                _parse_item_effect(effect_raw)
+                for effect_raw in item_data.get("effects", [])
+            ),
+        )
+        for item_id, item_data in raw.items()
+    }
+
+
+def load_item_blueprint(blueprint_id: str) -> ItemBlueprint:
+    blueprints = load_item_blueprints()
+    if blueprint_id not in blueprints:
+        raise KeyError(f"Unknown item blueprint: {blueprint_id}")
+    return blueprints[blueprint_id]
 
 
 # ---------------------------------------------------------------------------

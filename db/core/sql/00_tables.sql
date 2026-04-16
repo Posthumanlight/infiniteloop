@@ -56,3 +56,28 @@ create table public.game_characters_inventory (
   additional_data json null,
   constraint game_characters_inventory_pkey primary key (character_id)
 ) TABLESPACE pg_default;
+
+create table public.game_characters_item_instances (
+  instance_id text not null,
+  character_id bigint not null,
+  blueprint_id text not null,
+  item_type text not null,
+  quality bigint not null default 1,
+  generated_effects jsonb not null,
+  equipped_slot text null,
+  equipped_index bigint null,
+  additional_data jsonb null,
+  constraint game_characters_item_instances_pkey primary key (instance_id)
+) TABLESPACE pg_default;
+
+create index game_characters_item_instances_character_idx
+on public.game_characters_item_instances (character_id);
+
+create table public.game_enemies_loottable (
+  enemy_id text not null,
+  item_id text not null,
+  min_quantity bigint not null default '0'::bigint,
+  max_quantity bigint not null,
+  drop_rate real not null default '0.001'::real,
+  constraint game_enemies_loottable_pkey primary key (enemy_id, item_id)
+) TABLESPACE pg_default;

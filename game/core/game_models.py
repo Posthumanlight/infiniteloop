@@ -158,3 +158,29 @@ class CharacterSheet:
     modifiers: tuple[ModifierInfo, ...]
     active_effects: tuple[EffectInfo, ...]
     in_combat: bool
+
+
+@dataclass(frozen=True)
+class ItemEffectInfo:
+    effect_type: str
+    stat: str | None = None
+    value: float | None = None
+    skill_id: str | None = None
+    passive_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ItemInfo:
+    instance_id: str
+    blueprint_id: str
+    name: str
+    item_type: str
+    quality: int
+    equipped_slot: str | None
+    equipped_index: int | None
+    effects: tuple[ItemEffectInfo, ...]
+
+
+@dataclass(frozen=True)
+class InventorySnapshot:
+    items: tuple[ItemInfo, ...]

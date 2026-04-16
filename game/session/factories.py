@@ -118,7 +118,7 @@ def build_player_from_saved(
             )
             for modifier in record.skill_modifiers
         ),
-        inventory=Inventory(content=dict(record.inventory)),
+        inventory=record.inventory,
         level=record.level,
         xp=record.xp,
     )

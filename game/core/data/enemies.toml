@@ -115,6 +115,26 @@ energy = 60
 mastery = 1
 [enemies.wolf.minor_stats]
 
+[enemies.crocodile]
+name = "Crocodile"
+skills = ["crocodile_death_roll", generic_enemy_attack"]
+passives = []
+xp = 40
+combat_type = "elite"
+tags = ["forest", "wild"]
+[enemies.crocodile.major_stats]
+attack = 7
+hp = 55
+speed = 12
+crit_chance = 0.0
+crit_dmg = 1.3
+resistance = 200
+energy = 60
+mastery = 1
+[enemies.crocodile.minor_stats]
+slashing_def_pct = 0.15
+
+
 #demons
 [enemies.fire_imp]
 name = "Fire Imp"

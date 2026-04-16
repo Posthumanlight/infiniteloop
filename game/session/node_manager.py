@@ -35,6 +35,8 @@ from game.events.engine import (
     submit_vote,
 )
 from game.events.models import OutcomeResult
+from game.items.equipment_effects import get_effective_player_major_stat
+from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.factories import build_enemies
 from game.session.models import (
     PendingReward,
@@ -435,8 +437,9 @@ class NodeManager:
             if player.current_hp <= 0:
                 updated.append(player)
                 continue
+            max_hp = int(get_effective_player_major_stat(player, "hp"))
             ctx: dict[str, object] = {
-                "max_hp": player.major_stats.hp,
+                "max_hp": max_hp,
                 "current_hp": player.current_hp,
                 "level": player.level,
                 "attack": player.major_stats.attack,
@@ -448,7 +451,7 @@ class NodeManager:
                 "mastery": player.major_stats.mastery,
             }
             heal = max(0, int(evaluate_expr(restoration_formula, ctx)))
-            new_hp = min(player.current_hp + heal, player.major_stats.hp)
+            new_hp = min(player.current_hp + heal, max_hp)
             total_healing += new_hp - player.current_hp
             updated.append(replace(player, current_hp=new_hp))
         new_stats = replace(
@@ -539,9 +542,10 @@ class NodeManager:
 
             match outcome.action:
                 case OutcomeAction.HEAL:
+                    max_hp = int(get_effective_player_major_stat(player, "hp"))
                     new_hp = min(
                         player.current_hp + outcome.amount,
-                        player.major_stats.hp,
+                        max_hp,
                     )
                     total_healing += new_hp - player.current_hp
                     player = replace(player, current_hp=new_hp)
@@ -552,9 +556,10 @@ class NodeManager:
                     player = replace(player, current_hp=new_hp)
 
                 case OutcomeAction.RESTORE_ENERGY:
+                    max_energy = int(get_effective_player_major_stat(player, "energy"))
                     new_energy = min(
                         player.current_energy + outcome.amount,
-                        player.major_stats.energy,
+                        max_energy,
                     )
                     player = replace(player, current_energy=new_energy)
 
@@ -592,8 +597,18 @@ class NodeManager:
                 case OutcomeAction.START_COMBAT:
                     pass  # Handled by resolve_event caller
 
-                case (OutcomeAction.GIVE_ITEM
-                      | OutcomeAction.GIVE_GOLD
+                case OutcomeAction.GIVE_ITEM:
+                    if outcome.item_id is not None:
+                        item = generate_item_from_blueprint_id(
+                            outcome.item_id,
+                            quality=1,
+                        )
+                        player = replace(
+                            player,
+                            inventory=player.inventory.add_item(item),
+                        )
+
+                case (OutcomeAction.GIVE_GOLD
                       | OutcomeAction.TAKE_GOLD):
                     pass  # TODO: stubbed until inventory/gold systems exist
 

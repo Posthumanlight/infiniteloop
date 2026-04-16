@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Iterable
 
@@ -16,6 +14,7 @@ from game.core.data_loader import PassiveSkillData, load_passive, load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, PassiveAction, TriggerType, UsageLimit
 from game.core.formula_eval import ZeroDefaultNamespace, evaluate_expr
+from game.items.equipment_effects import get_effective_passive_ids
 
 
 @dataclass(frozen=True)
@@ -249,7 +248,7 @@ def _execute_passive_action(
 
 
 def _iter_matching_passives(entity, trigger: TriggerType) -> Iterable[PassiveSkillData]:
-    for passive_id in entity.passive_skills:
+    for passive_id in get_effective_passive_ids(entity):
         passive = load_passive(passive_id)
         if trigger in passive.triggers:
             yield passive

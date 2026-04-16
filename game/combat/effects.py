@@ -1,14 +1,14 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 from typing import Any
 
 from game.character.base_entity import BaseEntity
+from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState, DamageResult, HitResult
 from game.core.data_loader import load_effect
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, EffectActionType, TriggerType
 from game.core.formula_eval import ExprContext, evaluate_expr
+from game.items.equipment_effects import collect_equipped_item_effects
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +506,11 @@ def get_effective_skill_access(
     grants: list[str] = []
     blocks: list[str] = []
 
+    if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
+        item_effects = collect_equipped_item_effects(entity.inventory)
+        grants.extend(item_effects.granted_skills)
+        blocks.extend(item_effects.blocked_skills)
+
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)
         if state is not None:
@@ -564,6 +569,10 @@ def get_effective_major_stat(
     entity = state.entities[entity_id]
     base_value = float(getattr(entity.major_stats, stat_name))
 
+    if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
+        item_effects = collect_equipped_item_effects(entity.inventory)
+        base_value += item_effects.stat_modifiers.get(stat_name, 0.0)
+
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)
         for action in effect_def.actions:
@@ -602,6 +611,10 @@ def get_effective_minor_stat(
     """
     entity = state.entities[entity_id]
     base_value = entity.minor_stats.values.get(stat_key, 0.0)
+
+    if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
+        item_effects = collect_equipped_item_effects(entity.inventory)
+        base_value += item_effects.stat_modifiers.get(stat_key, 0.0)
 
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)

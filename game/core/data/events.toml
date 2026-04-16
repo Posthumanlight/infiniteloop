@@ -30,7 +30,7 @@ weight = 5
 label = "It`s crocodiles!"
 description = "It`s goddamn crocodiles!"
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["bandit"]},
+    { action = "start_combat", target = "all", enemy_group = ["crocodile", "crocodile"]},
 ]
 
 [[events.river_with_surprise.choices]]
@@ -39,3 +39,25 @@ description = "It`s goddamn goblins!"
 outcomes = [
     { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
 ]
+
+[events.mysterious_cache]
+name = "Test Cache"
+description = "A half-buried chest lies beneath the roots."
+event_type = "multiplayer"
+min_depth = 0
+max_depth = 10
+weight = 10
+
+[[events.mysterious_cache.choices]]
+label = "Open the cache"
+description = "Take what is inside."
+outcomes = [
+  { action = "give_item", target = "voter", item_id = "long_sword" },
+  { action = "give_item", target = "voter", item_id = "iron_armor" },
+  { action = "give_item", target = "voter", item_id = "sealed_talisman" }
+]
+
+[[events.mysterious_cache.choices]]
+label = "Leave it"
+description = "Walk away."
+outcomes = []

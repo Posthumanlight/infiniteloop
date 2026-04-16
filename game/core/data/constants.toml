@@ -25,8 +25,8 @@ per_extra_player = 0.3
 max_scalar = 999.99
 
 [world_difficulty.stat_weights]
-hp = 1.6
-attack = 0.35
+hp = 2
+attack = 1
 speed = 0.05
 resistance = 0.50
 mastery = 0.35

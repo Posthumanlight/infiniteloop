@@ -1,15 +1,17 @@
 from enum import Enum
 
+#combat
+class EntityType(Enum):
+    PLAYER = "player"
+    ENEMY = "enemy"
+
 
 class DamageType(Enum):
     SLASHING = "slashing"
     PIERCING = "piercing"
     ARCANE = "arcane"
     FIRE = 'fire'
-    ICE = 'ice'
-    
-
-
+    ICE = 'ice'    
 
 class TargetType(Enum):
     SINGLE_ENEMY = "single_enemy"
@@ -18,11 +20,9 @@ class TargetType(Enum):
     ALL_ALLIES = "all_allies"
     SELF = "self"
 
-
 class ActionType(Enum):
     ACTION = "action"
     ITEM = "item"
-
 
 class TriggerType(Enum):
     ON_APPLY = "on_apply"
@@ -50,17 +50,27 @@ class EffectActionType(Enum):
     BLOCK_SKILL = "block_skill"
 
 
+class UsageLimit(Enum):
+    UNLIMITED = "unlimited"
+    N_PER_TURN = "n_per_turn"
+    N_PER_COMBAT = "n_per_combat"
+
+
+class PassiveAction(Enum):
+    APPLY_EFFECT = "apply_effect"
+    DAMAGE = "damage"
+    HEAL = "heal"
+    MODIFY_STAT = "modify_stat"
+    CAST_SKILL = "cast_skill"
+    CONSUME_EFFECT = "consume_effect"
+    GRANT_ENERGY = "grant_energy"
+
 class CombatPhase(Enum):
     ACTING = "acting"
     ROUND_END = "round_end"
     ENDED = "ended"
 
-
-class EntityType(Enum):
-    PLAYER = "player"
-    ENEMY = "enemy"
-
-
+#events
 class EventType(Enum):
     SOLO = "solo"
     MULTIPLAYER = "multiplayer"
@@ -109,7 +119,7 @@ class CombatLocationType(Enum):
     SOLO_BOSS = "solo_boss"
     BOSS_GROUP = "boss_group"
 
-
+#session
 class ExplorationPhase(Enum):
     CHOOSING = "choosing"
     RESOLVING = "resolving"
@@ -128,22 +138,6 @@ class SessionEndReason(Enum):
     MAX_DEPTH = "max_depth"
 
 
-class UsageLimit(Enum):
-    UNLIMITED = "unlimited"
-    N_PER_TURN = "n_per_turn"
-    N_PER_COMBAT = "n_per_combat"
-
-
-class PassiveAction(Enum):
-    APPLY_EFFECT = "apply_effect"
-    DAMAGE = "damage"
-    HEAL = "heal"
-    MODIFY_STAT = "modify_stat"
-    CAST_SKILL = "cast_skill"
-    CONSUME_EFFECT = "consume_effect"
-    GRANT_ENERGY = "grant_energy"
-
-
 class ModifierPhase(Enum):
     PRE_HIT = "pre_hit"
     POST_HIT = "post_hit"
@@ -152,3 +146,16 @@ class ModifierPhase(Enum):
 class LevelRewardType(Enum):
     MODIFIER = "modifier"
     SKILL = "skill"
+
+#items
+class ItemType(Enum):
+    WEAPON = "weapon"
+    ARMOR = "armor"
+    RELIC = "relic"
+
+class ItemEffect(Enum):
+    MODIFY_STAT = "modify_stat"
+    GRANT_SKILL = "grant_skill"
+    BLOCK_SKILL = "block_skill"
+    GRANT_PASSIVE = "grant_passive"
+    BLOCK_PASSIVE = "block_passive"
