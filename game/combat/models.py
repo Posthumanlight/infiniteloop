@@ -56,7 +56,7 @@ class CombatState:
     entities: dict[str, object]  # str -> BaseEntity (avoid circular import)
     phase: CombatPhase
     action_log: tuple[ActionResult, ...] = ()
-    passive_trackers: dict[str, PassiveTracker] = ()  # type: ignore[assignment]
+    passive_trackers: dict[str, "PassiveTracker"] = ()  # type: ignore[assignment]
     cooldowns: dict[str, dict[str, int]] = ()  # type: ignore[assignment]
     rng_state: tuple | None = None
     room_difficulty: "RoomDifficultyModifier | None" = None
