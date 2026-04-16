@@ -1,14 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import InventoryView from '$components/InventoryView.svelte';
   import SectionCard from '$components/SectionCard.svelte';
   import SkillList from '$components/SkillList.svelte';
   import StatPill from '$components/StatPill.svelte';
   import TagList from '$components/TagList.svelte';
-  import { bootstrapCharacter } from '$lib/api';
+  import { bootstrapWebApp } from '$lib/api';
   import { applyTelegramTheme, getTelegramWebApp } from '$lib/telegram';
-  import type { CharacterBootstrap, CharacterSheet } from '$lib/types';
+  import type { InventoryMoveResponse, WebAppBootstrap, WebAppView, CharacterSheet } from '$lib/types';
 
-  let bootstrap: CharacterBootstrap | null = null;
+  let bootstrap: WebAppBootstrap | null = null;
+  let activeView: WebAppView = 'character';
+  let telegramInitData = '';
   let error = '';
   let loading = true;
 
@@ -20,7 +23,7 @@
 
   function passiveEntries(sheet: CharacterSheet): string[] {
     return sheet.passives.map(
-      (passive) => `${passive.name} · ${passive.triggers.map((trigger) => trigger.replaceAll('_', ' ')).join(', ')}`
+      (passive) => `${passive.name} | ${passive.triggers.map((trigger) => trigger.replaceAll('_', ' ')).join(', ')}`
     );
   }
 
@@ -41,8 +44,8 @@
       if (effect.blocked_skills.length > 0) {
         details.push(`blocks ${effect.blocked_skills.join(', ')}`);
       }
-      const suffix = details.length > 0 ? ` · ${details.join(' · ')}` : '';
-      return `${effect.name}${stacks} · ${effect.remaining_duration}t · ${tag}${suffix}`;
+      const suffix = details.length > 0 ? ` | ${details.join(' | ')}` : '';
+      return `${effect.name}${stacks} | ${effect.remaining_duration}t | ${tag}${suffix}`;
     });
   }
 
@@ -62,6 +65,15 @@
     return Number.isInteger(value) ? `${value}` : value.toFixed(1);
   }
 
+  function handleInventoryStateUpdate(payload: InventoryMoveResponse): void {
+    if (!bootstrap) return;
+    bootstrap = {
+      ...bootstrap,
+      sheet: payload.sheet,
+      inventory: payload.inventory
+    };
+  }
+
   onMount(async () => {
     const tg = getTelegramWebApp();
     if (!tg) {
@@ -70,14 +82,16 @@
       return;
     }
 
+    telegramInitData = tg.initData;
     applyTelegramTheme(tg);
     tg.ready();
     tg.expand();
 
     try {
-      bootstrap = await bootstrapCharacter(tg.initData);
+      bootstrap = await bootstrapWebApp(tg.initData);
+      activeView = bootstrap.initial_view;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load your character.';
+      error = err instanceof Error ? err.message : 'Failed to load the Mini App.';
     } finally {
       loading = false;
     }
@@ -85,10 +99,10 @@
 </script>
 
 <svelte:head>
-  <title>Character Sheet</title>
+  <title>Infinite Loop Mini App</title>
   <meta
     name="description"
-    content="Telegram Mini App character sheet for Infinite Loop."
+    content="Telegram Mini App character sheet and inventory for Infinite Loop."
   />
 </svelte:head>
 
@@ -96,7 +110,7 @@
   <main class="shell">
     <section class="hero loading-card">
       <p class="eyebrow">Infinite Loop</p>
-      <h1>Opening your character sheet...</h1>
+      <h1>Opening your Mini App...</h1>
       <p>Syncing Telegram identity and loading your current run state.</p>
     </section>
   </main>
@@ -104,19 +118,28 @@
   <main class="shell">
     <section class="hero error-card">
       <p class="eyebrow">Mini App Error</p>
-      <h1>We could not open your character sheet.</h1>
+      <h1>We could not open your game view.</h1>
       <p>{error}</p>
     </section>
   </main>
 {:else if bootstrap}
   {@const sheet = bootstrap.sheet}
   <main class="shell">
+    <nav class="view-tabs">
+      <button class:active={activeView === 'character'} on:click={() => (activeView = 'character')}>
+        Character
+      </button>
+      <button class:active={activeView === 'inventory'} on:click={() => (activeView = 'inventory')}>
+        Inventory
+      </button>
+    </nav>
+
     <section class="hero">
       <div>
         <p class="eyebrow">{sheet.in_combat ? 'Combat Snapshot' : 'Run Snapshot'}</p>
         <h1>{sheet.display_name}</h1>
         <p class="subtitle">
-          {sheet.class_name} · Level {sheet.level}{sheet.xp > 0 ? ` · ${sheet.xp} XP` : ''}
+          {sheet.class_name} | Level {sheet.level}{sheet.xp > 0 ? ` | ${sheet.xp} XP` : ''}
         </p>
       </div>
 
@@ -132,42 +155,52 @@
       </div>
     </section>
 
-    <section class="grid">
-      <SectionCard title="Core Stats" eyebrow="Major">
-        <div class="stat-grid">
-          <StatPill label="Attack" value={statValue(sheet, 'attack')} />
-          <StatPill label="Speed" value={statValue(sheet, 'speed')} />
-          <StatPill label="Resistance" value={statValue(sheet, 'resistance')} />
-          <StatPill label="Crit Chance" value={statValue(sheet, 'crit_chance')} />
-          <StatPill label="Crit Damage" value={statValue(sheet, 'crit_dmg')} />
-          <StatPill label="Mastery" value={statValue(sheet, 'mastery')} />
-        </div>
-      </SectionCard>
+    {#if activeView === 'character'}
+      <section class="grid">
+        <SectionCard title="Core Stats" eyebrow="Major">
+          <div class="stat-grid">
+            <StatPill label="Attack" value={statValue(sheet, 'attack')} />
+            <StatPill label="Speed" value={statValue(sheet, 'speed')} />
+            <StatPill label="Resistance" value={statValue(sheet, 'resistance')} />
+            <StatPill label="Crit Chance" value={statValue(sheet, 'crit_chance')} />
+            <StatPill label="Crit Damage" value={statValue(sheet, 'crit_dmg')} />
+            <StatPill label="Mastery" value={statValue(sheet, 'mastery')} />
+          </div>
+        </SectionCard>
 
-      <SectionCard title="Damage Profile" eyebrow="Minor">
-        <TagList items={minorStatEntries(sheet)} emptyLabel="No minor stat bonuses are active." />
-      </SectionCard>
+        <SectionCard title="Damage Profile" eyebrow="Minor">
+          <TagList items={minorStatEntries(sheet)} emptyLabel="No minor stat bonuses are active." />
+        </SectionCard>
 
-      <SectionCard title="Skills" eyebrow="Loadout">
-        <SkillList skills={sheet.skills} />
-      </SectionCard>
+        <SectionCard title="Skills" eyebrow="Loadout">
+          <SkillList skills={sheet.skills} />
+        </SectionCard>
 
-      <SectionCard title="Passives" eyebrow="Always On">
-        <TagList items={passiveEntries(sheet)} emptyLabel="No passive abilities learned yet." />
-      </SectionCard>
+        <SectionCard title="Passives" eyebrow="Always On">
+          <TagList items={passiveEntries(sheet)} emptyLabel="No passive abilities learned yet." />
+        </SectionCard>
 
-      <SectionCard title="Modifiers" eyebrow="Build">
-        <TagList items={modifierEntries(sheet)} emptyLabel="No modifiers are currently attached." />
-      </SectionCard>
+        <SectionCard title="Modifiers" eyebrow="Build">
+          <TagList items={modifierEntries(sheet)} emptyLabel="No modifiers are currently attached." />
+        </SectionCard>
 
-      <SectionCard title="Active Effects" eyebrow="Status">
-        <TagList items={effectEntries(sheet)} emptyLabel="No active buffs or debuffs right now." />
-      </SectionCard>
+        <SectionCard title="Active Effects" eyebrow="Status">
+          <TagList items={effectEntries(sheet)} emptyLabel="No active buffs or debuffs right now." />
+        </SectionCard>
 
-      <SectionCard title="Legacy Text View" eyebrow="Parity Check">
-        <pre>{bootstrap.legacy_text}</pre>
-      </SectionCard>
-    </section>
+        <SectionCard title="Legacy Text View" eyebrow="Parity Check">
+          <pre>{bootstrap.legacy_text}</pre>
+        </SectionCard>
+      </section>
+    {:else}
+      <section class="inventory-section">
+        <InventoryView
+          inventory={bootstrap.inventory}
+          initData={telegramInitData}
+          onStateUpdate={handleInventoryStateUpdate}
+        />
+      </section>
+    {/if}
   </main>
 {/if}
 
@@ -196,6 +229,30 @@
     max-width: 72rem;
     margin: 0 auto;
     padding: 1rem 1rem 2rem;
+  }
+
+  .view-tabs {
+    display: inline-flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding: 0.35rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .view-tabs button {
+    border: 0;
+    padding: 0.7rem 1rem;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(225, 234, 248, 0.82);
+    font: inherit;
+  }
+
+  .view-tabs button.active {
+    background: rgba(122, 193, 255, 0.16);
+    color: #f5f8ff;
   }
 
   .hero {
@@ -263,7 +320,8 @@
     font-size: 1.2rem;
   }
 
-  .grid {
+  .grid,
+  .inventory-section {
     display: grid;
     gap: 1rem;
     margin-top: 1rem;

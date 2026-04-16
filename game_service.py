@@ -37,6 +37,7 @@ from game.session.models import SessionState
 from game.core.game_models import (
     CharacterSheet,
     CombatSnapshot,
+    EquipmentSlotInfo,
     EffectInfo,
     EntitySnapshot,
     InventorySnapshot,
@@ -151,7 +152,10 @@ class GameService:
     def get_inventory(self, session_id: str, entity_id: str) -> InventorySnapshot:
         session = self._get_session(session_id)
         player = self._get_runtime_player(session, entity_id)
-        return self._build_inventory_snapshot(player)
+        return self._build_inventory_snapshot(
+            player,
+            in_combat=session.state is not None and session.state.combat is not None,
+        )
 
     def give_generated_item(
         self,
@@ -727,33 +731,81 @@ class GameService:
         )
 
     @staticmethod
-    def _build_inventory_snapshot(player: PlayerCharacter) -> InventorySnapshot:
+    def _build_inventory_snapshot(
+        player: PlayerCharacter,
+        *,
+        in_combat: bool,
+    ) -> InventorySnapshot:
         items = sorted(
             player.inventory.items.values(),
             key=lambda item: (item.item_type.value, item.name, item.instance_id),
         )
-        return InventorySnapshot(
-            items=tuple(
-                ItemInfo(
-                    instance_id=item.instance_id,
-                    blueprint_id=item.blueprint_id,
-                    name=item.name,
-                    item_type=item.item_type.value,
-                    quality=item.quality,
-                    equipped_slot=player.inventory.equipped_slot(item.instance_id)[0],
-                    equipped_index=player.inventory.equipped_slot(item.instance_id)[1],
-                    effects=tuple(
-                        ItemEffectInfo(
-                            effect_type=effect.effect_type.value,
-                            stat=effect.stat,
-                            value=effect.value,
-                            skill_id=effect.skill_id,
-                            passive_id=effect.passive_id,
-                        )
-                        for effect in item.effects
-                    ),
+        item_infos = tuple(
+            ItemInfo(
+                instance_id=item.instance_id,
+                blueprint_id=item.blueprint_id,
+                name=item.name,
+                item_type=item.item_type.value,
+                quality=item.quality,
+                equipped_slot=player.inventory.equipped_slot(item.instance_id)[0],
+                equipped_index=player.inventory.equipped_slot(item.instance_id)[1],
+                effects=tuple(
+                    ItemEffectInfo(
+                        effect_type=effect.effect_type.value,
+                        stat=effect.stat,
+                        value=effect.value,
+                        skill_id=effect.skill_id,
+                        passive_id=effect.passive_id,
+                    )
+                    for effect in item.effects
+                ),
+            )
+            for item in items
+        )
+        by_id = {
+            item_info.instance_id: item_info
+            for item_info in item_infos
+        }
+        equipment = player.inventory.equipment
+        equipment_slots = (
+            EquipmentSlotInfo(
+                slot_type="weapon",
+                slot_index=None,
+                label="Weapon",
+                accepts_item_type="weapon",
+                item=by_id.get(equipment.weapon_id) if equipment.weapon_id else None,
+            ),
+            EquipmentSlotInfo(
+                slot_type="armor",
+                slot_index=None,
+                label="Armor",
+                accepts_item_type="armor",
+                item=by_id.get(equipment.armor_id) if equipment.armor_id else None,
+            ),
+            *tuple(
+                EquipmentSlotInfo(
+                    slot_type="relic",
+                    slot_index=index,
+                    label=f"Relic {index + 1}",
+                    accepts_item_type="relic",
+                    item=by_id.get(item_id) if item_id else None,
                 )
-                for item in items
+                for index, item_id in enumerate(equipment.relic_ids)
+            ),
+        )
+        unequipped_items = tuple(
+            item_info
+            for item_info in item_infos
+            if item_info.equipped_slot is None
+        )
+        return InventorySnapshot(
+            items=item_infos,
+            unequipped_items=unequipped_items,
+            equipment_slots=equipment_slots,
+            can_manage_equipment=not in_combat,
+            equipment_lock_reason=(
+                "Equipment changes are disabled in combat."
+                if in_combat else None
             ),
         )
 

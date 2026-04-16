@@ -3,6 +3,8 @@ export interface SkillHit {
   damage_type: string | null;
 }
 
+export type WebAppView = 'character' | 'inventory';
+
 export interface Skill {
   skill_id: string;
   name: string;
@@ -54,7 +56,49 @@ export interface CharacterSheet {
   in_combat: boolean;
 }
 
-export interface CharacterBootstrap {
+export interface ItemEffect {
+  effect_type: string;
+  stat: string | null;
+  value: number | null;
+  skill_id: string | null;
+  passive_id: string | null;
+}
+
+export interface Item {
+  instance_id: string;
+  blueprint_id: string;
+  name: string;
+  item_type: string;
+  quality: number;
+  equipped_slot: string | null;
+  equipped_index: number | null;
+  effects: ItemEffect[];
+}
+
+export interface EquipmentSlot {
+  slot_type: 'weapon' | 'armor' | 'relic';
+  slot_index: number | null;
+  label: string;
+  accepts_item_type: 'weapon' | 'armor' | 'relic';
+  item: Item | null;
+}
+
+export interface InventorySnapshot {
+  items: Item[];
+  unequipped_items: Item[];
+  equipment_slots: EquipmentSlot[];
+  can_manage_equipment: boolean;
+  equipment_lock_reason: string | null;
+}
+
+export interface WebAppBootstrap {
+  initial_view: WebAppView;
   sheet: CharacterSheet;
+  inventory: InventorySnapshot;
   legacy_text: string;
+}
+
+export interface InventoryMoveResponse {
+  sheet: CharacterSheet;
+  inventory: InventorySnapshot;
 }

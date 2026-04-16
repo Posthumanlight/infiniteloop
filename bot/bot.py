@@ -22,6 +22,7 @@ async def set_bot_commands(bot: Bot) -> None:
         BotCommand(command="run", description="Create a new game session"),
         BotCommand(command="join", description="Join the current game session"),
         BotCommand(command="char", description="View your character"),
+        BotCommand(command="inventory", description="Open your inventory"),
         BotCommand(command="combat", description="Show combat status"),
         BotCommand(command="leave", description="End the current session"),
     ]

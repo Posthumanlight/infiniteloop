@@ -2,10 +2,14 @@
 
 from pydantic import BaseModel
 
-from game.core.game_models import CharacterSheet
+from game.core.game_models import CharacterSheet, InventorySnapshot
 
 
 class CharacterBootstrapIn(BaseModel):
+    init_data: str
+
+
+class WebAppBootstrapIn(BaseModel):
     init_data: str
 
 
@@ -128,6 +132,108 @@ class CharacterSheetOut(BaseModel):
         )
 
 
+class ItemEffectOut(BaseModel):
+    effect_type: str
+    stat: str | None = None
+    value: float | None = None
+    skill_id: str | None = None
+    passive_id: str | None = None
+
+
+class ItemOut(BaseModel):
+    instance_id: str
+    blueprint_id: str
+    name: str
+    item_type: str
+    quality: int
+    equipped_slot: str | None
+    equipped_index: int | None
+    effects: list[ItemEffectOut]
+
+
+class EquipmentSlotOut(BaseModel):
+    slot_type: str
+    slot_index: int | None
+    label: str
+    accepts_item_type: str
+    item: ItemOut | None
+
+
+class InventoryOut(BaseModel):
+    items: list[ItemOut]
+    unequipped_items: list[ItemOut]
+    equipment_slots: list[EquipmentSlotOut]
+    can_manage_equipment: bool
+    equipment_lock_reason: str | None
+
+    @classmethod
+    def from_domain(cls, snapshot: InventorySnapshot) -> "InventoryOut":
+        item_lookup = {
+            item.instance_id: ItemOut(
+                instance_id=item.instance_id,
+                blueprint_id=item.blueprint_id,
+                name=item.name,
+                item_type=item.item_type,
+                quality=item.quality,
+                equipped_slot=item.equipped_slot,
+                equipped_index=item.equipped_index,
+                effects=[
+                    ItemEffectOut(
+                        effect_type=effect.effect_type,
+                        stat=effect.stat,
+                        value=effect.value,
+                        skill_id=effect.skill_id,
+                        passive_id=effect.passive_id,
+                    )
+                    for effect in item.effects
+                ],
+            )
+            for item in snapshot.items
+        }
+        return cls(
+            items=list(item_lookup.values()),
+            unequipped_items=[
+                item_lookup[item.instance_id]
+                for item in snapshot.unequipped_items
+            ],
+            equipment_slots=[
+                EquipmentSlotOut(
+                    slot_type=slot.slot_type,
+                    slot_index=slot.slot_index,
+                    label=slot.label,
+                    accepts_item_type=slot.accepts_item_type,
+                    item=(
+                        item_lookup[slot.item.instance_id]
+                        if slot.item is not None else None
+                    ),
+                )
+                for slot in snapshot.equipment_slots
+            ],
+            can_manage_equipment=snapshot.can_manage_equipment,
+            equipment_lock_reason=snapshot.equipment_lock_reason,
+        )
+
+
 class CharacterBootstrapOut(BaseModel):
     sheet: CharacterSheetOut
     legacy_text: str
+
+
+class WebAppBootstrapOut(BaseModel):
+    initial_view: str
+    sheet: CharacterSheetOut
+    inventory: InventoryOut
+    legacy_text: str
+
+
+class InventoryMoveIn(BaseModel):
+    init_data: str
+    instance_id: str
+    destination_kind: str
+    slot_type: str | None = None
+    slot_index: int | None = None
+
+
+class InventoryMoveOut(BaseModel):
+    sheet: CharacterSheetOut
+    inventory: InventoryOut

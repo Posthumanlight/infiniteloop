@@ -182,5 +182,18 @@ class ItemInfo:
 
 
 @dataclass(frozen=True)
+class EquipmentSlotInfo:
+    slot_type: str
+    slot_index: int | None
+    label: str
+    accepts_item_type: str
+    item: ItemInfo | None
+
+
+@dataclass(frozen=True)
 class InventorySnapshot:
     items: tuple[ItemInfo, ...]
+    unequipped_items: tuple[ItemInfo, ...]
+    equipment_slots: tuple[EquipmentSlotInfo, ...]
+    can_manage_equipment: bool
+    equipment_lock_reason: str | None = None
