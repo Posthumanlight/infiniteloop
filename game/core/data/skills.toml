@@ -1,3 +1,4 @@
+#ENEMIES
 #generics
 [skills.generic_enemy_attack]
 name = "Attack"
@@ -7,6 +8,27 @@ hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack+base_power", base_power = 0, variance = 0.25 },
 ]
 
+#draugr
+[skills.draugr_chilling_wind]
+name = "Chilling Wind"
+energy_cost = 0
+action_type = "action"
+cooldown = 4
+hits = [
+{target_type = "all_enemies", damage_type = "ice", formula = "attacker.attack+base_power", base_power = 5, variance = 0.25}
+]
+
+#crocodile
+[skills.crocodile_death_roll]
+name = "Death Roll"
+energy_cost = 0
+action_type = "action"
+cooldown = 6
+hits = [
+  {target_type = "single_enemy", damage_type = "piercing", formula = "attacker.attack*2", base_power = 10, variance = 0.25, on_hit_effects = [{effect = "stun", chance = 1.0}]}
+]
+
+#PLAYERS
 #warrior
 [skills.slash]
 name = "Slash"
@@ -18,12 +40,12 @@ hits = [
 
 [skills.cleave]
 name = "Cleave"
-energy_cost = 10
+energy_cost = 15
 action_type = "action"
-level_eligibility = [3, 15]
+level_eligibility = [3, 99]
 class_tags = ["warrior"]
 hits = [
-  { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 10, variance = 0.0 },
+  { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 2, variance = 0.0 },
 ]
 
 [skills.brutalize]
@@ -36,14 +58,49 @@ class_tags = ["warrior"]
 hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun", chance = 1.0}]}
 ]
+
+[skills.deep_wounds]
+name = "Deep Wounds"
+energy_cost = 10
+action_type = "action"
+cooldown = 2
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = [
+  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 0.5", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]}
+]
+
+[skills.berserker]
+name = "Berserker"
+energy_cost = 90
+action_type = "action"
+cooldown = 10
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = []
+self_effects = [
+  { effect = "berserker" },
+]
+
+[skills.rampage]
+name = "Rampage"
+energy_cost = 0
+action_type = "action"
+hits = [
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0, share_with=0},
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0, share_with=0}
+]
+
+
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"
 energy_cost = 0
 action_type = "action"
 hits = [
-  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.7", base_power = 1, variance = 0.0 },
-  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.7", base_power = 1, variance = 0.0, share_with = 0 },
+  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.55", base_power = 3, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.55", base_power = 3, variance = 0.0, share_with = 0 },
 ]
 
 #don`t include in actual spell list, exists just for passive arcane_rupture
@@ -63,19 +120,19 @@ cooldown = 5
 level_eligibility = [1, 99]
 class_tags = ["mage"]
 hits = [
-  { target_type = "single_enemy", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.9)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
 ]
 
 [skills.singularity]
 name = "Singularity"
-energy_cost = 50
+energy_cost = 75
 action_type = "action"
 cooldown = 8
 level_eligibility = [3, 99]
 class_tags = ["mage"]
 hits = [
-  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 1.1", base_power = 10, variance = 0.0 },
-  { target_type = "all_enemies", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1.25)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.9", base_power = 10, variance = 0.0 },
+  { target_type = "all_enemies", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1)) * (1 + attacker.mastery * 0.04)", base_power = 5, variance = 0.0 },
 ]
 
 [skills.enlightenment]

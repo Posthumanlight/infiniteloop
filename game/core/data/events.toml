@@ -30,7 +30,7 @@ weight = 5
 label = "It`s crocodiles!"
 description = "It`s goddamn crocodiles!"
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["bandit"]},
+    { action = "start_combat", target = "all", enemy_group = ["crocodile", "crocodile"]},
 ]
 
 [[events.river_with_surprise.choices]]

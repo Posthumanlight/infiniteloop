@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from game.character.enemy import Enemy
 from game.character.player_character import PlayerCharacter
 from game.character.progression import apply_xp
 from game.character.stats import MajorStats
@@ -16,7 +17,9 @@ from game.core.data_loader import (
     ProgressionConfig,
     is_skill_offerable,
     load_effect,
+    load_enemy_loot,
     load_event,
+    load_loot_constants,
     load_modifiers,
     load_skills,
 )
@@ -29,12 +32,20 @@ from game.core.enums import (
     OutcomeAction,
     SessionPhase,
 )
+from game.core.game_models import (
+    LootAwardInfo,
+    LootResolutionSnapshot,
+    LootRollInfo,
+    LootRoundInfo,
+)
 from game.events.engine import (
     resolve_event as _resolve_event,
     start_event,
     submit_vote,
 )
 from game.events.models import OutcomeResult
+from game.items.equipment_effects import get_effective_player_major_stat
+from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.factories import build_enemies
 from game.session.models import (
     PendingReward,
@@ -42,6 +53,106 @@ from game.session.models import (
     RewardNotice,
     SessionState,
 )
+from game.world.difficulty import RoomDifficultyModifier
+
+
+def resolve_loot_item_quality(
+    room_difficulty: RoomDifficultyModifier | None,
+) -> int:
+    constants = load_loot_constants()
+    formula = constants["item_quality_formula"]
+    scalar = room_difficulty.scalar if room_difficulty is not None else 1.0
+    raw = evaluate_expr(formula, {
+        "room_difficulty_scalar": scalar,
+    })
+    return max(1, round(float(raw)))
+
+
+def roll_public_item_contest(
+    players: list[PlayerCharacter],
+    rng: SeededRNG,
+) -> tuple[str, tuple[LootRoundInfo, ...]]:
+    if not players:
+        raise ValueError("Cannot roll loot contest without players")
+
+    contenders = list(players)
+    rounds: list[LootRoundInfo] = []
+    round_index = 1
+
+    while True:
+        rolls = tuple(
+            LootRollInfo(player_id=player.entity_id, roll=rng.d(100))
+            for player in contenders
+        )
+        rounds.append(LootRoundInfo(round_index=round_index, rolls=rolls))
+
+        highest_roll = max(entry.roll for entry in rolls)
+        winner_ids = [
+            entry.player_id
+            for entry in rolls
+            if entry.roll == highest_roll
+        ]
+        if len(winner_ids) == 1:
+            return winner_ids[0], tuple(rounds)
+
+        contenders = [
+            player
+            for player in players
+            if player.entity_id in winner_ids
+        ]
+        round_index += 1
+
+
+def resolve_and_award_combat_loot(
+    players: list[PlayerCharacter],
+    defeated_enemies: list[Enemy],
+    room_difficulty: RoomDifficultyModifier | None,
+    rng: SeededRNG,
+) -> tuple[list[PlayerCharacter], LootResolutionSnapshot]:
+    updated_players = list(players)
+    player_indices = {
+        player.entity_id: index
+        for index, player in enumerate(updated_players)
+    }
+    awards: list[LootAwardInfo] = []
+
+    for enemy in defeated_enemies:
+        template_id = (
+            enemy.enemy_template_id
+            or enemy.entity_id.rsplit("_", 1)[0]
+        )
+        for drop in load_enemy_loot(template_id):
+            if rng.random_float() >= drop.drop_rate:
+                continue
+
+            quantity = drop.min_quantity
+            if drop.max_quantity > drop.min_quantity:
+                quantity += rng.d(drop.max_quantity - drop.min_quantity + 1) - 1
+
+            for copy_number in range(1, quantity + 1):
+                quality = resolve_loot_item_quality(room_difficulty)
+                winner_id, rounds = roll_public_item_contest(updated_players, rng)
+                item = generate_item_from_blueprint_id(drop.item_id, quality=quality)
+
+                winner_index = player_indices[winner_id]
+                winner = updated_players[winner_index]
+                updated_players[winner_index] = replace(
+                    winner,
+                    inventory=winner.inventory.add_item(item),
+                )
+
+                awards.append(LootAwardInfo(
+                    source_enemy_id=template_id,
+                    item_blueprint_id=drop.item_id,
+                    item_name=item.name,
+                    quality=quality,
+                    winner_id=winner_id,
+                    winner_item_instance_id=item.instance_id,
+                    copy_number=copy_number,
+                    rounds=rounds,
+                ))
+
+    return updated_players, LootResolutionSnapshot(awards=tuple(awards))
 
 
 class NodeManager:
@@ -74,14 +185,16 @@ class NodeManager:
         self,
         state: SessionState,
         enemy_ids: tuple[str, ...],
+        room_difficulty: RoomDifficultyModifier | None = None,
     ) -> SessionState:
         """Build enemies from TOML and start a combat encounter."""
-        enemies = build_enemies(enemy_ids)
+        enemies = build_enemies(enemy_ids, room_difficulty=room_difficulty)
         combat_state = start_combat(
             session_id=state.session_id,
             players=list(state.players),
             enemies=enemies,
             seed=self._next_seed(),
+            room_difficulty=room_difficulty,
         )
         return replace(
             state,
@@ -123,7 +236,38 @@ class NodeManager:
 
     def finalize_combat(self, state: SessionState) -> SessionState:
         """Apply combat results to players, clear combat sub-state."""
+        combat_state = state.combat
+        assert combat_state is not None
+
         state = self._apply_combat_results(state)
+        loot_snapshot: LootResolutionSnapshot | None = None
+
+        if any(player.current_hp > 0 for player in state.players):
+            rng = SeededRNG(0)
+            if combat_state.rng_state is not None:
+                rng.set_state(combat_state.rng_state)
+
+            defeated_enemies = [
+                entity
+                for entity in combat_state.entities.values()
+                if isinstance(entity, Enemy)
+                and entity.entity_type == EntityType.ENEMY
+                and entity.current_hp <= 0
+            ]
+            players, loot_snapshot = resolve_and_award_combat_loot(
+                players=list(state.players),
+                defeated_enemies=defeated_enemies,
+                room_difficulty=combat_state.room_difficulty,
+                rng=rng,
+            )
+            state = replace(
+                state,
+                players=tuple(players),
+                pending_loot=loot_snapshot,
+            )
+        else:
+            state = replace(state, pending_loot=None)
+
         state = self._restore_between_nodes(state, self._restoration_formula)
         return replace(
             state,
@@ -432,8 +576,9 @@ class NodeManager:
             if player.current_hp <= 0:
                 updated.append(player)
                 continue
+            max_hp = int(get_effective_player_major_stat(player, "hp"))
             ctx: dict[str, object] = {
-                "max_hp": player.major_stats.hp,
+                "max_hp": max_hp,
                 "current_hp": player.current_hp,
                 "level": player.level,
                 "attack": player.major_stats.attack,
@@ -445,7 +590,7 @@ class NodeManager:
                 "mastery": player.major_stats.mastery,
             }
             heal = max(0, int(evaluate_expr(restoration_formula, ctx)))
-            new_hp = min(player.current_hp + heal, player.major_stats.hp)
+            new_hp = min(player.current_hp + heal, max_hp)
             total_healing += new_hp - player.current_hp
             updated.append(replace(player, current_hp=new_hp))
         new_stats = replace(
@@ -536,9 +681,10 @@ class NodeManager:
 
             match outcome.action:
                 case OutcomeAction.HEAL:
+                    max_hp = int(get_effective_player_major_stat(player, "hp"))
                     new_hp = min(
                         player.current_hp + outcome.amount,
-                        player.major_stats.hp,
+                        max_hp,
                     )
                     total_healing += new_hp - player.current_hp
                     player = replace(player, current_hp=new_hp)
@@ -549,9 +695,10 @@ class NodeManager:
                     player = replace(player, current_hp=new_hp)
 
                 case OutcomeAction.RESTORE_ENERGY:
+                    max_energy = int(get_effective_player_major_stat(player, "energy"))
                     new_energy = min(
                         player.current_energy + outcome.amount,
-                        player.major_stats.energy,
+                        max_energy,
                     )
                     player = replace(player, current_energy=new_energy)
 
@@ -589,8 +736,18 @@ class NodeManager:
                 case OutcomeAction.START_COMBAT:
                     pass  # Handled by resolve_event caller
 
-                case (OutcomeAction.GIVE_ITEM
-                      | OutcomeAction.GIVE_GOLD
+                case OutcomeAction.GIVE_ITEM:
+                    if outcome.item_id is not None:
+                        item = generate_item_from_blueprint_id(
+                            outcome.item_id,
+                            quality=1,
+                        )
+                        player = replace(
+                            player,
+                            inventory=player.inventory.add_item(item),
+                        )
+
+                case (OutcomeAction.GIVE_GOLD
                       | OutcomeAction.TAKE_GOLD):
                     pass  # TODO: stubbed until inventory/gold systems exist
 

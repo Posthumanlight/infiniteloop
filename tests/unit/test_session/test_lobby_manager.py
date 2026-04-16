@@ -1,6 +1,8 @@
 import asyncio
 
+from game.character.inventory import Inventory
 from game.combat.skill_modifiers import ModifierInstance
+from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.lobby_manager import (
     CharacterRecord,
     LobbyManager,
@@ -10,6 +12,8 @@ from game.session.lobby_manager import (
 
 class _FakeRepo:
     def __init__(self):
+        relic = generate_item_from_blueprint_id("battle_charm", instance_id="relic1")
+        inventory = Inventory().add_item(relic).equip("relic1", relic_slot=0)
         self.get_character_record = CharacterRecord(
             character_id=42,
             tg_id=1001,
@@ -19,7 +23,7 @@ class _FakeRepo:
             xp=250,
             skills=("slash", "cleave"),
             skill_modifiers=(ModifierInstance("slash_power", 2),),
-            inventory={"potion": 1},
+            inventory=inventory,
         )
         self.user_characters: list[SavedCharacterSummary] = [
             SavedCharacterSummary(

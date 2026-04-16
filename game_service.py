@@ -1,7 +1,13 @@
 from dataclasses import dataclass, replace
 
-from game.combat.effects import get_effective_major_stat, get_effective_minor_stat
+from game.combat.enemy_ai import build_enemy_action as build_enemy_ai_action
+from game.combat.effects import (
+    get_effective_major_stat,
+    get_effective_minor_stat,
+    get_effective_skill_access,
+)
 from game.combat.models import ActionRequest, ActionResult
+from game.core.dice import SeededRNG
 from game.core.data_loader import (
     ClassData,
     load_class,
@@ -17,17 +23,27 @@ from game.core.enums import (
     EntityType,
     LevelRewardType,
     SessionPhase,
-    TargetType,
 )
 from game.character.player_character import PlayerCharacter
+from game.items.equipment_effects import (
+    get_effective_passive_ids,
+    get_effective_player_major_stat,
+    get_effective_player_minor_stat,
+)
+from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
 from game.core.game_models import (
     CharacterSheet,
     CombatSnapshot,
+    EquipmentSlotInfo,
     EffectInfo,
     EntitySnapshot,
+    InventorySnapshot,
+    ItemEffectInfo,
+    ItemInfo,
+    LootResolutionSnapshot,
     ModifierInfo,
     PendingRewardInfo,
     PassiveInfo,
@@ -47,6 +63,8 @@ class _ActiveSession:
     manager: SessionManager
     state: SessionState | None
     save_origins: dict[str, object] | None = None
+
+
 class GameService:
     """In-memory game orchestrator. One instance per server process.
 
@@ -127,6 +145,69 @@ class GameService:
 
     def remove_session(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
+
+    # ------------------------------------------------------------------
+    # Inventory
+    # ------------------------------------------------------------------
+
+    def get_inventory(self, session_id: str, entity_id: str) -> InventorySnapshot:
+        session = self._get_session(session_id)
+        player = self._get_runtime_player(session, entity_id)
+        return self._build_inventory_snapshot(
+            player,
+            in_combat=session.state is not None and session.state.combat is not None,
+        )
+
+    def give_generated_item(
+        self,
+        session_id: str,
+        entity_id: str,
+        blueprint_id: str,
+        *,
+        quality: int = 1,
+    ) -> str:
+        session = self._get_session(session_id)
+        player = self._get_runtime_player(session, entity_id)
+        item = generate_item_from_blueprint_id(blueprint_id, quality=quality)
+        updated = replace(
+            player,
+            inventory=player.inventory.add_item(item),
+        )
+        self._replace_runtime_player(session, updated)
+        return item.instance_id
+
+    def equip_item(
+        self,
+        session_id: str,
+        entity_id: str,
+        instance_id: str,
+        relic_slot: int | None = None,
+    ) -> None:
+        session = self._get_session(session_id)
+        self._assert_not_in_combat(session)
+        player = self._get_runtime_player(session, entity_id)
+        updated = replace(
+            player,
+            inventory=player.inventory.equip(instance_id, relic_slot=relic_slot),
+        )
+        updated = self._reconcile_current_resources(updated)
+        self._replace_runtime_player(session, updated)
+
+    def unequip_item(
+        self,
+        session_id: str,
+        entity_id: str,
+        instance_id: str,
+    ) -> None:
+        session = self._get_session(session_id)
+        self._assert_not_in_combat(session)
+        player = self._get_runtime_player(session, entity_id)
+        updated = replace(
+            player,
+            inventory=player.inventory.unequip(instance_id),
+        )
+        updated = self._reconcile_current_resources(updated)
+        self._replace_runtime_player(session, updated)
 
     # ------------------------------------------------------------------
     # Class selection
@@ -270,6 +351,17 @@ class GameService:
             for notice in notices
         )
 
+    def consume_pending_loot(
+        self,
+        session_id: str,
+    ) -> LootResolutionSnapshot | None:
+        session = self._get_session(session_id)
+        if session.state is None:
+            return None
+        pending = session.state.pending_loot
+        session.state = replace(session.state, pending_loot=None)
+        return pending
+
     def get_session_phase(self, session_id: str) -> SessionPhase | None:
         session = self._sessions.get(session_id)
         if session is None or session.state is None:
@@ -377,7 +469,7 @@ class GameService:
         session = self._get_session(session_id)
         self._assert_in_combat(session)
         return [
-            self._entity_to_snapshot(e)
+            self._entity_to_snapshot(e, session.state.combat)
             for e in session.state.combat.entities.values()
             if e.entity_type == EntityType.ENEMY and e.current_hp > 0
         ]
@@ -386,7 +478,7 @@ class GameService:
         session = self._get_session(session_id)
         self._assert_in_combat(session)
         return [
-            self._entity_to_snapshot(e)
+            self._entity_to_snapshot(e, session.state.combat)
             for e in session.state.combat.entities.values()
             if e.entity_type == EntityType.PLAYER and e.current_hp > 0
         ]
@@ -450,29 +542,37 @@ class GameService:
                     combat_state, entity_id, stat_name,
                 )
             else:
-                major_stats[stat_name] = float(
-                    getattr(entity.major_stats, stat_name),
+                major_stats[stat_name] = get_effective_player_major_stat(
+                    entity,
+                    stat_name,
                 )
 
         # Minor stats — effective if in combat, raw otherwise
         minor_stats: dict[str, float] = {}
-        for key, val in entity.minor_stats.values.items():
+        for key in entity.minor_stats.values:
             if combat_state is not None:
                 minor_stats[key] = get_effective_minor_stat(
                     combat_state, entity_id, key,
                 )
             else:
-                minor_stats[key] = val
+                minor_stats[key] = get_effective_player_minor_stat(entity, key)
 
         # Skills
-        skill_ids = player.skills
+        access = get_effective_skill_access(entity, combat_state)
+        granted_set = set(access.granted)
+        skill_ids = access.available
         skills = tuple(
-            self._build_skill_info(sid) for sid in skill_ids
+            self._build_skill_info(
+                sid,
+                temporary=(sid in granted_set),
+            )
+            for sid in skill_ids
         )
 
         # Passives
         passives = tuple(
-            self._build_passive_info(pid) for pid in entity.passive_skills
+            self._build_passive_info(pid)
+            for pid in get_effective_passive_ids(entity)
         )
 
         # Modifiers
@@ -495,9 +595,9 @@ class GameService:
             level=player.level,
             xp=player.xp,
             current_hp=entity.current_hp,
-            max_hp=entity.major_stats.hp,
+            max_hp=int(major_stats["hp"]),
             current_energy=entity.current_energy,
-            max_energy=entity.major_stats.energy,
+            max_energy=int(major_stats["energy"]),
             major_stats=major_stats,
             minor_stats=minor_stats,
             skills=skills,
@@ -542,7 +642,11 @@ class GameService:
         )
 
     @staticmethod
-    def _build_skill_info(skill_id: str) -> SkillInfo:
+    def _build_skill_info(
+        skill_id: str,
+        *,
+        temporary: bool = False,
+    ) -> SkillInfo:
         data = load_skill(skill_id)
         return SkillInfo(
             skill_id=data.skill_id,
@@ -555,6 +659,7 @@ class GameService:
                 )
                 for hit in data.hits
             ),
+            temporary=temporary,
         )
 
     @staticmethod
@@ -563,7 +668,7 @@ class GameService:
         return PassiveInfo(
             skill_id=data.skill_id,
             name=data.name,
-            trigger=data.trigger.value,
+            triggers=tuple(trigger.value for trigger in data.triggers),
             action=data.action.value,
         )
 
@@ -611,15 +716,109 @@ class GameService:
             EffectActionType.HEAL,
             EffectActionType.STAT_MODIFY,
             EffectActionType.GRANT_ENERGY,
+            EffectActionType.GRANT_SKILL,
             EffectActionType.DAMAGE_DEALT_MULT,
         })
         is_buff = all(a.action_type in _BUFF_ACTIONS for a in data.actions)
+        granted_skills = tuple(
+            action.skill_id
+            for action in data.actions
+            if action.action_type == EffectActionType.GRANT_SKILL
+            and action.skill_id is not None
+        )
+        blocked_skills = tuple(
+            action.skill_id
+            for action in data.actions
+            if action.action_type == EffectActionType.BLOCK_SKILL
+            and action.skill_id is not None
+        )
         return EffectInfo(
             effect_id=eff.effect_id,
             name=data.name,
             remaining_duration=eff.remaining_duration,
             stack_count=eff.stack_count,
             is_buff=is_buff,
+            granted_skills=granted_skills,
+            blocked_skills=blocked_skills,
+        )
+
+    @staticmethod
+    def _build_inventory_snapshot(
+        player: PlayerCharacter,
+        *,
+        in_combat: bool,
+    ) -> InventorySnapshot:
+        items = sorted(
+            player.inventory.items.values(),
+            key=lambda item: (item.item_type.value, item.name, item.instance_id),
+        )
+        item_infos = tuple(
+            ItemInfo(
+                instance_id=item.instance_id,
+                blueprint_id=item.blueprint_id,
+                name=item.name,
+                item_type=item.item_type.value,
+                quality=item.quality,
+                equipped_slot=player.inventory.equipped_slot(item.instance_id)[0],
+                equipped_index=player.inventory.equipped_slot(item.instance_id)[1],
+                effects=tuple(
+                    ItemEffectInfo(
+                        effect_type=effect.effect_type.value,
+                        stat=effect.stat,
+                        value=effect.value,
+                        skill_id=effect.skill_id,
+                        passive_id=effect.passive_id,
+                    )
+                    for effect in item.effects
+                ),
+            )
+            for item in items
+        )
+        by_id = {
+            item_info.instance_id: item_info
+            for item_info in item_infos
+        }
+        equipment = player.inventory.equipment
+        equipment_slots = (
+            EquipmentSlotInfo(
+                slot_type="weapon",
+                slot_index=None,
+                label="Weapon",
+                accepts_item_type="weapon",
+                item=by_id.get(equipment.weapon_id) if equipment.weapon_id else None,
+            ),
+            EquipmentSlotInfo(
+                slot_type="armor",
+                slot_index=None,
+                label="Armor",
+                accepts_item_type="armor",
+                item=by_id.get(equipment.armor_id) if equipment.armor_id else None,
+            ),
+            *tuple(
+                EquipmentSlotInfo(
+                    slot_type="relic",
+                    slot_index=index,
+                    label=f"Relic {index + 1}",
+                    accepts_item_type="relic",
+                    item=by_id.get(item_id) if item_id else None,
+                )
+                for index, item_id in enumerate(equipment.relic_ids)
+            ),
+        )
+        unequipped_items = tuple(
+            item_info
+            for item_info in item_infos
+            if item_info.equipped_slot is None
+        )
+        return InventorySnapshot(
+            items=item_infos,
+            unequipped_items=unequipped_items,
+            equipment_slots=equipment_slots,
+            can_manage_equipment=not in_combat,
+            equipment_lock_reason=(
+                "Equipment changes are disabled in combat."
+                if in_combat else None
+            ),
         )
 
     # ------------------------------------------------------------------
@@ -636,6 +835,53 @@ class GameService:
     def _assert_in_combat(session: _ActiveSession) -> None:
         if session.state is None or session.state.combat is None:
             raise ValueError("Not in combat")
+
+    @staticmethod
+    def _assert_not_in_combat(session: _ActiveSession) -> None:
+        if session.state is None:
+            raise ValueError("No active run")
+        if session.state.combat is not None:
+            raise ValueError("Cannot change equipment during combat")
+
+    @staticmethod
+    def _get_runtime_player(
+        session: _ActiveSession,
+        entity_id: str,
+    ) -> PlayerCharacter:
+        if session.state is None:
+            raise ValueError("No active run")
+        player = next(
+            (candidate for candidate in session.state.players if candidate.entity_id == entity_id),
+            None,
+        )
+        if player is None:
+            raise ValueError("Player is not part of this run")
+        return player
+
+    @staticmethod
+    def _replace_runtime_player(
+        session: _ActiveSession,
+        player: PlayerCharacter,
+    ) -> None:
+        if session.state is None:
+            raise ValueError("No active run")
+        session.state = replace(
+            session.state,
+            players=tuple(
+                player if current.entity_id == player.entity_id else current
+                for current in session.state.players
+            ),
+        )
+
+    @staticmethod
+    def _reconcile_current_resources(player: PlayerCharacter) -> PlayerCharacter:
+        max_hp = int(get_effective_player_major_stat(player, "hp"))
+        max_energy = int(get_effective_player_major_stat(player, "energy"))
+        return replace(
+            player,
+            current_hp=min(player.current_hp, max_hp),
+            current_energy=min(player.current_energy, max_energy),
+        )
 
     def _submit_and_capture(
         self,
@@ -671,7 +917,20 @@ class GameService:
             and self._current_entity_type(session) == EntityType.ENEMY
         ):
             enemy_action = self._build_enemy_action(session)
-            if results is not None:
+            if enemy_action is None:
+                current_id = self._current_turn_id(session)
+                skip_action = ActionRequest(
+                    actor_id=current_id,
+                    action_type=ActionType.ACTION,
+                    skill_id=None,
+                )
+                if results is not None:
+                    self._submit_and_capture(session, skip_action, results, skip=True)
+                else:
+                    session.state = session.manager.skip_combat_turn(
+                        session.state, current_id,
+                    )
+            elif results is not None:
                 self._submit_and_capture(session, enemy_action, results)
             else:
                 session.state = session.manager.submit_combat_action(
@@ -679,43 +938,17 @@ class GameService:
                 )
 
     @staticmethod
-    def _build_enemy_action(session: _ActiveSession) -> ActionRequest:
-        """MVP enemy AI: first skill, first alive player/ally per single-target hit."""
+    def _build_enemy_action(session: _ActiveSession) -> ActionRequest | None:
         combat = session.state.combat
         current_id = combat.turn_order[combat.current_turn_index]
-        enemy = combat.entities[current_id]
-        skill_id = enemy.skills[0]
-        skill = load_skill(skill_id)
-
-        alive_players = [
-            eid
-            for eid in combat.turn_order
-            if combat.entities[eid].entity_type == EntityType.PLAYER
-            and combat.entities[eid].current_hp > 0
-        ]
-        alive_allies = [
-            eid
-            for eid in combat.turn_order
-            if eid != current_id
-            and combat.entities[eid].entity_type == EntityType.ENEMY
-            and combat.entities[eid].current_hp > 0
-        ]
-
-        pairs: list[tuple[int, str]] = []
-        for hit_index, hit in enumerate(skill.hits):
-            if hit.share_with is not None:
-                continue
-            if hit.target_type == TargetType.SINGLE_ENEMY and alive_players:
-                pairs.append((hit_index, alive_players[0]))
-            elif hit.target_type == TargetType.SINGLE_ALLY and alive_allies:
-                pairs.append((hit_index, alive_allies[0]))
-
-        return ActionRequest(
-            actor_id=current_id,
-            action_type=ActionType.ACTION,
-            skill_id=skill_id,
-            target_ids=tuple(pairs),
+        rng = SeededRNG(0)
+        rng.set_state(combat.rng_state)
+        action = build_enemy_ai_action(combat, current_id, rng)
+        session.state = replace(
+            session.state,
+            combat=replace(combat, rng_state=rng.get_state()),
         )
+        return action
 
     @staticmethod
     def _current_turn_id(session: _ActiveSession) -> str | None:
@@ -765,7 +998,7 @@ class GameService:
     ) -> dict[str, EntitySnapshot]:
         if session.state.combat is not None:
             return {
-                eid: self._entity_to_snapshot(e)
+                eid: self._entity_to_snapshot(e, session.state.combat)
                 for eid, e in session.state.combat.entities.items()
             }
         # Combat ended — build from session players only
@@ -775,23 +1008,35 @@ class GameService:
                 name=p.entity_name,
                 entity_type=p.entity_type,
                 current_hp=p.current_hp,
-                max_hp=p.major_stats.hp,
+                max_hp=int(get_effective_player_major_stat(p, "hp")),
                 current_energy=p.current_energy,
-                max_energy=p.major_stats.energy,
+                max_energy=int(get_effective_player_major_stat(p, "energy")),
                 is_alive=p.current_hp > 0,
             )
             for p in session.state.players
         }
 
     @staticmethod
-    def _entity_to_snapshot(entity: object) -> EntitySnapshot:
+    def _entity_to_snapshot(
+        entity: object,
+        combat_state=None,
+    ) -> EntitySnapshot:
+        max_hp = entity.major_stats.hp
+        max_energy = entity.major_stats.energy
+        if combat_state is not None:
+            max_hp = int(get_effective_major_stat(combat_state, entity.entity_id, "hp"))
+            max_energy = int(get_effective_major_stat(
+                combat_state,
+                entity.entity_id,
+                "energy",
+            ))
         return EntitySnapshot(
             entity_id=entity.entity_id,
             name=entity.entity_name,
             entity_type=entity.entity_type,
             current_hp=entity.current_hp,
-            max_hp=entity.major_stats.hp,
+            max_hp=max_hp,
             current_energy=entity.current_energy,
-            max_energy=entity.major_stats.energy,
+            max_energy=max_energy,
             is_alive=entity.current_hp > 0,
         )

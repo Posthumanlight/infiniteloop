@@ -74,6 +74,7 @@ class SkillInfo:
     name: str
     energy_cost: int
     hits: tuple[SkillHitInfo, ...]
+    temporary: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,7 +83,7 @@ class PassiveInfo:
 
     skill_id: str
     name: str
-    trigger: str
+    triggers: tuple[str, ...]
     action: str
 
 
@@ -132,6 +133,8 @@ class EffectInfo:
     remaining_duration: int
     stack_count: int
     is_buff: bool
+    granted_skills: tuple[str, ...] = ()
+    blocked_skills: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -155,3 +158,71 @@ class CharacterSheet:
     modifiers: tuple[ModifierInfo, ...]
     active_effects: tuple[EffectInfo, ...]
     in_combat: bool
+
+
+@dataclass(frozen=True)
+class ItemEffectInfo:
+    effect_type: str
+    stat: str | None = None
+    value: float | None = None
+    skill_id: str | None = None
+    passive_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ItemInfo:
+    instance_id: str
+    blueprint_id: str
+    name: str
+    item_type: str
+    quality: int
+    equipped_slot: str | None
+    equipped_index: int | None
+    effects: tuple[ItemEffectInfo, ...]
+
+
+@dataclass(frozen=True)
+class EquipmentSlotInfo:
+    slot_type: str
+    slot_index: int | None
+    label: str
+    accepts_item_type: str
+    item: ItemInfo | None
+
+
+@dataclass(frozen=True)
+class InventorySnapshot:
+    items: tuple[ItemInfo, ...]
+    unequipped_items: tuple[ItemInfo, ...]
+    equipment_slots: tuple[EquipmentSlotInfo, ...]
+    can_manage_equipment: bool
+    equipment_lock_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class LootRollInfo:
+    player_id: str
+    roll: int
+
+
+@dataclass(frozen=True)
+class LootRoundInfo:
+    round_index: int
+    rolls: tuple[LootRollInfo, ...]
+
+
+@dataclass(frozen=True)
+class LootAwardInfo:
+    source_enemy_id: str
+    item_blueprint_id: str
+    item_name: str
+    quality: int
+    winner_id: str
+    winner_item_instance_id: str
+    copy_number: int
+    rounds: tuple[LootRoundInfo, ...]
+
+
+@dataclass(frozen=True)
+class LootResolutionSnapshot:
+    awards: tuple[LootAwardInfo, ...]

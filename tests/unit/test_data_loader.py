@@ -8,13 +8,19 @@ from game.core.data_loader import (
     load_constants,
     load_effect,
     load_enemy,
+    load_enemy_loot,
+    load_item_blueprint,
+    load_loot_constants,
     load_modifier,
+    load_passive,
     load_skill,
 )
 from game.core.enums import (
     ActionType,
     DamageType,
     EffectActionType,
+    ItemEffect,
+    ItemType,
     TargetType,
     TriggerType,
 )
@@ -27,9 +33,9 @@ def _fresh_cache():
     clear_cache()
 
 
-def test_load_effect_poison():
-    e = load_effect("poison")
-    assert e.effect_id == "poison"
+def test_load_effect_bleed():
+    e = load_effect("bleed")
+    assert e.effect_id == "bleed"
     assert e.trigger == TriggerType.ON_TURN_START
     assert len(e.actions) == 1
     assert e.actions[0].action_type == EffectActionType.DAMAGE
@@ -61,7 +67,17 @@ def test_load_effect_enlightenment():
     assert e.actions[0].stat == "mastery"
     assert e.actions[0].expr == "10 + 2 * target.mastery"
     assert e.actions[1].action_type == EffectActionType.GRANT_ENERGY
-    assert e.actions[1].expr == "target.energy * 0.1"
+    assert e.actions[1].expr == "target.energy * 0.2"
+
+
+def test_load_effect_berserker_skill_access():
+    e = load_effect("berserker")
+
+    assert e.trigger == TriggerType.ON_DAMAGE_CALC
+    assert e.actions[2].action_type == EffectActionType.GRANT_SKILL
+    assert e.actions[2].skill_id == "rampage"
+    assert e.actions[3].action_type == EffectActionType.BLOCK_SKILL
+    assert e.actions[3].skill_id == "slash"
 
 
 def test_load_skill_slash():
@@ -74,7 +90,7 @@ def test_load_skill_slash():
     assert s.hits[0].target_type == TargetType.SINGLE_ENEMY
     assert s.hits[0].damage_type == DamageType.SLASHING
     assert "attacker.attack" in s.hits[0].formula
-    assert s.hits[0].base_power == 10
+    assert s.hits[0].base_power == 1
 
 
 def test_load_skill_enlightenment():
@@ -124,3 +140,49 @@ def test_load_modifier_with_class_tags():
     assert m.modifier_id == "slash_power"
     assert m.skill_filter == "slash"
     assert "warrior" in m.class_tags
+
+
+def test_load_passive_multi_trigger():
+    passive = load_passive("battle_master")
+
+    assert passive.triggers == (
+        TriggerType.ON_HIT,
+        TriggerType.ON_TAKE_DAMAGE,
+    )
+    assert passive.trigger == TriggerType.ON_HIT
+    assert passive.action.value == "grant_energy"
+
+
+def test_load_item_blueprint_long_sword():
+    item = load_item_blueprint("long_sword")
+
+    assert item.blueprint_id == "long_sword"
+    assert item.item_type == ItemType.WEAPON
+    assert item.effects[0].effect_type == ItemEffect.MODIFY_STAT
+    assert item.effects[0].stat == "attack"
+    assert item.effects[0].expr == "10 + quality"
+
+
+def test_load_item_blueprint_sealed_talisman():
+    item = load_item_blueprint("sealed_talisman")
+
+    assert item.item_type == ItemType.RELIC
+    assert item.effects[0].effect_type == ItemEffect.BLOCK_SKILL
+    assert item.effects[0].skill_id == "slash"
+
+
+def test_load_loot_constants():
+    loot = load_loot_constants()
+
+    assert loot["item_quality_formula"] == "room_difficulty_scalar"
+
+
+def test_load_enemy_loot_goblin_boss():
+    loot = load_enemy_loot("goblin_boss")
+
+    assert len(loot) == 1
+    assert loot[0].enemy_id == "goblin_boss"
+    assert loot[0].item_id == "long_sword"
+    assert loot[0].min_quantity == 1
+    assert loot[0].max_quantity == 1
+    assert loot[0].drop_rate == 1.0

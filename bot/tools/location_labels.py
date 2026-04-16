@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import re
 
 from game.core.data_loader import LocationOption

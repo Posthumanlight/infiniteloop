@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import replace
 
 from game.character.player_character import PlayerCharacter
 from game.core.data_loader import (
@@ -12,6 +13,7 @@ from game.core.data_loader import (
 from game.core.dice import SeededRNG
 from game.core.enums import CombatLocationType, EnemyCombatType, LocationType
 from game.events.engine import select_event
+from game.world.difficulty import RoomDifficultyModifier, build_room_difficulty
 from game.world.models import GenerationConfig
 
 _ALLOWED_ROOM_TYPES: dict[EnemyCombatType, tuple[CombatLocationType, ...]] = {
@@ -38,6 +40,18 @@ class WorldGenerator:
     def load_predetermined(self, set_id: str) -> tuple[LocationOption, ...]:
         location_set = load_location_set(set_id)
         return location_set.locations
+
+    def _attach_room_difficulty(
+        self,
+        locations: tuple[LocationOption, ...],
+        room_difficulty: RoomDifficultyModifier,
+    ) -> tuple[LocationOption, ...]:
+        return tuple(
+            replace(loc, room_difficulty=room_difficulty)
+            if loc.location_type == LocationType.COMBAT
+            else loc
+            for loc in locations
+        )
 
     def _get_tag_filtered_enemies(self, tags: tuple[str, ...]) -> dict[str, EnemyData]:
         all_enemies = load_enemies()
@@ -266,7 +280,11 @@ class WorldGenerator:
         config: GenerationConfig,
         depth: int = 0,
     ) -> tuple[LocationOption, ...]:
-        if config.predetermined_set_id is not None:
-            return self.load_predetermined(config.predetermined_set_id)
+        room_difficulty = build_room_difficulty(players, power)
 
-        return self.generate_random(power, players, config, depth)
+        if config.predetermined_set_id is not None:
+            base = self.load_predetermined(config.predetermined_set_id)
+            return self._attach_room_difficulty(base, room_difficulty)
+
+        base = self.generate_random(power, players, config, depth)
+        return self._attach_room_difficulty(base, room_difficulty)

@@ -5,9 +5,10 @@ from game.character.base_entity import BaseEntity
 from game.character.enemy import Enemy
 from game.character.player_character import PlayerCharacter
 from game.combat.action_resolver import resolve_action
+from game.combat.effects import get_effective_skill_access
 from game.combat.initiative import build_turn_order
 from game.combat.models import ActionRequest, ActionResult, CombatState
-from game.combat.passives import check_passives
+from game.combat.passives import PassiveEvent, check_passives
 from game.combat.turn_manager import (
     check_combat_end,
     end_turn,
@@ -18,6 +19,7 @@ from game.combat.cooldowns import get_remaining_cooldown
 from game.core.data_loader import SkillData, load_constants, load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import ActionType, CombatPhase, TriggerType
+from game.world.difficulty import RoomDifficultyModifier
 
 
 def start_combat(
@@ -25,6 +27,7 @@ def start_combat(
     players: list[PlayerCharacter],
     enemies: list[Enemy],
     seed: int,
+    room_difficulty: RoomDifficultyModifier | None = None,
 ) -> CombatState:
     rng = SeededRNG(seed)
     constants = load_constants()
@@ -46,12 +49,17 @@ def start_combat(
         entities=entities,
         phase=CombatPhase.ACTING,
         rng_state=rng.get_state(),
+        room_difficulty=room_difficulty,
     )
 
     # Fire ON_COMBAT_START passives for all entities
     for eid in state.turn_order:
         if state.entities[eid].current_hp > 0:
-            state, _ = check_passives(state, eid, TriggerType.ON_COMBAT_START)
+            state, _ = check_passives(
+                state,
+                eid,
+                PassiveEvent(trigger=TriggerType.ON_COMBAT_START),
+            )
 
     # Skip to first alive entity
     while state.current_turn_index < len(state.turn_order):
@@ -143,8 +151,9 @@ def get_available_actions(
     state: CombatState, actor_id: str,
 ) -> list[tuple[SkillData, int]]:
     entity = state.entities[actor_id]
+    access = get_effective_skill_access(entity, state)
     result: list[tuple[SkillData, int]] = []
-    for skill_id in entity.skills:
+    for skill_id in access.available:
         skill_data = load_skill(skill_id)
         cd = get_remaining_cooldown(state, actor_id, skill_id)
         result.append((skill_data, cd))

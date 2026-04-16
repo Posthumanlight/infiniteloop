@@ -1,5 +1,7 @@
 from db.queries.users_namespace import UserCharactersData
 from game.combat.skill_modifiers import ModifierInstance
+from game.core.enums import ItemEffect
+from game.items.items import GeneratedItemEffect
 
 
 def test_parse_modifiers_accepts_json_string_with_stacks():
@@ -33,3 +35,22 @@ def test_serialize_modifiers_round_trips_with_parse():
         ("slash_power", 3),
         ("battle_hardened", 1),
     ]
+
+
+def test_generated_effects_round_trip():
+    effects = (
+        GeneratedItemEffect(
+            effect_type=ItemEffect.MODIFY_STAT,
+            stat="attack",
+            value=12.0,
+        ),
+        GeneratedItemEffect(
+            effect_type=ItemEffect.GRANT_SKILL,
+            skill_id="rampage",
+        ),
+    )
+
+    serialized = UserCharactersData._serialize_generated_effects(effects)
+    parsed = UserCharactersData._parse_generated_effects(serialized)
+
+    assert parsed == effects

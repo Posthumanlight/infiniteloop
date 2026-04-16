@@ -17,3 +17,19 @@ formula = "20 + max_hp * 0.20"
 vote_timer_seconds = 30
 max_choices = 4
 min_choices = 2
+
+[world_difficulty]
+base_scalar = 1.0
+per_avg_level = 0.2
+per_extra_player = 1.1
+max_scalar = 999.99
+
+[world_difficulty.stat_weights]
+hp = 2
+attack = 1.25
+speed = 0.05
+resistance = 0.50
+mastery = 0.35
+
+[loot]
+item_quality_formula = "room_difficulty_scalar"

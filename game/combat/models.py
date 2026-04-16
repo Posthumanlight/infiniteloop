@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from game.core.enums import ActionType, CombatPhase, DamageType
 
 if TYPE_CHECKING:
     from game.combat.passives import PassiveTracker
+    from game.world.difficulty import RoomDifficultyModifier
 
 
 @dataclass(frozen=True)
@@ -57,12 +58,7 @@ class CombatState:
     entities: dict[str, object]  # str -> BaseEntity (avoid circular import)
     phase: CombatPhase
     action_log: tuple[ActionResult, ...] = ()
-    passive_trackers: dict[str, PassiveTracker] = ()  # type: ignore[assignment]
-    cooldowns: dict[str, dict[str, int]] = ()  # type: ignore[assignment]
+    passive_trackers: dict[str, PassiveTracker] = field(default_factory=dict)
+    cooldowns: dict[str, dict[str, int]] = field(default_factory=dict)
     rng_state: tuple | None = None
-
-    def __post_init__(self) -> None:
-        if isinstance(self.passive_trackers, tuple):
-            object.__setattr__(self, "passive_trackers", {})
-        if isinstance(self.cooldowns, tuple):
-            object.__setattr__(self, "cooldowns", {})
+    room_difficulty: RoomDifficultyModifier | None = None

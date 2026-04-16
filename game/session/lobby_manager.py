@@ -5,6 +5,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Protocol
 
 from game.combat.skill_modifiers import ModifierInstance
+from game.character.inventory import Inventory
 from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats
 from game.core.data_loader import load_classes, load_progression
@@ -40,7 +41,7 @@ class CharacterRecord:
     xp: int
     skills: tuple[str, ...]
     skill_modifiers: tuple[ModifierInstance, ...]
-    inventory: dict[str, int]
+    inventory: Inventory
 
 
 @dataclass
@@ -81,7 +82,7 @@ class CharacterRepository(Protocol):
         level: int = 1,
         xp: int = 0,
         skill_modifiers: tuple[ModifierInstance, ...] = (),
-        inventory: dict[str, int] | None = None,
+        inventory: Inventory | None = None,
     ) -> CharacterRecord: ...
 
     async def character_name_exists(
@@ -98,6 +99,7 @@ class CharacterRepository(Protocol):
         xp: int,
         skills: tuple[str, ...],
         skill_modifiers: tuple[ModifierInstance, ...],
+        inventory: Inventory | None = None,
     ) -> None: ...
 
 

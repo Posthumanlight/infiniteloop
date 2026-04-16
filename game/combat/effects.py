@@ -1,14 +1,14 @@
-from __future__ import annotations
-
 from dataclasses import dataclass, replace
 from typing import Any
 
 from game.character.base_entity import BaseEntity
+from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState, DamageResult, HitResult
 from game.core.data_loader import load_effect
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, EffectActionType, TriggerType
 from game.core.formula_eval import ExprContext, evaluate_expr
+from game.items.equipment_effects import collect_equipped_item_effects
 
 
 # ---------------------------------------------------------------------------
@@ -21,6 +21,22 @@ class StatusEffectInstance:
     source_id: str
     remaining_duration: int
     stack_count: int = 1
+
+
+@dataclass(frozen=True)
+class SkillAccessSnapshot:
+    base: tuple[str, ...]
+    granted: tuple[str, ...]
+    blocked: tuple[str, ...]
+    available: tuple[str, ...]
+
+    @property
+    def available_set(self) -> frozenset[str]:
+        return frozenset(self.available)
+
+    @property
+    def blocked_set(self) -> frozenset[str]:
+        return frozenset(self.blocked)
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +142,20 @@ _NON_TICKING_ACTIONS = frozenset({
     EffectActionType.DAMAGE_DEALT_MULT,
     EffectActionType.DAMAGE_TAKEN_MULT,
     EffectActionType.STAT_MODIFY,
+    EffectActionType.GRANT_SKILL,
+    EffectActionType.BLOCK_SKILL,
 })
+
+
+def _ordered_unique(values: list[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return tuple(ordered)
 
 
 def _build_effect_context(
@@ -469,6 +498,64 @@ def is_skipped(state: CombatState, entity_id: str) -> bool:
     return False
 
 
+def get_effective_skill_access(
+    entity: BaseEntity,
+    state: CombatState | None = None,
+) -> SkillAccessSnapshot:
+    base = tuple(getattr(entity, "skills", ()))
+    grants: list[str] = []
+    blocks: list[str] = []
+
+    if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
+        item_effects = collect_equipped_item_effects(entity.inventory)
+        grants.extend(item_effects.granted_skills)
+        blocks.extend(item_effects.blocked_skills)
+
+    for inst in entity.active_effects:
+        effect_def = load_effect(inst.effect_id)
+        if state is not None:
+            ctx = _build_effect_context(
+                state,
+                entity.entity_id,
+                inst.source_id,
+                use_effective_stats=True,
+            )
+            if not _check_condition(
+                effect_def.tick_condition,
+                entity,
+                target_ctx=ctx["target"],
+                attacker_ctx=ctx["attacker"],
+            ):
+                continue
+
+        for action in effect_def.actions:
+            if action.action_type == EffectActionType.GRANT_SKILL and action.skill_id:
+                grants.append(action.skill_id)
+            elif action.action_type == EffectActionType.BLOCK_SKILL and action.skill_id:
+                blocks.append(action.skill_id)
+
+    ordered_grants = _ordered_unique(grants)
+    ordered_blocks = _ordered_unique(blocks)
+    blocked_set = set(ordered_blocks)
+
+    available = tuple(
+        skill_id
+        for skill_id in _ordered_unique([*base, *ordered_grants])
+        if skill_id not in blocked_set
+    )
+    visible_grants = tuple(
+        skill_id for skill_id in ordered_grants
+        if skill_id not in blocked_set
+    )
+
+    return SkillAccessSnapshot(
+        base=base,
+        granted=visible_grants,
+        blocked=ordered_blocks,
+        available=available,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Effective stat helpers (on-demand, for STAT_MODIFY effects)
 # ---------------------------------------------------------------------------
@@ -481,6 +568,10 @@ def get_effective_major_stat(
     """Get a major stat value with all active STAT_MODIFY effects applied."""
     entity = state.entities[entity_id]
     base_value = float(getattr(entity.major_stats, stat_name))
+
+    if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
+        item_effects = collect_equipped_item_effects(entity.inventory)
+        base_value += item_effects.stat_modifiers.get(stat_name, 0.0)
 
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)
@@ -520,6 +611,10 @@ def get_effective_minor_stat(
     """
     entity = state.entities[entity_id]
     base_value = entity.minor_stats.values.get(stat_key, 0.0)
+
+    if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
+        item_effects = collect_equipped_item_effects(entity.inventory)
+        base_value += item_effects.stat_modifiers.get(stat_key, 0.0)
 
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)

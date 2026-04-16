@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from game.combat.effects import build_effective_expr_context, get_effective_major_stat
+from game.combat.effects import (
+    apply_effect,
+    build_effective_expr_context,
+    get_effective_major_stat,
+)
 from game.combat.models import CombatState, HitResult
 from game.core.data_loader import SkillData, load_modifier
 from game.core.enums import ModifierPhase
@@ -31,6 +35,7 @@ class ResolvedModifier:
     action: str
     stack_count: int
     damage_type_filter: str | None = None
+    effect_id: str | None = None
 
 
 def add_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
@@ -81,6 +86,7 @@ def collect_modifiers(
             action=mod_data.action,
             stack_count=inst.stack_count,
             damage_type_filter=mod_data.damage_type_filter,
+            effect_id=mod_data.effect_id,
         ))
     return tuple(result)
 
@@ -114,6 +120,17 @@ def apply_post_hit_modifiers(
                 new_entities = {**state.entities, actor_id: replace(actor, current_hp=new_hp)}
                 state = replace(state, entities=new_entities)
                 results.append(HitResult(target_id=actor_id, heal_amount=applied))
+            case "apply_effect":
+                if mod.effect_id is None:
+                    continue
+                applications = max(0, int(value))
+                for _ in range(applications):
+                    state = apply_effect(state, target_id, mod.effect_id, actor_id)
+                if applications > 0:
+                    results.append(HitResult(
+                        target_id=target_id,
+                        effects_applied=tuple(mod.effect_id for _ in range(applications)),
+                    ))
             case _:
                 pass  # other post-hit actions can be added here
 

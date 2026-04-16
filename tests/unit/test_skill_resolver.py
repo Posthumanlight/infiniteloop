@@ -7,7 +7,7 @@ import game.combat.passives as combat_passives
 import game.combat.skill_modifiers as combat_skill_modifiers
 from game.combat.action_resolver import resolve_action
 from game.combat.effects import apply_effect, expire_effects
-from game.combat.passives import check_passives
+from game.combat.passives import PassiveEvent, check_passives
 from game.combat.models import ActionRequest
 from game.combat.skill_modifiers import ModifierInstance
 from game.combat.skill_resolver import resolve_skill
@@ -122,7 +122,7 @@ def test_missing_stack_namespace_defaults_to_zero_for_passive_conditions(monkeyp
         return PassiveSkillData(
             skill_id="stack_check",
             name="Stack Check",
-            trigger=TriggerType.ON_CAST,
+            triggers=(TriggerType.ON_CAST,),
             condition="stacks.nonexistent_effect >= 1",
             action=PassiveAction.HEAL,
             expr="1",
@@ -134,7 +134,7 @@ def test_missing_stack_namespace_defaults_to_zero_for_passive_conditions(monkeyp
     warrior = replace(make_warrior(), passive_skills=("stack_check",), current_hp=100)
     state = make_combat_state(players=[warrior])
 
-    state, hits = check_passives(state, "p1", TriggerType.ON_CAST)
+    state, hits = check_passives(state, "p1", PassiveEvent(trigger=TriggerType.ON_CAST))
 
     assert hits == []
     assert state.entities["p1"].current_hp == 100
@@ -159,7 +159,7 @@ def test_enlightenment_buff_increases_spell_damage_restores_energy_and_expires()
     state, buff_hits = resolve_skill(state, "p1", enlightenment, {}, SeededRNG(1), CONSTANTS)
 
     assert buff_hits == []
-    assert state.entities["p1"].current_energy == 115
+    assert state.entities["p1"].current_energy == 130
     assert any(eff.effect_id == "enlightenment" for eff in state.entities["p1"].active_effects)
 
     _, baseline_hits = resolve_skill(
@@ -210,7 +210,7 @@ def test_passive_context_sees_effective_major_stats(monkeypatch):
         return PassiveSkillData(
             skill_id="mastery_guard",
             name="Mastery Guard",
-            trigger=TriggerType.ON_TURN_START,
+            triggers=(TriggerType.ON_TURN_START,),
             condition="attacker.mastery >= 20",
             action=PassiveAction.HEAL,
             expr="attacker.mastery",
@@ -223,7 +223,11 @@ def test_passive_context_sees_effective_major_stats(monkeypatch):
     state = make_combat_state(players=[warrior])
     state = apply_effect(state, "p1", "enlightenment", "p1")
 
-    state, hits = check_passives(state, "p1", TriggerType.ON_TURN_START)
+    state, hits = check_passives(
+        state,
+        "p1",
+        PassiveEvent(trigger=TriggerType.ON_TURN_START),
+    )
 
     assert hits[0].heal_amount == 25
     assert state.entities["p1"].current_hp == 105
@@ -258,3 +262,86 @@ def test_modifier_context_sees_effective_major_stats(monkeypatch):
     heal_hits = [hit for hit in hits if hit.heal_amount > 0]
     assert heal_hits[0].heal_amount == 25
     assert state.entities["p1"].current_hp == 75
+
+
+def test_butcher_adds_extra_bleed_stack_to_deep_wounds():
+    warrior = replace(
+        make_warrior(),
+        skills=("deep_wounds",),
+        skill_modifiers=(ModifierInstance("butcher"),),
+    )
+    state = make_combat_state(players=[warrior])
+    skill = load_skill("deep_wounds")
+
+    state, hits = resolve_skill(state, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
+
+    bleed = [
+        effect
+        for effect in state.entities["e1"].active_effects
+        if effect.effect_id == "bleed"
+    ]
+    assert len(bleed) == 1
+    assert bleed[0].stack_count == 2
+    assert any(hit.effects_applied == ("bleed",) for hit in hits)
+
+
+def test_multi_trigger_passive_grants_energy_on_hit_and_on_take_damage():
+    warrior = replace(
+        make_warrior(),
+        current_energy=90,
+        passive_skills=("battle_master",),
+    )
+    state = make_combat_state(players=[warrior])
+
+    state, _ = check_passives(
+        state,
+        "p1",
+        PassiveEvent(trigger=TriggerType.ON_HIT, payload={"damage_type": "slashing"}),
+    )
+    assert state.entities["p1"].current_energy == 95
+
+    state, _ = check_passives(
+        state,
+        "p1",
+        PassiveEvent(trigger=TriggerType.ON_TAKE_DAMAGE, payload={"damage_taken": 7}),
+    )
+    assert state.entities["p1"].current_energy == 100
+
+
+def test_multi_trigger_passive_shared_cooldown_blocks_second_trigger(monkeypatch):
+    def fake_load_passive(passive_id: str) -> PassiveSkillData:
+        if passive_id != "battle_master":
+            raise KeyError(passive_id)
+        return PassiveSkillData(
+            skill_id="battle_master",
+            name="Battle Master",
+            triggers=(TriggerType.ON_HIT, TriggerType.ON_TAKE_DAMAGE),
+            condition="",
+            action=PassiveAction.GRANT_ENERGY,
+            expr="5",
+            usage_limit=UsageLimit.UNLIMITED,
+            cooldown=2,
+        )
+
+    monkeypatch.setattr(combat_passives, "load_passive", fake_load_passive)
+
+    warrior = replace(
+        make_warrior(),
+        current_energy=50,
+        passive_skills=("battle_master",),
+    )
+    state = make_combat_state(players=[warrior])
+
+    state, _ = check_passives(
+        state,
+        "p1",
+        PassiveEvent(trigger=TriggerType.ON_HIT),
+    )
+    assert state.entities["p1"].current_energy == 55
+
+    state, _ = check_passives(
+        state,
+        "p1",
+        PassiveEvent(trigger=TriggerType.ON_TAKE_DAMAGE),
+    )
+    assert state.entities["p1"].current_energy == 55

@@ -4,6 +4,7 @@ from game.combat.skill_modifiers import ModifierInstance
 from game.core.data_loader import load_classes, load_progression
 from game.core.data_loader import clear_cache
 from game.core.enums import EntityType
+from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.factories import (
     build_enemy,
     build_enemies,
@@ -12,6 +13,7 @@ from game.session.factories import (
 )
 from game.session.lobby_manager import CharacterRecord
 from game.character.stats import MajorStats
+from game.character.inventory import Inventory
 
 
 @pytest.fixture(autouse=True)
@@ -74,6 +76,9 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
         )
         for class_id, cls in classes.items()
     }
+    sword = generate_item_from_blueprint_id("long_sword", quality=2, instance_id="s1")
+    inventory = Inventory().add_item(sword).equip("s1")
+
     record = CharacterRecord(
         character_id=42,
         tg_id=1001,
@@ -86,7 +91,7 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
             ModifierInstance("slash_power", 2),
             ModifierInstance("battle_hardened", 1),
         ),
-        inventory={"potion": 2},
+        inventory=inventory,
     )
 
     player = build_player_from_saved(record, progression, base_stats)
@@ -99,4 +104,5 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
         ("slash_power", 2),
         ("battle_hardened", 1),
     ]
-    assert player.inventory.content == {"potion": 2}
+    assert "s1" in player.inventory.items
+    assert player.inventory.equipment.weapon_id == "s1"

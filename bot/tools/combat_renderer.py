@@ -8,6 +8,7 @@ from game.core.enums import EntityType
 from game.core.game_models import (
     CombatSnapshot,
     EntitySnapshot,
+    LootResolutionSnapshot,
     PlayerInfo,
     TurnBatch,
 )
@@ -150,6 +151,57 @@ def render_combat_end(
         return "\U0001f3c6 Victory!\n\nSurvivors:\n" + "\n".join(survivor_lines)
 
     return "\U0001f480 Defeat! Your party has fallen."
+
+
+def _chunk_text_blocks(blocks: list[str], max_length: int = 3500) -> list[str]:
+    chunks: list[str] = []
+    current = ""
+
+    for block in blocks:
+        candidate = block if not current else f"{current}\n\n{block}"
+        if len(candidate) <= max_length:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+        current = block
+
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def render_loot_resolution(
+    loot: LootResolutionSnapshot,
+    player_names: dict[str, str],
+) -> list[str]:
+    if not loot.awards:
+        return []
+
+    blocks: list[str] = ["\U0001f381 Loot rolls:"]
+
+    for award in loot.awards:
+        lines = [
+            (
+                f"{award.item_name} [Q{award.quality}] "
+                f"from {award.source_enemy_id}"
+            ),
+        ]
+        if award.copy_number > 1:
+            lines[0] += f" #{award.copy_number}"
+
+        for round_info in award.rounds:
+            roll_text = ", ".join(
+                f"{player_names.get(roll.player_id, roll.player_id)} {roll.roll}"
+                for roll in round_info.rolls
+            )
+            lines.append(f"Round {round_info.round_index}: {roll_text}")
+
+        winner_name = player_names.get(award.winner_id, award.winner_id)
+        lines.append(f"Winner: {winner_name}")
+        blocks.append("\n".join(lines))
+
+    return _chunk_text_blocks(blocks)
 
 
 def render_status(

@@ -1,9 +1,9 @@
 from dataclasses import replace
 
 from game.combat.cooldowns import is_on_cooldown, put_on_cooldown
-from game.combat.effects import is_skipped
+from game.combat.effects import get_effective_skill_access, is_skipped
 from game.combat.models import ActionRequest, ActionResult, CombatState
-from game.combat.passives import check_passives
+from game.combat.passives import PassiveEvent, check_passives
 from game.combat.skill_resolver import resolve_skill
 from game.core.data_loader import load_skill
 from game.core.dice import SeededRNG
@@ -39,8 +39,19 @@ def _resolve_skill_action(
     rng: SeededRNG,
     constants: dict,
 ) -> tuple[CombatState, ActionResult]:
-    skill = load_skill(action.skill_id)
     actor = state.entities[action.actor_id]
+    access = get_effective_skill_access(actor, state)
+
+    if action.skill_id is None:
+        raise ValueError("Skill id is required for action")
+    if action.skill_id not in access.available_set:
+        if action.skill_id in access.blocked_set:
+            raise ValueError(
+                f"Skill '{action.skill_id}' is blocked by an active effect",
+            )
+        raise ValueError(f"Skill '{action.skill_id}' is not available to this actor")
+
+    skill = load_skill(action.skill_id)
 
     if is_on_cooldown(state, action.actor_id, action.skill_id):
         raise ValueError(
@@ -69,9 +80,14 @@ def _resolve_skill_action(
 
     # Fire ON_CAST passives (e.g. arcane_rupture consuming stacks)
     state, cast_hits = check_passives(
-        state, action.actor_id, TriggerType.ON_CAST,
-        trigger_context={"skill_id": action.skill_id},
-        rng=rng, constants=constants,
+        state,
+        action.actor_id,
+        PassiveEvent(
+            trigger=TriggerType.ON_CAST,
+            payload={"skill_id": action.skill_id},
+        ),
+        rng=rng,
+        constants=constants,
     )
     hits.extend(cast_hits)
 

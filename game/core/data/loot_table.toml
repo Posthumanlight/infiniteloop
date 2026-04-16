@@ -1,0 +1,13 @@
+[[drops]]
+enemy_id = "draugr"
+item_id = "iron_armor"
+min_quantity = 1
+max_quantity = 1
+drop_rate = 1.0
+
+[[drops]]
+enemy_id = "goblin_boss"
+item_id = "long_sword"
+min_quantity = 1
+max_quantity = 1
+drop_rate = 1.0

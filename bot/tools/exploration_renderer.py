@@ -1,10 +1,9 @@
+from __future__ import annotations
+
 """Renders exploration, class selection, events, and run summary into Telegram messages.
 
 Pure functions — no aiogram imports. Takes service-layer DTOs, returns strings.
 """
-
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from bot.tools.location_labels import location_display_label

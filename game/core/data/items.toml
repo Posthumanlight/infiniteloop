@@ -1,0 +1,21 @@
+[items.long_sword]
+name = "Long Sword"
+effects = [
+    { type = "modify_stat", stat = "attack", expr = "10 + quality" }
+]
+item_type = "weapon"
+
+[items.iron_armor]
+name = "Iron Armor"
+item_type = "armor"
+effects = [
+    { type = "modify_stat", stat = "resistance", expr = "10 + quality" }
+]
+
+
+[items.sealed_talisman]
+name = "Sealed Talisman"
+item_type = "relic"
+effects = [
+    { type = "block_skill", skill_id = "slash" }
+]

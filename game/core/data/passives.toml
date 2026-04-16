@@ -1,13 +1,13 @@
-[passives.last_stand]
-name = "Last Stand"
-trigger = "on_take_damage"
-condition = "attacker.current_hp < attacker.hp * 0.25"
-action = "apply_effect"
-effect_id = "fortify"
-expr = "1"
+#warrior
+[passives.battle_master]
+name = "Battle Master"
+trigger = ["on_hit", "on_take_damage"]
+condition = ""
+action = "grant_energy"
+expr = "5"
 usage_limit = "unlimited"
-target_type = "self"
 
+#mage
 [passives.arcane_prowess]
 name = "Arcane Prowess"
 trigger = "on_hit"

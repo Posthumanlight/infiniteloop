@@ -4,7 +4,10 @@ import logging
 import asyncpg
 
 from db.core.crud_operations import safe_get_db_data, safe_execute, SupabaseOperation
+from game.character.inventory import EquipmentLoadout, Inventory
 from game.combat.skill_modifiers import ModifierInstance
+from game.core.enums import ItemEffect, ItemType
+from game.items.items import GeneratedItemEffect, ItemInstance
 from game.session.lobby_manager import CharacterRecord, SavedCharacterSummary
 
 logger = logging.getLogger(__name__)
@@ -143,6 +146,131 @@ class UserCharactersData(UserData):
         ]
         return json.dumps(payload)
 
+    @staticmethod
+    def _parse_generated_effects(raw_effects) -> tuple[GeneratedItemEffect, ...]:
+        if raw_effects is None:
+            return ()
+        if isinstance(raw_effects, str):
+            try:
+                decoded = json.loads(raw_effects)
+            except json.JSONDecodeError:
+                return ()
+        elif isinstance(raw_effects, (list, tuple)):
+            decoded = raw_effects
+        else:
+            return ()
+
+        effects: list[GeneratedItemEffect] = []
+        for item in decoded:
+            if not isinstance(item, dict):
+                continue
+            effect_type = item.get("effect_type")
+            if effect_type is None:
+                continue
+            try:
+                parsed_type = ItemEffect(str(effect_type))
+            except ValueError:
+                continue
+            value = item.get("value")
+            parsed_value: float | None
+            if value is None:
+                parsed_value = None
+            else:
+                try:
+                    parsed_value = float(value)
+                except (TypeError, ValueError):
+                    parsed_value = None
+            effects.append(GeneratedItemEffect(
+                effect_type=parsed_type,
+                stat=item.get("stat"),
+                value=parsed_value,
+                skill_id=item.get("skill_id"),
+                passive_id=item.get("passive_id"),
+            ))
+        return tuple(effects)
+
+    @staticmethod
+    def _serialize_generated_effects(
+        effects: tuple[GeneratedItemEffect, ...],
+    ) -> str:
+        payload = [
+            {
+                "effect_type": effect.effect_type.value,
+                "stat": effect.stat,
+                "value": effect.value,
+                "skill_id": effect.skill_id,
+                "passive_id": effect.passive_id,
+            }
+            for effect in effects
+        ]
+        return json.dumps(payload)
+
+    @classmethod
+    def _deserialize_item_instance(cls, row) -> ItemInstance:
+        additional_data = row["additional_data"]
+        if isinstance(additional_data, str):
+            try:
+                parsed_additional = json.loads(additional_data)
+            except json.JSONDecodeError:
+                parsed_additional = {}
+        elif isinstance(additional_data, dict):
+            parsed_additional = additional_data
+        else:
+            parsed_additional = {}
+        return ItemInstance(
+            instance_id=str(row["instance_id"]),
+            blueprint_id=str(row["blueprint_id"]),
+            name=str(parsed_additional.get("name", row["blueprint_id"])),
+            item_type=ItemType(str(row["item_type"])),
+            quality=int(row["quality"] or 1),
+            effects=cls._parse_generated_effects(row["generated_effects"]),
+        )
+
+    @staticmethod
+    def _serialize_item_instance(item: ItemInstance) -> dict[str, object]:
+        return {
+            "instance_id": item.instance_id,
+            "blueprint_id": item.blueprint_id,
+            "item_type": item.item_type.value,
+            "quality": item.quality,
+            "generated_effects": UserCharactersData._serialize_generated_effects(
+                item.effects,
+            ),
+            "additional_data": json.dumps({"name": item.name}),
+        }
+
+    @classmethod
+    def _build_inventory_from_rows(cls, rows) -> Inventory:
+        items: dict[str, ItemInstance] = {}
+        weapon_id: str | None = None
+        armor_id: str | None = None
+        relic_ids: list[str | None] = [None, None, None, None, None]
+
+        for row in rows:
+            item = cls._deserialize_item_instance(row)
+            items[item.instance_id] = item
+            slot = row["equipped_slot"]
+            index = row["equipped_index"]
+            if slot == "weapon":
+                weapon_id = item.instance_id
+            elif slot == "armor":
+                armor_id = item.instance_id
+            elif slot == "relic":
+                if index is None:
+                    continue
+                idx = int(index)
+                if 0 <= idx < len(relic_ids):
+                    relic_ids[idx] = item.instance_id
+
+        return Inventory(
+            items=items,
+            equipment=EquipmentLoadout(
+                weapon_id=weapon_id,
+                armor_id=armor_id,
+                relic_ids=tuple(relic_ids),
+            ),
+        )
+
     async def get_user_characters(self, tg_id: int) -> list[SavedCharacterSummary]:
         sql = """
             SELECT
@@ -198,9 +326,18 @@ class UserCharactersData(UserData):
             LIMIT 1
         """
         inventory_sql = """
-            SELECT item_id, amount
-            FROM public.game_characters_inventory
+            SELECT
+                instance_id,
+                blueprint_id,
+                item_type,
+                quality,
+                generated_effects,
+                equipped_slot,
+                equipped_index,
+                additional_data
+            FROM public.game_characters_item_instances
             WHERE character_id = $1
+            ORDER BY instance_id
         """
 
         try:
@@ -215,13 +352,6 @@ class UserCharactersData(UserData):
             logger.error(f"DB error in get_character for character_id={character_id}: {exc}")
             raise
 
-        inventory: dict[str, int] = {}
-        for inv_row in inventory_rows:
-            item_id = inv_row["item_id"]
-            if item_id is None:
-                continue
-            inventory[str(item_id)] = inventory.get(str(item_id), 0) + int(inv_row["amount"] or 0)
-
         return CharacterRecord(
             character_id=int(row["character_id"]),
             tg_id=int(row["tg_id"]),
@@ -235,7 +365,7 @@ class UserCharactersData(UserData):
             xp=int(row["xp"] or 0),
             skills=self._parse_skills(row["skills"]),
             skill_modifiers=self._parse_modifiers(row["modifiers"]),
-            inventory=inventory,
+            inventory=self._build_inventory_from_rows(inventory_rows),
         )
 
     async def create_saved_character(
@@ -247,9 +377,9 @@ class UserCharactersData(UserData):
         level: int = 1,
         xp: int = 0,
         skill_modifiers: tuple[ModifierInstance, ...] = (),
-        inventory: dict[str, int] | None = None,
+        inventory: Inventory | None = None,
     ) -> CharacterRecord:
-        inventory = inventory or {}
+        inventory = inventory or Inventory()
         skills_json = json.dumps(list(skills))
         modifiers_json = self._serialize_modifiers(skill_modifiers)
 
@@ -264,8 +394,18 @@ class UserCharactersData(UserData):
             ON CONFLICT (character_id) DO NOTHING
         """
         sql_insert_inventory = """
-            INSERT INTO public.game_characters_inventory (character_id, item_id, amount)
-            VALUES ($1, $2, $3)
+            INSERT INTO public.game_characters_item_instances (
+                instance_id,
+                character_id,
+                blueprint_id,
+                item_type,
+                quality,
+                generated_effects,
+                equipped_slot,
+                equipped_index,
+                additional_data
+            )
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb)
         """
 
         try:
@@ -288,8 +428,21 @@ class UserCharactersData(UserData):
                         int(character_id),
                         character_name,
                     )
-                    for item_id, amount in inventory.items():
-                        await conn.execute(sql_insert_inventory, int(character_id), item_id, amount)
+                    for item in inventory.items.values():
+                        slot, index = inventory.equipped_slot(item.instance_id)
+                        payload = self._serialize_item_instance(item)
+                        await conn.execute(
+                            sql_insert_inventory,
+                            payload["instance_id"],
+                            int(character_id),
+                            payload["blueprint_id"],
+                            payload["item_type"],
+                            payload["quality"],
+                            payload["generated_effects"],
+                            slot,
+                            index,
+                            payload["additional_data"],
+                        )
         except Exception as exc:
             logger.error(
                 f"DB error in create_saved_character for tg_id={tg_id}: {exc}",
@@ -305,7 +458,7 @@ class UserCharactersData(UserData):
             xp=xp,
             skills=tuple(skills),
             skill_modifiers=tuple(skill_modifiers),
-            inventory=dict(inventory),
+            inventory=inventory,
         )
 
     async def character_name_exists(
@@ -342,6 +495,7 @@ class UserCharactersData(UserData):
         xp: int,
         skills: tuple[str, ...],
         skill_modifiers: tuple[ModifierInstance, ...],
+        inventory: Inventory | None = None,
     ) -> None:
         skills_json = json.dumps(list(skills))
         modifiers_json = self._serialize_modifiers(skill_modifiers)
@@ -357,6 +511,24 @@ class UserCharactersData(UserData):
             UPDATE public.game_characters
             SET character_name = $2
             WHERE character_id = $1
+        """
+        sql_delete_inventory = """
+            DELETE FROM public.game_characters_item_instances
+            WHERE character_id = $1
+        """
+        sql_insert_inventory = """
+            INSERT INTO public.game_characters_item_instances (
+                instance_id,
+                character_id,
+                blueprint_id,
+                item_type,
+                quality,
+                generated_effects,
+                equipped_slot,
+                equipped_index,
+                additional_data
+            )
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb)
         """
         try:
             async with self.pool.acquire() as conn:
@@ -374,6 +546,23 @@ class UserCharactersData(UserData):
                         int(character_id),
                         character_name,
                     )
+                    if inventory is not None:
+                        await conn.execute(sql_delete_inventory, int(character_id))
+                        for item in inventory.items.values():
+                            slot, index = inventory.equipped_slot(item.instance_id)
+                            payload = self._serialize_item_instance(item)
+                            await conn.execute(
+                                sql_insert_inventory,
+                                payload["instance_id"],
+                                int(character_id),
+                                payload["blueprint_id"],
+                                payload["item_type"],
+                                payload["quality"],
+                                payload["generated_effects"],
+                                slot,
+                                index,
+                                payload["additional_data"],
+                            )
         except Exception as exc:
             logger.error(
                 "DB error in save_character_progress "
