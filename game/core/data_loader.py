@@ -1,7 +1,7 @@
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from game.core.enums import (
     ActionType,
@@ -25,6 +25,9 @@ from game.events.models import (
     EventRequirements,
     OutcomeDef,
 )
+
+if TYPE_CHECKING:
+    from game.world.difficulty import RoomDifficultyModifier
 _DATA_DIR = Path(__file__).parent / "data"
 _cache: dict[str, Any] = {}
 
@@ -48,6 +51,7 @@ class EffectActionDef:
     scales_with_stacks: bool = True
     damage_type: DamageType | None = None   # for "damage" — what type of damage
     stat: str | None = None                  # for "stat_modify" — which stat
+    skill_id: str | None = None             # for skill grant/block — which skill
 
 
 @dataclass(frozen=True)
@@ -64,15 +68,30 @@ class EffectDef:
 
 
 def _parse_effect_action(raw: dict[str, Any]) -> EffectActionDef:
+    action_type = EffectActionType(raw["type"])
+    skill_id = raw.get("skill_id")
     dmg_type = None
     if "damage_type" in raw:
         dmg_type = DamageType(raw["damage_type"])
+    skill_access_actions = {
+        EffectActionType.GRANT_SKILL,
+        EffectActionType.BLOCK_SKILL,
+    }
+    if action_type in skill_access_actions and not skill_id:
+        raise ValueError(
+            f"Effect action '{action_type.value}' requires skill_id",
+        )
+    if action_type not in skill_access_actions and skill_id is not None:
+        raise ValueError(
+            f"skill_id is only valid for skill access actions, got '{action_type.value}'",
+        )
     return EffectActionDef(
-        action_type=EffectActionType(raw["type"]),
+        action_type=action_type,
         expr=raw.get("expr", "0"),
         scales_with_stacks=raw.get("scales_with_stacks", True),
         damage_type=dmg_type,
         stat=raw.get("stat"),
+        skill_id=skill_id,
     )
 
 
@@ -321,6 +340,10 @@ def load_restoration_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["restoration"]
 
 
+def load_world_difficulty_constants() -> dict[str, Any]:
+    return _load_toml("constants.toml")["world_difficulty"]
+
+
 # ---------------------------------------------------------------------------
 # Event definitions
 # ---------------------------------------------------------------------------
@@ -393,7 +416,7 @@ def load_event(event_id: str) -> EventDef:
 class PassiveSkillData:
     skill_id: str
     name: str
-    trigger: TriggerType
+    triggers: tuple[TriggerType, ...]
     condition: str
     action: PassiveAction
     expr: str
@@ -405,6 +428,26 @@ class PassiveSkillData:
     target_type: TargetType = TargetType.SELF
     cooldown: int = 0
 
+    @property
+    def trigger(self) -> TriggerType:
+        """Compatibility shim for older call sites/tests."""
+        return self.triggers[0]
+
+
+def _parse_passive_triggers(raw: str | list[str]) -> tuple[TriggerType, ...]:
+    if isinstance(raw, str):
+        return (TriggerType(raw),)
+    if isinstance(raw, list) and raw:
+        seen: set[TriggerType] = set()
+        ordered: list[TriggerType] = []
+        for item in raw:
+            trigger = TriggerType(item)
+            if trigger not in seen:
+                seen.add(trigger)
+                ordered.append(trigger)
+        return tuple(ordered)
+    raise ValueError("Passive trigger must be a trigger string or non-empty list")
+
 
 def load_passives() -> dict[str, PassiveSkillData]:
     raw = _load_toml("passives.toml").get("passives", {})
@@ -412,7 +455,7 @@ def load_passives() -> dict[str, PassiveSkillData]:
         pid: PassiveSkillData(
             skill_id=pid,
             name=pdata["name"],
-            trigger=TriggerType(pdata["trigger"]),
+            triggers=_parse_passive_triggers(pdata["trigger"]),
             condition=pdata.get("condition", ""),
             action=PassiveAction(pdata["action"]),
             expr=pdata.get("expr", "0"),
@@ -511,6 +554,7 @@ class LocationOption:
     combat_type: CombatLocationType | None = None
     # Event fields (populated when location_type == EVENT)
     event_id: str | None = None
+    room_difficulty: "RoomDifficultyModifier | None" = None
 
 
 @dataclass(frozen=True)

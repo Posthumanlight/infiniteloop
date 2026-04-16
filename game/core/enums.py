@@ -46,6 +46,8 @@ class EffectActionType(Enum):
     DAMAGE_TAKEN_MULT = "damage_taken_mult"
     STAT_MODIFY = "stat_modify"
     GRANT_ENERGY = "grant_energy"
+    GRANT_SKILL = "grant_skill"
+    BLOCK_SKILL = "block_skill"
 
 
 class CombatPhase(Enum):
@@ -80,6 +82,7 @@ class OutcomeAction(Enum):
     APPLY_EFFECT = "apply_effect"
     START_COMBAT = "start_combat"
     GIVE_XP = "give_xp"
+    CONSUME_EFFECT = "consume_effect"
 
 
 class OutcomeTarget(Enum):
@@ -138,6 +141,7 @@ class PassiveAction(Enum):
     MODIFY_STAT = "modify_stat"
     CAST_SKILL = "cast_skill"
     CONSUME_EFFECT = "consume_effect"
+    GRANT_ENERGY = "grant_energy"
 
 
 class ModifierPhase(Enum):

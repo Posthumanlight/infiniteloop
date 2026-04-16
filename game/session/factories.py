@@ -10,12 +10,16 @@ from game.character.stats import MajorStats, MinorStats
 from game.core.data_loader import ProgressionConfig
 from game.core.data_loader import load_class, load_enemy
 from game.core.enums import EntityType
+from game.world.difficulty import RoomDifficultyModifier, apply_room_difficulty
 
 if TYPE_CHECKING:
     from game.session.lobby_manager import CharacterRecord
 
 
-def build_enemy(enemy_id: str) -> Enemy:
+def build_enemy(
+    enemy_id: str,
+    room_difficulty: RoomDifficultyModifier | None = None,
+) -> Enemy:
     """Load TOML enemy data and construct a runtime Enemy entity."""
     data = load_enemy(enemy_id)
     major = MajorStats(
@@ -28,6 +32,7 @@ def build_enemy(enemy_id: str) -> Enemy:
         energy=int(data.major_stats.get("energy", 50)),
         mastery=int(data.major_stats.get("mastery", 0)),
     )
+    major = apply_room_difficulty(major, room_difficulty)
     minor = MinorStats(values=dict(data.minor_stats))
     return Enemy(
         entity_id=f"{enemy_id}_{uuid.uuid4().hex[:8]}",
@@ -43,9 +48,12 @@ def build_enemy(enemy_id: str) -> Enemy:
     )
 
 
-def build_enemies(enemy_ids: tuple[str, ...] | list[str]) -> list[Enemy]:
+def build_enemies(
+    enemy_ids: tuple[str, ...] | list[str],
+    room_difficulty: RoomDifficultyModifier | None = None,
+) -> list[Enemy]:
     """Build a list of Enemy instances from TOML IDs."""
-    return [build_enemy(eid) for eid in enemy_ids]
+    return [build_enemy(eid, room_difficulty=room_difficulty) for eid in enemy_ids]
 
 
 def build_player(class_id: str, entity_id: str = "p1") -> PlayerCharacter:

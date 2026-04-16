@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import replace
 
 from game.core.data_loader import clear_cache, load_enemy
 from game.core.enums import CombatLocationType, EnemyCombatType, LocationType
@@ -40,6 +41,28 @@ def test_predetermined_set(players):
     assert len(locations) == 3
     assert locations[0].name == "Goblin Ambush"
     assert locations[0].combat_type == CombatLocationType.NORMAL
+
+
+def test_combat_rooms_receive_room_difficulty(players):
+    config = GenerationConfig(predetermined_set_id="dark_cave_intro")
+
+    locations = _generate(seed=42, config=config, players=players)
+
+    assert locations[0].room_difficulty is not None
+    assert locations[1].room_difficulty is not None
+    assert locations[2].room_difficulty is None
+
+
+def test_room_difficulty_is_deterministic_for_same_party_snapshot(players):
+    leveled = [replace(players[0], level=4)]
+    config = GenerationConfig(count_min=3, count_max=3, combat_weight=1.0)
+
+    left = _generate(seed=42, config=config, players=leveled)
+    right = _generate(seed=42, config=config, players=leveled)
+
+    left_difficulties = [loc.room_difficulty for loc in left]
+    right_difficulties = [loc.room_difficulty for loc in right]
+    assert left_difficulties == right_difficulties
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +119,7 @@ def test_event_locations_have_event_id(players):
         for loc in locations:
             if loc.location_type == LocationType.EVENT:
                 assert loc.event_id is not None
+                assert loc.room_difficulty is None
 
 
 # ---------------------------------------------------------------------------

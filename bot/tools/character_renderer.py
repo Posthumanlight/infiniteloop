@@ -30,7 +30,13 @@ def _format_minor_stats(minor_stats: dict[str, float]) -> str:
 def _format_effect(effect: EffectInfo) -> str:
     tag = "buff" if effect.is_buff else "debuff"
     stacks = f" x{effect.stack_count}" if effect.stack_count > 1 else ""
-    return f"{effect.name}{stacks} ({effect.remaining_duration}t) [{tag}]"
+    details: list[str] = []
+    if effect.granted_skills:
+        details.append(f"grants: {', '.join(effect.granted_skills)}")
+    if effect.blocked_skills:
+        details.append(f"blocks: {', '.join(effect.blocked_skills)}")
+    suffix = f" - {'; '.join(details)}" if details else ""
+    return f"{effect.name}{stacks} ({effect.remaining_duration}t) [{tag}]{suffix}"
 
 
 def _format_target_type(value: str) -> str:
@@ -82,13 +88,14 @@ def render_character_sheet(sheet: CharacterSheet) -> str:
     if sheet.skills:
         for sk in sheet.skills:
             cost = f" ({sk.energy_cost} energy)" if sk.energy_cost > 0 else ""
+            temporary = " [temporary]" if sk.temporary else ""
             hit_parts = []
             for hit in sk.hits:
                 target = _format_target_type(hit.target_type.value)
                 dmg = f" {hit.damage_type}" if hit.damage_type else ""
                 hit_parts.append(f"{target}{dmg}")
             hits_text = " | ".join(hit_parts) if hit_parts else ""
-            lines.append(f"{sk.name}{cost} - {hits_text}")
+            lines.append(f"{sk.name}{cost}{temporary} - {hits_text}")
     else:
         lines.append("(none)")
     lines.append("")
@@ -97,8 +104,8 @@ def render_character_sheet(sheet: CharacterSheet) -> str:
     if sheet.passives:
         lines.append("-- Passives --")
         for ps in sheet.passives:
-            trigger = ps.trigger.replace("_", " ")
-            lines.append(f"{ps.name} - {trigger}")
+            triggers = ", ".join(trigger.replace("_", " ") for trigger in ps.triggers)
+            lines.append(f"{ps.name} - {triggers}")
         lines.append("")
 
     # Modifiers

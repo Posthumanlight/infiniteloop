@@ -1,3 +1,4 @@
+#ENEMIES
 #generics
 [skills.generic_enemy_attack]
 name = "Attack"
@@ -7,6 +8,18 @@ hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack+base_power", base_power = 0, variance = 0.25 },
 ]
 
+#draugr
+[skills.draugr_chilling_wind]
+name = "Chilling Wind"
+energy_cost = 0
+action_type = "action"
+cooldown = 4
+hits = [
+{target_type = "all_enemies", damage_type = "ice", formula = "attacker.attack+base_power", base_power = 5, variance = 0.25}
+]
+
+
+#PLAYERS
 #warrior
 [skills.slash]
 name = "Slash"
@@ -36,6 +49,41 @@ class_tags = ["warrior"]
 hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun", chance = 1.0}]}
 ]
+
+[skills.deep_wounds]
+name = "Deep Wounds"
+energy_cost = 10
+action_type = "action"
+cooldown = 2
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = [
+  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 0.5", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]}
+]
+
+[skills.berserker]
+name = "Berserker"
+energy_cost = 50
+action_type = "action"
+cooldown = 10
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = []
+self_effects = [
+  { effect = "berserker" },
+]
+
+[skills.rampage]
+name = "Rampage"
+energy_cost = 0
+action_type = "action"
+hits = [
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0, share_with=0},
+  { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0, share_with=0}
+]
+
+
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"

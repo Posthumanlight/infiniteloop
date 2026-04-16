@@ -17,3 +17,16 @@ formula = "20 + max_hp * 0.20"
 vote_timer_seconds = 30
 max_choices = 4
 min_choices = 2
+
+[world_difficulty]
+base_scalar = 1.0
+per_avg_level = 0.1
+per_extra_player = 0.3
+max_scalar = 999.99
+
+[world_difficulty.stat_weights]
+hp = 1.6
+attack = 0.35
+speed = 0.05
+resistance = 0.50
+mastery = 0.35

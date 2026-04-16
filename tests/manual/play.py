@@ -4,12 +4,14 @@ Run with: python -m tests.manual.play
 """
 
 import random
+from dataclasses import replace
 
 from game.character.enemy import Enemy
 from game.character.inventory import Inventory
 from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats, MinorStats
-from game.combat.engine import get_available_actions, start_combat, submit_action
+from game.combat.enemy_ai import build_enemy_action
+from game.combat.engine import get_available_actions, skip_turn, start_combat, submit_action
 from game.combat.models import ActionRequest
 from game.core.data_loader import (
     LocationOption,
@@ -18,6 +20,7 @@ from game.core.data_loader import (
     load_enemy,
     load_event,
 )
+from game.core.dice import SeededRNG
 from game.core.enums import (
     ActionType,
     CombatPhase,
@@ -200,28 +203,14 @@ def player_turn(state, actor_id):
 
 
 def enemy_turn(state, actor_id):
-    """AI: use first skill on a random alive player."""
-    entity = state.entities[actor_id]
-    players_alive = [
-        eid for eid in state.turn_order
-        if state.entities[eid].entity_type == EntityType.PLAYER
-        and state.entities[eid].current_hp > 0
-    ]
-    target = players_alive[0]
-    skill_id = entity.skills[0] if entity.skills else "slash"
-    from game.core.data_loader import load_skill
-    skill_def = load_skill(skill_id)
-    ai_pairs: list[tuple[int, str]] = []
-    for hit_index, hit in enumerate(skill_def.hits):
-        if hit.share_with is None and hit.target_type.value == "single_enemy":
-            ai_pairs.append((hit_index, target))
+    """AI: use priority-ordered skills with deterministic random targeting."""
+    rng = SeededRNG(0)
+    rng.set_state(state.rng_state)
+    action = build_enemy_action(state, actor_id, rng)
+    if action is None:
+        return skip_turn(state, actor_id)
 
-    action = ActionRequest(
-        actor_id=actor_id,
-        action_type=ActionType.ACTION,
-        skill_id=skill_id,
-        target_ids=tuple(ai_pairs),
-    )
+    state = replace(state, rng_state=rng.get_state())
     return submit_action(state, action)
 
 

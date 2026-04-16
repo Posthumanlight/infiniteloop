@@ -74,6 +74,28 @@ mastery = 3
 [enemies.skeleton.minor_stats]
 slashing_def_pct = 0.1
 
+[enemies.draugr]
+name = "Draugr"
+skills = ["draugr_chilling_wind", "generic_enemy_attack"]
+passives = []
+xp_reward = 75
+combat_type = "elite"
+tags = ["undead", "cave", "ruins"]
+[enemies.draugr.major_stats]
+attack = 20
+hp = 100
+speed = 10
+crit_chance = 0.00
+crit_dmg = 1.4
+resistance = 100
+energy = 40
+mastery = 3
+[enemies.draugr.minor_stats]
+slashing_def_pct = 0.25
+piercing_def_pct = 0.25
+arcane_def_pct = 0.25
+ice_def_pct = 0.25
+
 #beasts
 [enemies.wolf]
 name = "Wolf"
@@ -99,7 +121,7 @@ name = "Fire Imp"
 skills = ["generic_enemy_attack"]
 passives = []
 xp_reward = 20
-combat_type = "elite"
+combat_type = "normal"
 tags = ["fire", "cave"]
 [enemies.fire_imp.major_stats]
 attack = 12
@@ -112,4 +134,3 @@ energy = 70
 mastery = 6
 [enemies.fire_imp.minor_stats]
 fire_dmg_pct = 0.15
-

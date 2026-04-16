@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Inventory:
-    max_slots: int = 6
+    max_slots: int = 99
     content: dict = field(default_factory=dict)
 
     def add_item(self, item):
