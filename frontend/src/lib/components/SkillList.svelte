@@ -1,4 +1,4 @@
-<script lang="ts">
+ï»¿<script lang="ts">
   import type { Skill, SkillEffectDetail } from '$lib/types';
 
   let { skills }: { skills: Skill[] } = $props();
@@ -7,8 +7,13 @@
     return value.replaceAll('_', ' ');
   }
 
+  function formatHitLabel(targetType: string, damageType: string | null): string {
+    const target = formatTarget(targetType);
+    return damageType ? `${target} ${damageType}` : target;
+  }
+
   function formatChance(chance: number | null): string {
-    if (chance === null) return '';
+    if (chance === null || chance >= 1) return '';
     return `${Math.round(chance * 100)}%`;
   }
 
@@ -37,7 +42,7 @@
                 Utility skill
               {:else}
                 {#each skill.hits as hit, index}
-                  <span>{formatTarget(hit.target_type)}{hit.damage_type ? ` · ${hit.damage_type}` : ''}</span>{#if index < skill.hits.length - 1} / {/if}
+                  <span>{formatHitLabel(hit.target_type, hit.damage_type)}</span>{#if index < skill.hits.length - 1} / {/if}
                 {/each}
               {/if}
             </p>
