@@ -105,12 +105,15 @@ hits = [
 name = "Blood Bath"
 energy_cost = 15
 action_type = "action"
-summary = "Damages yourself for a some damage and hits all enemies for some damage and applies 2 stacks of Bleed to them."
+cooldown = 5
+level_eligibility = [6, 99]
+class_tags = ["warrior"]
+summary = "Damages yourself for a 25% percent of current HP and hits all enemies for some damage and applies 2 stacks of Bleed to them."
 hits = [
-  {target_type = "self", damage_type = "piercing", formula = "attacker.current_hp * 0.2+base_power", base_power = 1, variance = 0.0},
+  {target_type = "self", damage_type = "piercing", formula = "attacker.current_hp * 0.25+base_power", base_power = 1, variance = 0.0},
   {target_type = "all_enemies", damage_type = "slashing", formula = "attacker.attack*1+base_power", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}, {effect = "bleed", chance = 1.0}]}
 ]
-cooldown = 5
+
 
 #mage
 [skills.arcane_bolt]
