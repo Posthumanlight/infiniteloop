@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, WebAppInfo
@@ -9,6 +10,17 @@ if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption, SkillData
     from game.events.models import ChoiceDef
     from game.core.game_models import EntitySnapshot, RewardOfferInfo
+
+
+SKILLS_PER_PAGE = 5
+
+
+@dataclass(frozen=True)
+class SkillPage:
+    page_index: int
+    total_pages: int
+    skills: tuple[tuple[SkillData, int], ...]
+    show_skip: bool
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -57,26 +69,105 @@ def lobby_keyboard() -> InlineKeyboardMarkup:
 def skill_keyboard(
     skills: list[tuple[SkillData, int]],
     current_energy: int | None = None,
+    *,
+    page: int = 0,
 ) -> InlineKeyboardMarkup:
+    pages = build_skill_pages(skills)
+    current_page = pages[normalize_skill_page(skills, page)]
     rows: list[list[InlineKeyboardButton]] = []
-    for skill, cd in skills:
-        if cd > 0:
-            text = f"{skill.name} (CD: {cd})"
-        elif current_energy is not None and current_energy < skill.energy_cost:
-            text = f"{skill.name} (\u26a1{skill.energy_cost}, no energy)"
-        elif skill.energy_cost > 0:
-            text = f"{skill.name} (\u26a1{skill.energy_cost})"
-        else:
-            text = skill.name
+
+    for skill, cd in current_page.skills:
         rows.append([InlineKeyboardButton(
-            text=text,
+            text=_skill_button_text(skill, cd, current_energy),
             callback_data=f"g:sk:{skill.skill_id}",
         )])
-    rows.append([InlineKeyboardButton(text="\u23ed\ufe0f Skip", callback_data="g:skip")])
+
+    if current_page.show_skip:
+        rows.append([InlineKeyboardButton(text="\u23ed\ufe0f Skip", callback_data="g:skip")])
+
+    pager = _skill_pager_row(current_page)
+    if pager:
+        rows.append(pager)
+
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def target_keyboard(enemies: list[EntitySnapshot]) -> InlineKeyboardMarkup:
+def build_skill_pages(
+    skills: list[tuple[SkillData, int]],
+) -> tuple[SkillPage, ...]:
+    pages: list[SkillPage] = []
+    index = 0
+
+    while len(skills) - index > SKILLS_PER_PAGE - 1:
+        pages.append(SkillPage(
+            page_index=len(pages),
+            total_pages=0,
+            skills=tuple(skills[index:index + SKILLS_PER_PAGE]),
+            show_skip=False,
+        ))
+        index += SKILLS_PER_PAGE
+
+    pages.append(SkillPage(
+        page_index=len(pages),
+        total_pages=0,
+        skills=tuple(skills[index:index + (SKILLS_PER_PAGE - 1)]),
+        show_skip=True,
+    ))
+
+    total_pages = len(pages)
+    return tuple(
+        SkillPage(
+            page_index=page.page_index,
+            total_pages=total_pages,
+            skills=page.skills,
+            show_skip=page.show_skip,
+        )
+        for page in pages
+    )
+
+
+def normalize_skill_page(
+    skills: list[tuple[SkillData, int]],
+    page: int,
+) -> int:
+    pages = build_skill_pages(skills)
+    return min(max(page, 0), len(pages) - 1)
+
+
+def _skill_button_text(
+    skill: SkillData,
+    cooldown: int,
+    current_energy: int | None,
+) -> str:
+    if cooldown > 0:
+        return f"{skill.name} (CD: {cooldown})"
+    if current_energy is not None and current_energy < skill.energy_cost:
+        return f"{skill.name} (\u26a1{skill.energy_cost}, no energy)"
+    if skill.energy_cost > 0:
+        return f"{skill.name} (\u26a1{skill.energy_cost})"
+    return skill.name
+
+
+def _skill_pager_row(page: SkillPage) -> list[InlineKeyboardButton]:
+    row: list[InlineKeyboardButton] = []
+    if page.page_index > 0:
+        row.append(InlineKeyboardButton(
+            text="\u2190 Prev",
+            callback_data=f"g:skpg:{page.page_index - 1}",
+        ))
+    if page.page_index < page.total_pages - 1:
+        row.append(InlineKeyboardButton(
+            text="Next \u2192",
+            callback_data=f"g:skpg:{page.page_index + 1}",
+        ))
+    return row
+
+
+def target_keyboard(
+    enemies: list[EntitySnapshot],
+    *,
+    back_page: int,
+) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(
             text=f"{e.name} ({e.current_hp}/{e.max_hp} HP)",
@@ -85,6 +176,12 @@ def target_keyboard(enemies: list[EntitySnapshot]) -> InlineKeyboardMarkup:
         for e in enemies
         if e.is_alive
     ]
+    rows.append([
+        InlineKeyboardButton(
+            text="Back",
+            callback_data=f"g:back:skills:{back_page}",
+        ),
+    ])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

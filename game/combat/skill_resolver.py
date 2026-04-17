@@ -82,7 +82,7 @@ def resolve_skill(
 
             # Post-hit modifiers (vampirism, etc.)
             state, post_results = apply_post_hit_modifiers(
-                state, actor_id, target_id, dmg_result.amount, modifiers,
+                state, actor_id, target_id, dmg_result.amount, modifiers, rng,
             )
             all_hits.extend(post_results)
 

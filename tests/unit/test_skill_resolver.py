@@ -9,7 +9,11 @@ from game.combat.action_resolver import resolve_action
 from game.combat.effects import apply_effect, expire_effects
 from game.combat.passives import PassiveEvent, check_passives
 from game.combat.models import ActionRequest
-from game.combat.skill_modifiers import ModifierInstance
+from game.combat.skill_modifiers import (
+    ModifierInstance,
+    ResolvedModifier,
+    apply_post_hit_modifiers,
+)
 from game.combat.skill_resolver import resolve_skill
 from game.core.data_loader import PassiveSkillData, SkillModifierData, clear_cache, load_skill
 from game.core.dice import SeededRNG
@@ -283,6 +287,50 @@ def test_butcher_adds_extra_bleed_stack_to_deep_wounds():
     assert len(bleed) == 1
     assert bleed[0].stack_count == 2
     assert any(hit.effects_applied == ("bleed",) for hit in hits)
+
+
+def test_cruelty_respects_modifier_proc_chance():
+    state = make_combat_state()
+    cruelty = ResolvedModifier(
+        modifier_id="cruelty",
+        phase=ModifierPhase.POST_HIT,
+        expr="1",
+        action="apply_effect",
+        stack_count=1,
+        effect_id="bleed",
+        chance=0.25,
+    )
+
+    state_proc, proc_hits = apply_post_hit_modifiers(
+        state,
+        "p1",
+        "e1",
+        10,
+        (cruelty,),
+        SeededRNG(1),
+    )
+    proc_bleed = [
+        effect for effect in state_proc.entities["e1"].active_effects
+        if effect.effect_id == "bleed"
+    ]
+    assert len(proc_bleed) == 1
+    assert proc_bleed[0].stack_count == 1
+    assert any(hit.effects_applied == ("bleed",) for hit in proc_hits)
+
+    state_no_proc, no_proc_hits = apply_post_hit_modifiers(
+        state,
+        "p1",
+        "e1",
+        10,
+        (cruelty,),
+        SeededRNG(2),
+    )
+    no_proc_bleed = [
+        effect for effect in state_no_proc.entities["e1"].active_effects
+        if effect.effect_id == "bleed"
+    ]
+    assert no_proc_bleed == []
+    assert no_proc_hits == []
 
 
 def test_multi_trigger_passive_grants_energy_on_hit_and_on_take_damage():

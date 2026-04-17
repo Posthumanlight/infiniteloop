@@ -634,12 +634,20 @@ class SkillModifierData:
     damage_type_filter: str | None = None
     damage_type_override: str | None = None
     effect_id: str | None = None
+    chance: float = 1.0
 
 
 def load_modifiers() -> dict[str, SkillModifierData]:
     raw = _load_toml("modifiers.toml").get("modifiers", {})
-    return {
-        mid: SkillModifierData(
+    result: dict[str, SkillModifierData] = {}
+    for mid, mdata in raw.items():
+        chance = float(mdata.get("chance", 1.0))
+        if not 0.0 <= chance <= 1.0:
+            raise ValueError(
+                f"Modifier {mid}: chance must be between 0.0 and 1.0, got {chance}",
+            )
+
+        result[mid] = SkillModifierData(
             modifier_id=mid,
             name=mdata["name"],
             phase=ModifierPhase(mdata["phase"]),
@@ -652,9 +660,9 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             damage_type_filter=mdata.get("damage_type_filter"),
             damage_type_override=mdata.get("damage_type_override"),
             effect_id=mdata.get("effect_id"),
+            chance=chance,
         )
-        for mid, mdata in raw.items()
-    }
+    return result
 
 
 def load_modifier(modifier_id: str) -> SkillModifierData:

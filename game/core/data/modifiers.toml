@@ -45,3 +45,14 @@ class_tags = ["warrior"]
 expr = "1"
 action = "apply_effect"
 effect_id = "bleed"
+
+[modifiers.cruelty]
+name = "Cruelty"
+phase = "post_hit"
+stackable = false
+skill_filter = "slash"
+class_tags = ["warrior"]
+expr = "1"
+action = "apply_effect"
+effect_id = "bleed"
+chance = 0.5

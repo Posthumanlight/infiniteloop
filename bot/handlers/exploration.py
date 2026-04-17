@@ -10,8 +10,9 @@ from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from bot.bot_state import GameStates
+from bot.handlers.combat import _show_skill_prompt
 from bot.handlers.game import start_victory_save_flow
-from bot.tools.combat_renderer import render_combat_start, render_turn_prompt
+from bot.tools.combat_renderer import render_combat_start
 from bot.tools.exploration_renderer import (
     render_event,
     render_exploration_choices,
@@ -23,7 +24,6 @@ from bot.tools.keyboards import (
     event_choice_keyboard,
     location_keyboard,
     reward_choice_keyboard,
-    skill_keyboard,
 )
 from bot.tools.combat_image import send_combat_image
 from bot.tools.session_lookup import entity_id_for_tg_user
@@ -228,11 +228,16 @@ async def _handle_phase_transition(
 
             whose_turn = game_service.get_whose_turn(session_id)
             if whose_turn is not None:
-                turn_snap = snapshot.entities[whose_turn]
-                skills = game_service.get_available_skills(session_id, whose_turn)
-                prompt = render_turn_prompt(whose_turn, turn_snap, players)
-                await callback.message.answer(prompt, reply_markup=skill_keyboard(skills))
-            await state.set_state(GameStates.combat_idle)
+                await _show_skill_prompt(
+                    callback,
+                    game_service,
+                    session_id,
+                    state,
+                    page=0,
+                    edit=False,
+                )
+            else:
+                await state.set_state(GameStates.combat_idle)
 
         case SessionPhase.IN_EVENT:
             event_state = game_service.get_event_state(session_id)

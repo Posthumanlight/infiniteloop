@@ -10,6 +10,7 @@ from game.combat.effects import (
 )
 from game.combat.models import CombatState, HitResult
 from game.core.data_loader import SkillData, load_modifier
+from game.core.dice import SeededRNG
 from game.core.enums import ModifierPhase
 from game.core.formula_eval import evaluate_expr
 
@@ -36,6 +37,7 @@ class ResolvedModifier:
     stack_count: int
     damage_type_filter: str | None = None
     effect_id: str | None = None
+    chance: float = 1.0
 
 
 def add_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
@@ -87,6 +89,7 @@ def collect_modifiers(
             stack_count=inst.stack_count,
             damage_type_filter=mod_data.damage_type_filter,
             effect_id=mod_data.effect_id,
+            chance=mod_data.chance,
         ))
     return tuple(result)
 
@@ -97,6 +100,7 @@ def apply_post_hit_modifiers(
     target_id: str,
     damage_dealt: int,
     modifiers: tuple[ResolvedModifier, ...],
+    rng: SeededRNG,
 ) -> tuple[CombatState, list[HitResult]]:
     """Apply post-hit modifiers. Extensible via match on action."""
     post_mods = [m for m in modifiers if m.phase == ModifierPhase.POST_HIT]
@@ -112,6 +116,8 @@ def apply_post_hit_modifiers(
 
         match mod.action:
             case "vampirism":
+                if rng.random_float() >= mod.chance:
+                    continue
                 actor = state.entities[actor_id]
                 heal = int(abs(value))
                 max_hp = int(get_effective_major_stat(state, actor_id, "hp"))
@@ -122,6 +128,8 @@ def apply_post_hit_modifiers(
                 results.append(HitResult(target_id=actor_id, heal_amount=applied))
             case "apply_effect":
                 if mod.effect_id is None:
+                    continue
+                if rng.random_float() >= mod.chance:
                     continue
                 applications = max(0, int(value))
                 for _ in range(applications):

@@ -25,6 +25,7 @@ from bot.tools.exploration_renderer import (
 from bot.tools.combat_image import send_combat_image
 from bot.tools.keyboards import (
     location_keyboard,
+    normalize_skill_page,
     reward_choice_keyboard,
     skill_keyboard,
     target_keyboard,
@@ -41,9 +42,89 @@ def _session_id(chat_id: int) -> str:
     return str(chat_id)
 
 
+async def _show_skill_prompt(
+    callback: CallbackQuery,
+    game_service: GameService,
+    session_id: str,
+    state: FSMContext,
+    *,
+    page: int,
+    edit: bool,
+) -> None:
+    whose_turn = game_service.get_whose_turn(session_id)
+    if whose_turn is None:
+        return
+
+    snapshot = game_service.get_combat_snapshot(session_id)
+    turn_snap = snapshot.entities.get(whose_turn)
+    if turn_snap is None:
+        return
+
+    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+    skills = game_service.get_available_skills(session_id, whose_turn)
+    resolved_page = normalize_skill_page(skills, page)
+    prompt = render_turn_prompt(whose_turn, turn_snap, players)
+
+    await state.update_data(combat_skill_page=resolved_page)
+    await state.set_state(GameStates.combat_idle)
+
+    markup = skill_keyboard(
+        skills,
+        turn_snap.current_energy,
+        page=resolved_page,
+    )
+    if edit:
+        await callback.message.edit_text(prompt, reply_markup=markup)
+    else:
+        await callback.message.answer(prompt, reply_markup=markup)
+
+
+def _parse_skill_page(callback_data: str, prefix: str) -> int | None:
+    if not callback_data.startswith(prefix):
+        return None
+    try:
+        return max(0, int(callback_data.removeprefix(prefix)))
+    except ValueError:
+        return None
+
+
 # ------------------------------------------------------------------
 # Skill selection — g:sk:{skill_id}
 # ------------------------------------------------------------------
+
+@router.callback_query(F.data.startswith("g:skpg:"))
+async def cb_skill_page(
+    callback: CallbackQuery,
+    game_service: GameService,
+    state: FSMContext,
+) -> None:
+    sid = _session_id(callback.message.chat.id)
+    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if actor_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
+
+    whose_turn = game_service.get_whose_turn(sid)
+    if whose_turn != actor_id:
+        await callback.answer("Not your turn!", show_alert=True)
+        return
+
+    page = _parse_skill_page(callback.data, "g:skpg:")
+    if page is None:
+        await callback.answer("Invalid page.", show_alert=True)
+        return
+
+    await _clear_pending_combat_selection(state)
+    await _show_skill_prompt(
+        callback,
+        game_service,
+        sid,
+        state,
+        page=page,
+        edit=True,
+    )
+    await callback.answer()
+
 
 @router.callback_query(F.data.startswith("g:sk:"))
 async def cb_skill(
@@ -85,6 +166,9 @@ async def cb_skill(
         )
         return
 
+    data = await state.get_data()
+    current_page = int(data.get("combat_skill_page", 0) or 0)
+
     # Build queue of hit indices that need single-target selection.
     pending_hits: list[int] = [
         idx for idx, hit in enumerate(skill.hits)
@@ -108,6 +192,7 @@ async def cb_skill(
         pending_skill=skill_id,
         pending_hit_queue=pending_hits,
         collected_targets=[],
+        pending_skill_page=current_page,
     )
     await state.set_state(GameStates.combat_target)
     first_hit_index = pending_hits[0]
@@ -120,7 +205,7 @@ async def cb_skill(
     prompt = _target_prompt(skill.name, first_hit_index, len(skill.hits))
     await callback.message.edit_text(
         prompt,
-        reply_markup=target_keyboard(candidates),
+        reply_markup=target_keyboard(candidates, back_page=current_page),
     )
     await callback.answer()
 
@@ -134,6 +219,40 @@ def _target_prompt(skill_name: str, hit_index: int, total_hits: int) -> str:
 # ------------------------------------------------------------------
 # Target selection — g:tg:{entity_id}
 # ------------------------------------------------------------------
+
+@router.callback_query(F.data.startswith("g:back:skills:"))
+async def cb_back_to_skills(
+    callback: CallbackQuery,
+    game_service: GameService,
+    state: FSMContext,
+) -> None:
+    sid = _session_id(callback.message.chat.id)
+    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    if actor_id is None:
+        await callback.answer("You are not in this game.", show_alert=True)
+        return
+
+    whose_turn = game_service.get_whose_turn(sid)
+    if whose_turn != actor_id:
+        await callback.answer("Not your turn!", show_alert=True)
+        return
+
+    page = _parse_skill_page(callback.data, "g:back:skills:")
+    if page is None:
+        await callback.answer("Invalid page.", show_alert=True)
+        return
+
+    await _clear_pending_combat_selection(state)
+    await _show_skill_prompt(
+        callback,
+        game_service,
+        sid,
+        state,
+        page=page,
+        edit=True,
+    )
+    await callback.answer()
+
 
 @router.callback_query(F.data.startswith("g:tg:"))
 async def cb_target(
@@ -187,6 +306,9 @@ async def cb_target(
 
     current_hit_index = pending_hit_queue.pop(0)
     collected.append([current_hit_index, target_id])
+    current_page = int(
+        data.get("pending_skill_page", data.get("combat_skill_page", 0)) or 0,
+    )
 
     if pending_hit_queue:
         # Still more hits to target — show next picker
@@ -202,7 +324,10 @@ async def cb_target(
             pending_hit_queue=pending_hit_queue,
             collected_targets=collected,
         )
-        await callback.message.edit_text(prompt, reply_markup=target_keyboard(candidates))
+        await callback.message.edit_text(
+            prompt,
+            reply_markup=target_keyboard(candidates, back_page=current_page),
+        )
         await callback.answer()
         return
 
@@ -379,14 +504,14 @@ async def _render_batch_and_prompt(
             # Відправляємо оновлену картинку з актуальним HP перед наступним ходом
             await send_combat_image(callback, game_service, session_id)
             
-            turn_snap = batch.entities[whose_turn]
-            skills = game_service.get_available_skills(session_id, whose_turn)
-            prompt = render_turn_prompt(whose_turn, turn_snap, players)
-            await callback.message.answer(
-                prompt,
-                reply_markup=skill_keyboard(skills, turn_snap.current_energy),
+            await _show_skill_prompt(
+                callback,
+                game_service,
+                session_id,
+                state,
+                page=0,
+                edit=False,
             )
-            await state.set_state(GameStates.combat_idle)
 
 
 def _get_actor_energy(
@@ -410,6 +535,7 @@ async def _clear_pending_combat_selection(state: FSMContext) -> None:
         pending_skill=None,
         pending_hit_queue=[],
         collected_targets=[],
+        pending_skill_page=None,
     )
 
 
@@ -420,27 +546,19 @@ async def _restore_skill_prompt(
     state: FSMContext,
 ) -> None:
     previous_state = await state.get_state()
+    data = await state.get_data()
+    page = int(data.get("pending_skill_page", data.get("combat_skill_page", 0)) or 0)
     await _clear_pending_combat_selection(state)
-    await state.set_state(GameStates.combat_idle)
 
     if previous_state != GameStates.combat_target.state:
         return
     if not game_service.has_session(session_id) or not game_service.is_in_combat(session_id):
         return
-
-    whose_turn = game_service.get_whose_turn(session_id)
-    if whose_turn is None:
-        return
-
-    snapshot = game_service.get_combat_snapshot(session_id)
-    turn_snap = snapshot.entities.get(whose_turn)
-    if turn_snap is None:
-        return
-
-    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
-    skills = game_service.get_available_skills(session_id, whose_turn)
-    prompt = render_turn_prompt(whose_turn, turn_snap, players)
-    await callback.message.edit_text(
-        prompt,
-        reply_markup=skill_keyboard(skills, turn_snap.current_energy),
+    await _show_skill_prompt(
+        callback,
+        game_service,
+        session_id,
+        state,
+        page=page,
+        edit=True,
     )
