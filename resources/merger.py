@@ -17,13 +17,6 @@ def get_random_png(folder_path):
         os.path.join(script_dir, folder_path),
         os.path.join(script_dir, "Locations", folder_path),
         os.path.join(script_dir, "Mobs", folder_path),
-        os.path.join(script_dir, "Mobs", "goblins"),
-        os.path.join(script_dir, "Mobs", "wolfs"),
-        os.path.join(script_dir, "Mobs", "skeletons"),
-        os.path.join(script_dir, "Mobs", "fire_imps"),
-        os.path.join(script_dir, "Mobs", "bandits"),
-        os.path.join(script_dir, "Mobs", "crocodile"),
-        os.path.join(script_dir, "Mobs", "draugrs")
     ]
     
     actual_path = None
@@ -66,6 +59,18 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
     logger.info(f"[{session_id}] Початок 'generate_battle_scene' (кімната {room_number}). Вхідна кількість ворогів: {len(enemies_data)}")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
+    # Конфігурація мобів. Легко розширювати, просто додаючи нові словники.
+    MOB_CONFIG = [
+        {"keys": ["wolf", "вовк"], "folder": "wolfs", "size": (710, 532)},
+        {"keys": ["goblin", "гоблін"], "folder": "goblins", "size": (600, 600)},
+        {"keys": ["skeleton", "скелет"], "folder": "skeletons", "size": (600, 600)},
+        {"keys": ["imp", "імп"], "folder": "fire_imps", "size": (500, 500)},
+        {"keys": ["bandit", "бандит"], "folder": "bandits", "size": (700, 700)},
+        {"keys": ["crocodile", "крокодил"], "folder": "crocodile", "size": (710, 532)},
+        {"keys": ["draugr", "драугр"], "folder": "draugrs", "size": (700, 700)},
+        {"keys": ["bayayamshiks", "баяямшикс"], "folder": "EXPLICIT_BOSS", "size": (800, 800), "explicit_path": os.path.join(script_dir, "Mobs", "bosses", "Bayayamshiks.png"), "is_boss": True},
+    ]
+
     # 1. Налаштування позицій (центри) для 5 ворогів
     placement_pool = [(330, 960), (885, 1110), (1395, 876), (1820, 1070), (2450, 1080)]
     
@@ -104,32 +109,25 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
         max_hp = enemy.get("max_hp", 100)
         name_lower = name.lower()
         
-        if "wolf" in name_lower or "вовк" in name_lower:
-            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "wolfs", "size": (710, 532), "hp": hp, "max_hp": max_hp})
-        elif "goblin" in name_lower or "гоблін" in name_lower:
-            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "goblins", "size": (600, 600), "hp": hp, "max_hp": max_hp})
-        elif "skeleton" in name_lower or "скелет" in name_lower:
-            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "skeletons", "size": (600, 600), "hp": hp, "max_hp": max_hp})
-        elif "imp" in name_lower or "імп" in name_lower:
-            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "fire_imps", "size": (500, 500), "hp": hp, "max_hp": max_hp})
-        elif "bandit" in name_lower or "бандит" in name_lower:
-            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "bandits", "size": (700, 700), "hp": hp, "max_hp": max_hp})
-        elif "crocodile" in name_lower or "крокодил" in name_lower:
-            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "crocodile", "size": (710, 532), "hp": hp, "max_hp": max_hp})
-        elif "draugr" in name_lower or "драугр" in name_lower:
-            mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "draugrs", "size": (700, 700), "hp": hp, "max_hp": max_hp})
-        elif "bayayamshiks" in name_lower or "баяямшикс" in name_lower:
-            mobs_to_spawn.append({
-                "entity_id": entity_id, 
-                "name": name, 
-                "folder": "EXPLICIT_BOSS", 
-                "explicit_path": os.path.join(script_dir, "Mobs", "bosses", "Bayayamshiks.png"),
-                "size": (800, 800), 
-                "hp": hp, 
-                "max_hp": max_hp,
-                "is_boss": True
-            })
-        else:
+        matched = False
+        for config in MOB_CONFIG:
+            if any(k in name_lower for k in config["keys"]):
+                mob_data = {
+                    "entity_id": entity_id,
+                    "name": name,
+                    "folder": config["folder"],
+                    "size": config["size"],
+                    "hp": hp,
+                    "max_hp": max_hp
+                }
+                if config.get("is_boss"):
+                    mob_data["is_boss"] = True
+                    mob_data["explicit_path"] = config["explicit_path"]
+                mobs_to_spawn.append(mob_data)
+                matched = True
+                break
+                
+        if not matched:
             mobs_to_spawn.append({"entity_id": entity_id, "name": name, "folder": "ERROR_TEXT", "size": (400, 400), "hp": hp, "max_hp": max_hp})
             logger.warning(f"[{session_id}] Невідомий тип моба '{name}', буде підставлено заглушку (ERROR_TEXT).")
             
@@ -137,21 +135,28 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
     # Сортуємо: спочатку боси, щоб їм гарантовано дістались центральні позиції
     mobs_to_spawn.sort(key=lambda m: not m.get("is_boss", False))
     
+    # Перераховуємо зайняті позиції тільки для актуальних мобів (щоб позиції мертвих мобів звільнялися)
+    active_used_positions = []
+    for mob in mobs_to_spawn:
+        eid = mob["entity_id"]
+        if eid in room_state["entities"]:
+            active_used_positions.append(room_state["entities"][eid]["pos_idx"])
+            
     for mob in mobs_to_spawn:
         eid = mob["entity_id"]
         if eid not in room_state["entities"]:
             # Шукаємо вільну позицію
             if mob.get("is_boss"):
-                avail_pos = [i for i in [1, 2, 3] if i not in room_state["used_positions"]]
+                avail_pos = [i for i in [1, 2, 3] if i not in active_used_positions]
             else:
-                avail_pos = [i for i in range(len(placement_pool)) if i not in room_state["used_positions"]]
+                avail_pos = [i for i in range(len(placement_pool)) if i not in active_used_positions]
                 
             if not avail_pos:
-                avail_pos = [i for i in range(len(placement_pool)) if i not in room_state["used_positions"]]
+                avail_pos = [i for i in range(len(placement_pool)) if i not in active_used_positions]
                 if not avail_pos:
-                    avail_pos = [0] # Фолбек
+                    avail_pos = [i for i in range(len(placement_pool))] # Фолбек
             chosen_pos = random.choice(avail_pos)
-            room_state["used_positions"].append(chosen_pos)
+            active_used_positions.append(chosen_pos)
             
             # Обираємо випадкову картинку для цього моба на весь бій
             if mob["folder"] == "ERROR_TEXT":
@@ -165,6 +170,12 @@ def generate_battle_scene(session_id: str, room_number: int, enemies_data: list[
                 logger.debug(f"[{session_id}] Для моба '{mob['name']}' (ID: {eid}) прив'язано картинку: {img_path}")
             room_state["entities"][eid] = {"pos_idx": chosen_pos, "img_path": img_path}
             
+    room_state["used_positions"] = active_used_positions
+    
+    # Очищуємо старих мобів з entities, яких вже немає, щоб JSON файл стану не розростався
+    active_eids = {mob["entity_id"] for mob in mobs_to_spawn}
+    room_state["entities"] = {k: v for k, v in room_state["entities"].items() if k in active_eids}
+
     with open(state_file, "w", encoding="utf-8") as f:
         json.dump(room_state, f, ensure_ascii=False, indent=4)
     logger.debug(f"[{session_id}] Стан кімнати успішно оновлено та записано у {state_file}")
