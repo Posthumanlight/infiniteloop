@@ -188,9 +188,6 @@
           <TagList items={effectEntries(sheet)} emptyLabel="No active buffs or debuffs right now." />
         </SectionCard>
 
-        <SectionCard title="Legacy Text View" eyebrow="Parity Check">
-          <pre>{bootstrap.legacy_text}</pre>
-        </SectionCard>
       </section>
     {:else}
       <section class="inventory-section">
@@ -331,19 +328,6 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.8rem;
-  }
-
-  pre {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family:
-      'Consolas',
-      'Courier New',
-      monospace;
-    color: rgba(236, 242, 252, 0.82);
-    font-size: 0.85rem;
-    line-height: 1.5;
   }
 
   @media (min-width: 760px) {
