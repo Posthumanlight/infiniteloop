@@ -3,6 +3,29 @@ export interface SkillHit {
   damage_type: string | null;
 }
 
+export interface SkillSummaryPart {
+  kind: 'text' | 'damage_non_crit' | 'damage_crit';
+  value: string;
+}
+
+export interface SkillEffectDetail {
+  effect_id: string;
+  name: string;
+  summary: string;
+  chance: number | null;
+}
+
+export interface SkillHitDetail {
+  index: number;
+  target_type: string;
+  damage_type: string | null;
+  preview_damage_non_crit: number | null;
+  preview_damage_crit: number | null;
+  formula: string;
+  on_hit_effects: SkillEffectDetail[];
+  shared_with: number | null;
+}
+
 export type WebAppView = 'character' | 'inventory';
 
 export interface Skill {
@@ -11,6 +34,10 @@ export interface Skill {
   energy_cost: number;
   hits: SkillHit[];
   temporary: boolean;
+  summary_parts: SkillSummaryPart[];
+  preview_note: string;
+  hit_details: SkillHitDetail[];
+  self_effects: SkillEffectDetail[];
 }
 
 export interface Passive {

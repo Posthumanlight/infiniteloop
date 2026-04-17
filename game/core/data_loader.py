@@ -1,4 +1,5 @@
 import tomllib
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -162,6 +163,59 @@ class SkillData:
     cooldown: int = 0
     level_eligibility: tuple[int, int] | None = None
     class_tags: tuple[str, ...] = ()
+    summary: str = ""
+
+
+_SKILL_SUMMARY_PLACEHOLDER_RE = re.compile(r"\[([A-Za-z0-9_.]+)\]")
+_SKILL_SUMMARY_BASE_KEYS = frozenset({
+    "hits.count",
+    "target_type",
+    "damage_type",
+    "damage_non_crit",
+    "damage_crit",
+    "summary_text",
+})
+_SKILL_SUMMARY_HIT_KEYS = frozenset({
+    "target_type",
+    "damage_type",
+    "damage_non_crit",
+    "damage_crit",
+    "formula",
+})
+
+
+def _validate_skill_summary_template(
+    skill_id: str,
+    summary: object,
+    *,
+    hit_count: int,
+) -> str:
+    if not isinstance(summary, str) or not summary.strip():
+        raise ValueError(f"Skill {skill_id}: summary must be a non-empty string")
+
+    for match in _SKILL_SUMMARY_PLACEHOLDER_RE.finditer(summary):
+        key = match.group(1)
+        if key in _SKILL_SUMMARY_BASE_KEYS:
+            continue
+
+        parts = key.split(".")
+        if len(parts) != 3 or parts[0] != "hits" or not parts[1].isdigit():
+            raise ValueError(
+                f"Skill {skill_id}: unknown summary placeholder [{key}]",
+            )
+
+        hit_index = int(parts[1])
+        if hit_index < 0 or hit_index >= hit_count:
+            raise ValueError(
+                f"Skill {skill_id}: summary placeholder [{key}] "
+                f"references missing hit index {hit_index}",
+            )
+        if parts[2] not in _SKILL_SUMMARY_HIT_KEYS:
+            raise ValueError(
+                f"Skill {skill_id}: unknown summary placeholder [{key}]",
+            )
+
+    return summary
 
 
 def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
@@ -207,6 +261,12 @@ def load_skills() -> dict[str, SkillData]:
                 )
             level_eligibility = (int(raw_eligibility[0]), int(raw_eligibility[1]))
 
+        summary = _validate_skill_summary_template(
+            sid,
+            sdata.get("summary"),
+            hit_count=len(hits),
+        )
+
         result[sid] = SkillData(
             skill_id=sid,
             name=sdata["name"],
@@ -217,6 +277,7 @@ def load_skills() -> dict[str, SkillData]:
             cooldown=sdata.get("cooldown", 0),
             level_eligibility=level_eligibility,
             class_tags=tuple(sdata.get("class_tags", [])),
+            summary=summary,
         )
     return result
 

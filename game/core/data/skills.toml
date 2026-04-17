@@ -4,6 +4,7 @@
 name = "Attack"
 energy_cost = 0
 action_type = "action"
+summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack+base_power", base_power = 0, variance = 0.25 },
 ]
@@ -14,6 +15,7 @@ name = "Chilling Wind"
 energy_cost = 0
 action_type = "action"
 cooldown = 4
+summary = "Hits all enemies for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
 {target_type = "all_enemies", damage_type = "ice", formula = "attacker.attack+base_power", base_power = 5, variance = 0.25}
 ]
@@ -24,6 +26,7 @@ name = "Death Roll"
 energy_cost = 0
 action_type = "action"
 cooldown = 6
+summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "attacker.attack*2", base_power = 10, variance = 0.25, on_hit_effects = [{effect = "stun", chance = 1.0}]}
 ]
@@ -34,6 +37,7 @@ hits = [
 name = "Slash"
 energy_cost = 0
 action_type = "action"
+summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
 ]
@@ -44,6 +48,7 @@ energy_cost = 15
 action_type = "action"
 level_eligibility = [3, 99]
 class_tags = ["warrior"]
+summary = "Hits all enemies for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   { target_type = "all_enemies", damage_type = "slashing", formula = "base_power + attacker.attack * 1.25 + attacker.mastery", base_power = 2, variance = 0.0 },
 ]
@@ -55,6 +60,7 @@ action_type = "action"
 cooldown = 5
 level_eligibility = [3, 99]
 class_tags = ["warrior"]
+summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun", chance = 1.0}]}
 ]
@@ -66,6 +72,7 @@ action_type = "action"
 cooldown = 2
 level_eligibility = [3, 99]
 class_tags = ["warrior"]
+summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 0.5", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]}
 ]
@@ -77,6 +84,7 @@ action_type = "action"
 cooldown = 10
 level_eligibility = [3, 99]
 class_tags = ["warrior"]
+summary = "Applies Berserker to yourself."
 hits = []
 self_effects = [
   { effect = "berserker" },
@@ -86,6 +94,7 @@ self_effects = [
 name = "Rampage"
 energy_cost = 0
 action_type = "action"
+summary = "Hits a [target_type] [hits.count] times for [damage_non_crit] / [damage_crit] [damage_type] damage each."
 hits = [
   { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0 },
   { target_type = "single_enemy", damage_type = "slashing", formula = "base_power + attacker.attack * 1.5", base_power = 1, variance = 0.0, share_with=0},
@@ -98,6 +107,7 @@ hits = [
 name = "Arcane Bolt"
 energy_cost = 0
 action_type = "action"
+summary = "Hits a [target_type] [hits.count] times for [damage_non_crit] / [damage_crit] [damage_type] damage each."
 hits = [
   { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.55", base_power = 3, variance = 0.0 },
   { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.55", base_power = 3, variance = 0.0, share_with = 0 },
@@ -108,6 +118,7 @@ hits = [
 name = "Arcane Rupture"
 energy_cost = 0
 action_type = "action"
+summary = "Hits all enemies for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   { target_type = "all_enemies", damage_type = "arcane", formula = "base_power + attacker.attack * 0.05", base_power = 1, variance = 0.0 },
 ]
@@ -119,6 +130,7 @@ action_type = "action"
 cooldown = 5
 level_eligibility = [1, 99]
 class_tags = ["mage"]
+summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
   { target_type = "single_enemy", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1)) * (1 + attacker.mastery * 0.05)", base_power = 5, variance = 0.0 },
 ]
@@ -130,6 +142,7 @@ action_type = "action"
 cooldown = 8
 level_eligibility = [3, 99]
 class_tags = ["mage"]
+summary = "[summary_text]"
 hits = [
   { target_type = "single_enemy", damage_type = "arcane", formula = "base_power + attacker.attack * 0.9", base_power = 10, variance = 0.0 },
   { target_type = "all_enemies", damage_type = "arcane", formula = "(base_power + (attacker.attack * 1)) * (1 + attacker.mastery * 0.04)", base_power = 5, variance = 0.0 },
@@ -142,6 +155,7 @@ action_type = "action"
 cooldown = 5
 level_eligibility = [3, 99]
 class_tags = ["mage"]
+summary = "Applies Enlightenment to yourself."
 hits = []
 self_effects = [
   { effect = "enlightenment" },

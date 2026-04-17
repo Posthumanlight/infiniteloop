@@ -1,7 +1,11 @@
+import re
 from dataclasses import dataclass, replace
 
+from game.character.base_entity import BaseEntity
 from game.combat.enemy_ai import build_enemy_action as build_enemy_ai_action
 from game.combat.effects import (
+    build_effective_expr_context,
+    build_expr_context,
     get_effective_major_stat,
     get_effective_minor_stat,
     get_effective_skill_access,
@@ -12,6 +16,7 @@ from game.core.data_loader import (
     ClassData,
     load_class,
     load_classes,
+    load_constants,
     load_effect,
     load_modifier,
     load_passive,
@@ -19,11 +24,15 @@ from game.core.data_loader import (
 )
 from game.core.enums import (
     ActionType,
+    DamageType,
     EffectActionType,
     EntityType,
     LevelRewardType,
+    ModifierPhase,
     SessionPhase,
+    TriggerType,
 )
+from game.core.formula_eval import ExprContext, evaluate_expr
 from game.character.player_character import PlayerCharacter
 from game.items.equipment_effects import (
     get_effective_passive_ids,
@@ -50,8 +59,11 @@ from game.core.game_models import (
     PlayerInfo,
     RewardNoticeInfo,
     RewardOfferInfo,
+    SkillEffectDetail,
     SkillHitInfo,
+    SkillHitDetail,
     SkillInfo,
+    SkillSummaryPart,
     TurnBatch,
 )
 
@@ -63,6 +75,24 @@ class _ActiveSession:
     manager: SessionManager
     state: SessionState | None
     save_origins: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class _DamagePreview:
+    amount_non_crit: int
+    amount_crit: int
+    damage_type: str
+
+
+_SKILL_TEMPLATE_RE = re.compile(r"\[([A-Za-z0-9_.]+)\]")
+_PREVIEW_NOTE = "Preview vs neutral target, no crit chance, no variance, no target defense."
+_DAMAGE_TYPE_NUMERIC: dict[DamageType, int] = {
+    DamageType.SLASHING: 1,
+    DamageType.PIERCING: 2,
+    DamageType.ARCANE: 3,
+    DamageType.FIRE: 4,
+    DamageType.ICE: 5,
+}
 
 
 class GameService:
@@ -563,7 +593,9 @@ class GameService:
         skill_ids = access.available
         skills = tuple(
             self._build_skill_info(
+                entity,
                 sid,
+                combat_state=combat_state,
                 temporary=(sid in granted_set),
             )
             for sid in skill_ids
@@ -614,8 +646,13 @@ class GameService:
     ) -> CharacterSheet:
         """Build a character sheet from class template (lobby phase)."""
         major = class_data.major_stats
+        template_player = build_player(
+            class_data.class_id,
+            entity_id=player_info.entity_id,
+        )
         skills = tuple(
-            self._build_skill_info(sid) for sid in class_data.starting_skills
+            self._build_skill_info(template_player, sid)
+            for sid in class_data.starting_skills
         )
         passives = tuple(
             self._build_passive_info(pid)
@@ -641,13 +678,31 @@ class GameService:
             in_combat=False,
         )
 
-    @staticmethod
+    @classmethod
     def _build_skill_info(
+        cls,
+        entity: BaseEntity,
         skill_id: str,
         *,
+        combat_state=None,
         temporary: bool = False,
     ) -> SkillInfo:
         data = load_skill(skill_id)
+        hit_details = tuple(
+            cls._build_skill_hit_detail(
+                entity,
+                skill_id,
+                hit,
+                index=index,
+                combat_state=combat_state,
+            )
+            for index, hit in enumerate(data.hits)
+        )
+        summary_context = cls._build_skill_summary_context(
+            data,
+            hit_details,
+        )
+
         return SkillInfo(
             skill_id=data.skill_id,
             name=data.name,
@@ -660,7 +715,431 @@ class GameService:
                 for hit in data.hits
             ),
             temporary=temporary,
+            summary_parts=cls._tokenize_skill_summary_template(
+                data.summary,
+                summary_context,
+            ),
+            preview_note=_PREVIEW_NOTE if hit_details else "",
+            hit_details=hit_details,
+            self_effects=tuple(
+                cls._build_effect_detail(
+                    effect.effect_id,
+                    duration_override=effect.duration_override,
+                )
+                for effect in data.self_effects
+            ),
         )
+
+    @classmethod
+    def _build_skill_hit_detail(
+        cls,
+        entity: BaseEntity,
+        skill_id: str,
+        hit,
+        *,
+        index: int,
+        combat_state=None,
+    ) -> SkillHitDetail:
+        preview = cls._preview_skill_hit_damage(
+            entity,
+            skill_id,
+            hit,
+            combat_state=combat_state,
+        )
+        return SkillHitDetail(
+            index=index,
+            target_type=hit.target_type,
+            damage_type=preview.damage_type if preview else (
+                hit.damage_type.value if hit.damage_type else None
+            ),
+            preview_damage_non_crit=preview.amount_non_crit if preview else None,
+            preview_damage_crit=preview.amount_crit if preview else None,
+            formula=hit.formula,
+            on_hit_effects=tuple(
+                cls._build_effect_detail(
+                    effect.effect_id,
+                    chance=effect.chance,
+                )
+                for effect in hit.on_hit_effects
+            ),
+            shared_with=hit.share_with,
+        )
+
+    @staticmethod
+    def _damage_type_constants() -> dict[str, int]:
+        return {
+            damage_type.name: numeric
+            for damage_type, numeric in _DAMAGE_TYPE_NUMERIC.items()
+        }
+
+    @classmethod
+    def _preview_skill_hit_damage(
+        cls,
+        entity: BaseEntity,
+        skill_id: str,
+        hit,
+        *,
+        combat_state=None,
+    ) -> _DamagePreview | None:
+        if hit.damage_type is None:
+            return None
+
+        if combat_state is not None:
+            attacker_ctx = build_effective_expr_context(combat_state, entity.entity_id)
+            crit_dmg = get_effective_major_stat(
+                combat_state,
+                entity.entity_id,
+                "crit_dmg",
+            )
+        else:
+            attacker_ctx = build_expr_context(entity)
+            crit_dmg = (
+                get_effective_player_major_stat(entity, "crit_dmg")
+                if isinstance(entity, PlayerCharacter)
+                else entity.major_stats.crit_dmg
+            )
+
+        neutral_target = ExprContext(
+            attack=0,
+            hp=100,
+            current_hp=100,
+            speed=0,
+            crit_chance=0.0,
+            crit_dmg=1.0,
+            resistance=0,
+            energy=0,
+            mastery=0,
+        )
+
+        ctx: dict[str, object] = {
+            "base_power": hit.base_power,
+            "attacker": attacker_ctx,
+            "target": neutral_target,
+        }
+
+        raw = evaluate_expr(hit.formula, ctx)
+        resolved_damage_type = hit.damage_type
+        for inst in entity.skill_modifiers:
+            mod = load_modifier(inst.modifier_id)
+            if mod.phase != ModifierPhase.PRE_HIT:
+                continue
+            if mod.skill_filter and mod.skill_filter != skill_id:
+                continue
+            if (
+                mod.damage_type_filter is not None
+                and mod.damage_type_filter != resolved_damage_type.value
+            ):
+                continue
+            if mod.action == "bonus_damage":
+                raw += evaluate_expr(mod.expr, ctx) * inst.stack_count
+            elif mod.action == "change_type" and mod.damage_type_override is not None:
+                resolved_damage_type = DamageType(mod.damage_type_override)
+
+        if combat_state is not None:
+            damage_bonus = get_effective_minor_stat(
+                combat_state,
+                entity.entity_id,
+                f"{resolved_damage_type.value}_dmg_pct",
+            )
+        elif isinstance(entity, PlayerCharacter):
+            damage_bonus = get_effective_player_minor_stat(
+                entity,
+                f"{resolved_damage_type.value}_dmg_pct",
+            )
+        else:
+            damage_bonus = entity.minor_stats.values.get(
+                f"{resolved_damage_type.value}_dmg_pct",
+                0.0,
+            )
+
+        base_after_type = raw * (1.0 + damage_bonus)
+        effect_multiplier = cls._preview_damage_multiplier(
+            entity,
+            resolved_damage_type,
+            combat_state=combat_state,
+        )
+        min_damage = load_constants().get("min_damage", 0)
+        amount_non_crit = max(
+            min_damage,
+            int(base_after_type * effect_multiplier),
+        )
+        amount_crit = max(
+            min_damage,
+            int(base_after_type * crit_dmg * effect_multiplier),
+        )
+        return _DamagePreview(
+            amount_non_crit=amount_non_crit,
+            amount_crit=amount_crit,
+            damage_type=resolved_damage_type.value,
+        )
+
+    @classmethod
+    def _preview_damage_multiplier(
+        cls,
+        entity: BaseEntity,
+        damage_type: DamageType,
+        *,
+        combat_state=None,
+    ) -> float:
+        multiplier = 1.0
+        for inst in entity.active_effects:
+            effect_def = load_effect(inst.effect_id)
+            if effect_def.trigger != TriggerType.ON_DAMAGE_CALC:
+                continue
+
+            target_ctx = (
+                build_effective_expr_context(combat_state, entity.entity_id)
+                if combat_state is not None
+                else build_expr_context(entity)
+            )
+            source_ctx = target_ctx
+            if (
+                combat_state is not None
+                and inst.source_id in combat_state.entities
+            ):
+                source_ctx = build_effective_expr_context(
+                    combat_state,
+                    inst.source_id,
+                )
+
+            ctx: dict[str, object] = {
+                "target": target_ctx,
+                "attacker": source_ctx,
+                "damage_type": _DAMAGE_TYPE_NUMERIC[damage_type],
+                **cls._damage_type_constants(),
+            }
+
+            if effect_def.tick_condition and not evaluate_expr(effect_def.tick_condition, ctx):
+                continue
+
+            for action in effect_def.actions:
+                if action.action_type != EffectActionType.DAMAGE_DEALT_MULT:
+                    continue
+                value = evaluate_expr(action.expr, ctx)
+                stack_mult = inst.stack_count if action.scales_with_stacks else 1
+                if value != 0:
+                    multiplier *= value ** stack_mult
+
+        return multiplier
+
+    @classmethod
+    def _build_skill_summary_context(
+        cls,
+        skill,
+        hit_details: tuple[SkillHitDetail, ...],
+    ) -> dict[str, str | int]:
+        context: dict[str, str | int] = {
+            "hits.count": len(skill.hits),
+            "target_type": cls._aggregate_target_type(hit_details),
+            "damage_type": cls._aggregate_damage_type(hit_details),
+            "damage_non_crit": cls._aggregate_damage_value(
+                hit_details,
+                crit=False,
+            ),
+            "damage_crit": cls._aggregate_damage_value(
+                hit_details,
+                crit=True,
+            ),
+            "summary_text": cls._build_summary_text(hit_details, skill.self_effects),
+        }
+
+        for index, detail in enumerate(hit_details):
+            context[f"hits.{index}.target_type"] = cls._target_label(detail.target_type)
+            context[f"hits.{index}.damage_type"] = detail.damage_type or ""
+            context[f"hits.{index}.damage_non_crit"] = (
+                str(detail.preview_damage_non_crit)
+                if detail.preview_damage_non_crit is not None else ""
+            )
+            context[f"hits.{index}.damage_crit"] = (
+                str(detail.preview_damage_crit)
+                if detail.preview_damage_crit is not None else ""
+            )
+            context[f"hits.{index}.formula"] = detail.formula
+
+        return context
+
+    @classmethod
+    def _tokenize_skill_summary_template(
+        cls,
+        template: str,
+        context: dict[str, str | int],
+    ) -> tuple[SkillSummaryPart, ...]:
+        parts: list[SkillSummaryPart] = []
+        last = 0
+
+        for match in _SKILL_TEMPLATE_RE.finditer(template):
+            if match.start() > last:
+                parts.append(SkillSummaryPart(
+                    kind="text",
+                    value=template[last:match.start()],
+                ))
+
+            key = match.group(1)
+            if key not in context:
+                raise ValueError(f"Unknown skill template placeholder: {key}")
+
+            kind = "text"
+            if key.endswith("damage_non_crit") or key == "damage_non_crit":
+                kind = "damage_non_crit"
+            elif key.endswith("damage_crit") or key == "damage_crit":
+                kind = "damage_crit"
+
+            parts.append(SkillSummaryPart(
+                kind=kind,
+                value=str(context[key]),
+            ))
+            last = match.end()
+
+        if last < len(template):
+            parts.append(SkillSummaryPart(kind="text", value=template[last:]))
+
+        return tuple(parts)
+
+    @classmethod
+    def _build_summary_text(
+        cls,
+        hit_details: tuple[SkillHitDetail, ...],
+        self_effects,
+    ) -> str:
+        if hit_details:
+            segments = [
+                cls._format_hit_summary(detail)
+                for detail in hit_details
+            ]
+            if len(segments) == 1:
+                return segments[0]
+            return ", then ".join(segments)
+
+        if self_effects:
+            effect_names = [
+                load_effect(effect.effect_id).name
+                for effect in self_effects
+            ]
+            if len(effect_names) == 1:
+                return f"Applies {effect_names[0]} to yourself."
+            return f"Applies {', '.join(effect_names[:-1])}, and {effect_names[-1]} to yourself."
+
+        return "Utility skill."
+
+    @classmethod
+    def _format_hit_summary(cls, detail: SkillHitDetail) -> str:
+        target = cls._target_label(detail.target_type)
+        if detail.preview_damage_non_crit is None or detail.preview_damage_crit is None:
+            return f"Targets {target}."
+        damage_type = detail.damage_type or "damage"
+        return (
+            f"Hits {target} for "
+            f"{detail.preview_damage_non_crit} / {detail.preview_damage_crit} "
+            f"{damage_type} damage"
+        )
+
+    @classmethod
+    def _aggregate_target_type(
+        cls,
+        hit_details: tuple[SkillHitDetail, ...],
+    ) -> str:
+        if not hit_details:
+            return "yourself"
+        labels = {
+            cls._target_label(detail.target_type)
+            for detail in hit_details
+        }
+        return labels.pop() if len(labels) == 1 else "mixed targets"
+
+    @staticmethod
+    def _aggregate_damage_type(
+        hit_details: tuple[SkillHitDetail, ...],
+    ) -> str:
+        values = {
+            detail.damage_type
+            for detail in hit_details
+            if detail.damage_type is not None
+        }
+        if not values:
+            return ""
+        return values.pop() if len(values) == 1 else "mixed"
+
+    @staticmethod
+    def _aggregate_damage_value(
+        hit_details: tuple[SkillHitDetail, ...],
+        *,
+        crit: bool,
+    ) -> str:
+        values: list[str] = []
+        seen: set[str] = set()
+        for detail in hit_details:
+            value = (
+                detail.preview_damage_crit
+                if crit else detail.preview_damage_non_crit
+            )
+            if value is None:
+                continue
+            text = str(value)
+            if text in seen:
+                continue
+            seen.add(text)
+            values.append(text)
+
+        return " then ".join(values)
+
+    @staticmethod
+    def _target_label(target_type) -> str:
+        labels = {
+            "single_enemy": "single enemy",
+            "all_enemies": "all enemies",
+            "single_ally": "single ally",
+            "all_allies": "all allies",
+            "self": "yourself",
+        }
+        return labels.get(target_type.value, target_type.value.replace("_", " "))
+
+    @classmethod
+    def _build_effect_detail(
+        cls,
+        effect_id: str,
+        *,
+        chance: float | None = None,
+        duration_override: int | None = None,
+    ) -> SkillEffectDetail:
+        effect = load_effect(effect_id)
+        duration = duration_override if duration_override is not None else effect.duration
+        return SkillEffectDetail(
+            effect_id=effect_id,
+            name=effect.name,
+            summary=cls._describe_effect(effect, duration),
+            chance=chance,
+        )
+
+    @classmethod
+    def _describe_effect(cls, effect, duration: int) -> str:
+        parts: list[str] = []
+        for action in effect.actions:
+            match action.action_type:
+                case EffectActionType.DAMAGE:
+                    damage_type = action.damage_type.value if action.damage_type else "damage"
+                    parts.append(f"deals {damage_type} damage each turn")
+                case EffectActionType.HEAL:
+                    parts.append("restores health")
+                case EffectActionType.SKIP_TURN:
+                    parts.append("skips the target's next turn")
+                case EffectActionType.DAMAGE_DEALT_MULT:
+                    parts.append(f"changes damage dealt by {action.expr}")
+                case EffectActionType.DAMAGE_TAKEN_MULT:
+                    parts.append(f"changes damage taken by {action.expr}")
+                case EffectActionType.STAT_MODIFY:
+                    parts.append(f"modifies {action.stat} by {action.expr}")
+                case EffectActionType.GRANT_ENERGY:
+                    parts.append(f"restores energy by {action.expr}")
+                case EffectActionType.GRANT_SKILL:
+                    if action.skill_id is not None:
+                        parts.append(f"grants {load_skill(action.skill_id).name}")
+                case EffectActionType.BLOCK_SKILL:
+                    if action.skill_id is not None:
+                        parts.append(f"blocks {load_skill(action.skill_id).name}")
+
+        body = ", ".join(parts) if parts else "applies an effect"
+        turn_label = "turn" if duration == 1 else "turns"
+        return f"{body} for {duration} {turn_label}."
 
     @staticmethod
     def _build_passive_info(passive_id: str) -> PassiveInfo:

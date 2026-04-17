@@ -67,6 +67,32 @@ class SkillHitInfo:
 
 
 @dataclass(frozen=True)
+class SkillSummaryPart:
+    kind: str
+    value: str
+
+
+@dataclass(frozen=True)
+class SkillEffectDetail:
+    effect_id: str
+    name: str
+    summary: str
+    chance: float | None = None
+
+
+@dataclass(frozen=True)
+class SkillHitDetail:
+    index: int
+    target_type: TargetType
+    damage_type: str | None
+    preview_damage_non_crit: int | None
+    preview_damage_crit: int | None
+    formula: str
+    on_hit_effects: tuple[SkillEffectDetail, ...] = ()
+    shared_with: int | None = None
+
+
+@dataclass(frozen=True)
 class SkillInfo:
     """Display-ready skill data."""
 
@@ -75,6 +101,10 @@ class SkillInfo:
     energy_cost: int
     hits: tuple[SkillHitInfo, ...]
     temporary: bool = False
+    summary_parts: tuple[SkillSummaryPart, ...] = ()
+    preview_note: str = ""
+    hit_details: tuple[SkillHitDetail, ...] = ()
+    self_effects: tuple[SkillEffectDetail, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -19,4 +19,3 @@ item_type = "relic"
 effects = [
     { type = "modify_stat", stat = "crit_chance", expr = "0.04 + quality*0.005" }
 ]
-

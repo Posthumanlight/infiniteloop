@@ -18,12 +18,39 @@ class SkillHitOut(BaseModel):
     damage_type: str | None
 
 
+class SkillSummaryPartOut(BaseModel):
+    kind: str
+    value: str
+
+
+class SkillEffectDetailOut(BaseModel):
+    effect_id: str
+    name: str
+    summary: str
+    chance: float | None = None
+
+
+class SkillHitDetailOut(BaseModel):
+    index: int
+    target_type: str
+    damage_type: str | None
+    preview_damage_non_crit: int | None
+    preview_damage_crit: int | None
+    formula: str
+    on_hit_effects: list[SkillEffectDetailOut]
+    shared_with: int | None = None
+
+
 class SkillOut(BaseModel):
     skill_id: str
     name: str
     energy_cost: int
     hits: list[SkillHitOut]
     temporary: bool
+    summary_parts: list[SkillSummaryPartOut]
+    preview_note: str
+    hit_details: list[SkillHitDetailOut]
+    self_effects: list[SkillEffectDetailOut]
 
 
 class PassiveOut(BaseModel):
@@ -89,12 +116,47 @@ class CharacterSheetOut(BaseModel):
                     name=skill.name,
                     energy_cost=skill.energy_cost,
                     temporary=skill.temporary,
+                    summary_parts=[
+                        SkillSummaryPartOut(kind=part.kind, value=part.value)
+                        for part in skill.summary_parts
+                    ],
+                    preview_note=skill.preview_note,
                     hits=[
                         SkillHitOut(
                             target_type=hit.target_type.value,
                             damage_type=hit.damage_type,
                         )
                         for hit in skill.hits
+                    ],
+                    hit_details=[
+                        SkillHitDetailOut(
+                            index=detail.index,
+                            target_type=detail.target_type.value,
+                            damage_type=detail.damage_type,
+                            preview_damage_non_crit=detail.preview_damage_non_crit,
+                            preview_damage_crit=detail.preview_damage_crit,
+                            formula=detail.formula,
+                            on_hit_effects=[
+                                SkillEffectDetailOut(
+                                    effect_id=effect.effect_id,
+                                    name=effect.name,
+                                    summary=effect.summary,
+                                    chance=effect.chance,
+                                )
+                                for effect in detail.on_hit_effects
+                            ],
+                            shared_with=detail.shared_with,
+                        )
+                        for detail in skill.hit_details
+                    ],
+                    self_effects=[
+                        SkillEffectDetailOut(
+                            effect_id=effect.effect_id,
+                            name=effect.name,
+                            summary=effect.summary,
+                            chance=effect.chance,
+                        )
+                        for effect in skill.self_effects
                     ],
                 )
                 for skill in sheet.skills

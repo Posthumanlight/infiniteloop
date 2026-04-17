@@ -91,6 +91,10 @@ def test_load_skill_slash():
     assert s.hits[0].damage_type == DamageType.SLASHING
     assert "attacker.attack" in s.hits[0].formula
     assert s.hits[0].base_power == 1
+    assert s.summary == (
+        "Hits a [target_type] for [damage_non_crit] / "
+        "[damage_crit] [damage_type] damage."
+    )
 
 
 def test_load_skill_enlightenment():
@@ -102,6 +106,7 @@ def test_load_skill_enlightenment():
     assert s.hits == ()
     assert len(s.self_effects) == 1
     assert s.self_effects[0].effect_id == "enlightenment"
+    assert s.summary == "Applies Enlightenment to yourself."
 
 
 def test_load_class_warrior():
