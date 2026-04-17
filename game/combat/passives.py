@@ -11,6 +11,7 @@ from game.combat.effects import (
     reset_effect_stacks,
 )
 from game.combat.models import CombatState, DamageResult, HitResult
+from game.combat.summons import handle_owner_death
 from game.combat.targeting import get_enemies
 from game.core.data_loader import PassiveSkillData, load_passive, load_skill
 from game.core.dice import SeededRNG
@@ -132,6 +133,8 @@ def _exec_damage(
     entity = state.entities[entity_id]
     new_hp = max(0, entity.current_hp - value)
     state = _update_entity(state, entity_id, current_hp=new_hp)
+    if new_hp <= 0:
+        state = handle_owner_death(state, entity_id)
     return state, [HitResult(
         target_id=entity_id,
         damage=DamageResult(
@@ -197,7 +200,15 @@ def _exec_cast_skill(
         for hit_index, hit in enumerate(skill.hits)
         if hit.target_type.value in {'single_enemy', 'single_ally'}
     }
-    return resolve_skill(state, entity_id, skill, selected_targets, rng, constants)
+    state, hits, _ = resolve_skill(
+        state,
+        entity_id,
+        skill,
+        selected_targets,
+        rng,
+        constants,
+    )
+    return state, hits
 
 
 def _exec_consume_effect(

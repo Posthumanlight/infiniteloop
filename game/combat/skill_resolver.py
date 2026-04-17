@@ -6,9 +6,10 @@ from game.combat.effects import (
     build_effective_expr_context,
     get_damage_multiplier,
 )
-from game.combat.models import CombatState, HitResult
+from game.combat.models import CombatState, HitResult, SummonSpawnResult
 from game.combat.passives import PassiveEvent, check_passives
 from game.combat.skill_modifiers import apply_post_hit_modifiers, collect_modifiers
+from game.combat.summons import handle_owner_death, spawn_skill_summons
 from game.combat.targeting import get_allies, resolve_targets
 from game.core.data_loader import SkillData
 from game.core.dice import SeededRNG
@@ -22,8 +23,9 @@ def resolve_skill(
     selected_targets: dict[int, str],
     rng: SeededRNG,
     constants: dict,
-) -> tuple[CombatState, list[HitResult]]:
+) -> tuple[CombatState, list[HitResult], tuple[SummonSpawnResult, ...]]:
     all_hits: list[HitResult] = []
+    summon_results = ()
 
     # Collect modifiers for this actor + skill (damage_type filter re-checked per hit)
     actor = state.entities[actor_id]
@@ -79,6 +81,8 @@ def resolve_skill(
                 target_id: replace(current_defender, current_hp=new_hp),
             }
             state = replace(state, entities=new_entities)
+            if new_hp <= 0:
+                state = handle_owner_death(state, target_id)
 
             # Post-hit modifiers (vampirism, etc.)
             state, post_results = apply_post_hit_modifiers(
@@ -148,4 +152,12 @@ def resolve_skill(
     for self_effect in skill.self_effects:
         state = apply_effect(state, actor_id, self_effect.effect_id, actor_id)
 
-    return state, all_hits
+    state, summon_results = spawn_skill_summons(
+        state,
+        actor_id,
+        skill,
+        rng,
+        constants,
+    )
+
+    return state, all_hits, summon_results

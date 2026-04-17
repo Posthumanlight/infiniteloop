@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass, replace
 
 from game.character.base_entity import BaseEntity
-from game.combat.enemy_ai import build_enemy_action as build_enemy_ai_action
+from game.combat.enemy_ai import build_ai_action
 from game.combat.effects import (
     build_effective_expr_context,
     build_expr_context,
@@ -10,6 +10,7 @@ from game.combat.effects import (
     get_effective_minor_stat,
     get_effective_skill_access,
 )
+from game.combat.targeting import is_ai_controlled, is_player_team
 from game.combat.models import ActionRequest, ActionResult
 from game.core.dice import SeededRNG
 from game.core.data_loader import (
@@ -317,9 +318,9 @@ class GameService:
 
         if (
             session.state.phase == SessionPhase.IN_COMBAT
-            and self._current_entity_type(session) == EntityType.ENEMY
+            and self._current_actor_is_ai_controlled(session)
         ):
-            self._auto_play_enemies(session)
+            self._auto_play_ai_entities(session)
 
         return session.state.phase
 
@@ -441,9 +442,9 @@ class GameService:
 
         if (
             session.state.phase == SessionPhase.IN_COMBAT
-            and self._current_entity_type(session) == EntityType.ENEMY
+            and self._current_actor_is_ai_controlled(session)
         ):
-            self._auto_play_enemies(session)
+            self._auto_play_ai_entities(session)
 
         return session.state.phase
 
@@ -461,7 +462,7 @@ class GameService:
         results: list[ActionResult] = []
 
         self._submit_and_capture(session, action, results)
-        self._auto_play_enemies(session, results)
+        self._auto_play_ai_entities(session, results)
 
         return self._build_turn_batch(session, tuple(results))
 
@@ -480,7 +481,7 @@ class GameService:
             skill_id=None,
         )
         self._submit_and_capture(session, action, results, skip=True)
-        self._auto_play_enemies(session, results)
+        self._auto_play_ai_entities(session, results)
 
         return self._build_turn_batch(session, tuple(results))
 
@@ -511,7 +512,7 @@ class GameService:
         return [
             self._entity_to_snapshot(e, session.state.combat)
             for e in session.state.combat.entities.values()
-            if e.entity_type == EntityType.PLAYER and e.current_hp > 0
+            if is_player_team(e.entity_type) and e.current_hp > 0
         ]
 
     def get_whose_turn(self, session_id: str) -> str | None:
@@ -1427,18 +1428,18 @@ class GameService:
         if session.state.combat is not None:
             results.extend(session.state.combat.action_log[log_len:])
 
-    def _auto_play_enemies(
+    def _auto_play_ai_entities(
         self,
         session: _ActiveSession,
         results: list[ActionResult] | None = None,
     ) -> None:
-        """Process all consecutive enemy turns, capturing results."""
+        """Process all consecutive AI-controlled turns, capturing results."""
         while (
             session.state.combat is not None
-            and self._current_entity_type(session) == EntityType.ENEMY
+            and self._current_actor_is_ai_controlled(session)
         ):
-            enemy_action = self._build_enemy_action(session)
-            if enemy_action is None:
+            ai_action = self._build_ai_action(session)
+            if ai_action is None:
                 current_id = self._current_turn_id(session)
                 skip_action = ActionRequest(
                     actor_id=current_id,
@@ -1452,19 +1453,19 @@ class GameService:
                         session.state, current_id,
                     )
             elif results is not None:
-                self._submit_and_capture(session, enemy_action, results)
+                self._submit_and_capture(session, ai_action, results)
             else:
                 session.state = session.manager.submit_combat_action(
-                    session.state, enemy_action,
+                    session.state, ai_action,
                 )
 
     @staticmethod
-    def _build_enemy_action(session: _ActiveSession) -> ActionRequest | None:
+    def _build_ai_action(session: _ActiveSession) -> ActionRequest | None:
         combat = session.state.combat
         current_id = combat.turn_order[combat.current_turn_index]
         rng = SeededRNG(0)
         rng.set_state(combat.rng_state)
-        action = build_enemy_ai_action(combat, current_id, rng)
+        action = build_ai_action(combat, current_id, rng)
         session.state = replace(
             session.state,
             combat=replace(combat, rng_state=rng.get_state()),
@@ -1485,6 +1486,17 @@ class GameService:
             return None
         current_id = combat.turn_order[combat.current_turn_index]
         return combat.entities[current_id].entity_type
+
+    @staticmethod
+    def _current_actor_is_ai_controlled(session: _ActiveSession) -> bool:
+        combat = session.state.combat
+        if combat is None or combat.current_turn_index >= len(combat.turn_order):
+            return False
+        current_id = combat.turn_order[combat.current_turn_index]
+        entity = combat.entities.get(current_id)
+        if entity is None:
+            return False
+        return is_ai_controlled(entity)
 
     def _build_turn_batch(
         self,

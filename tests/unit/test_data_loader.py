@@ -14,6 +14,8 @@ from game.core.data_loader import (
     load_modifier,
     load_passive,
     load_skill,
+    load_summon,
+    load_summon_constants,
 )
 from game.core.enums import (
     ActionType,
@@ -109,6 +111,33 @@ def test_load_skill_enlightenment():
     assert s.summary == "Applies Enlightenment to yourself."
 
 
+def test_load_skill_summon_familiar():
+    skill = load_skill("summon_familiar")
+
+    assert skill.skill_id == "summon_familiar"
+    assert skill.self_effects == ()
+    assert len(skill.summons) == 1
+    assert skill.summons[0].summon_id == "familiar"
+    assert skill.summons[0].count_expr == "1"
+    assert skill.summons[0].duration_own_turns == 3
+
+
+def test_load_summon_familiar():
+    summon = load_summon("familiar")
+
+    assert summon.summon_id == "familiar"
+    assert summon.max_per_owner == 1
+    assert summon.skills == ("generic_enemy_attack",)
+    assert summon.passives == ()
+    assert summon.major_stat_formulas["attack"] == "owner.attack * 0.45 + owner.mastery * 0.4"
+
+
+def test_load_summon_constants():
+    constants = load_summon_constants()
+
+    assert constants["max_total_per_owner"] == 3
+
+
 def test_load_class_warrior():
     c = load_class("warrior")
     assert c.name == "Warrior"
@@ -145,6 +174,14 @@ def test_load_modifier_with_class_tags():
     assert m.modifier_id == "slash_power"
     assert m.skill_filter == "slash"
     assert "warrior" in m.class_tags
+
+
+def test_load_summon_modifier_fields():
+    modifier = load_modifier("familiar_training")
+
+    assert modifier.phase.value == "on_summon"
+    assert modifier.summon_filter == "familiar"
+    assert modifier.summon_stat == "attack"
 
 
 def test_load_passive_multi_trigger():

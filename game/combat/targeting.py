@@ -3,25 +3,46 @@ from game.combat.models import CombatState
 from game.core.enums import EntityType, TargetType
 
 
+_PLAYER_TEAM = frozenset({EntityType.PLAYER, EntityType.ALLY})
+
+
 def is_alive(entity: BaseEntity) -> bool:
     return entity.current_hp > 0
 
 
+def is_player_team(entity_type: EntityType) -> bool:
+    return entity_type in _PLAYER_TEAM
+
+
+def are_allies(a: BaseEntity, b: BaseEntity) -> bool:
+    return is_player_team(a.entity_type) == is_player_team(b.entity_type)
+
+
+def are_enemies(a: BaseEntity, b: BaseEntity) -> bool:
+    return not are_allies(a, b)
+
+
+def is_player_controlled(entity: BaseEntity) -> bool:
+    return entity.entity_type == EntityType.PLAYER
+
+
+def is_ai_controlled(entity: BaseEntity) -> bool:
+    return entity.entity_type in {EntityType.ENEMY, EntityType.ALLY}
+
+
 def get_allies(state: CombatState, entity_id: str) -> list[str]:
     entity = state.entities[entity_id]
-    my_type = entity.entity_type
     return [
         eid for eid, e in state.entities.items()
-        if e.entity_type == my_type and is_alive(e)
+        if are_allies(entity, e) and is_alive(e)
     ]
 
 
 def get_enemies(state: CombatState, entity_id: str) -> list[str]:
     entity = state.entities[entity_id]
-    my_type = entity.entity_type
     return [
         eid for eid, e in state.entities.items()
-        if e.entity_type != my_type and is_alive(e)
+        if are_enemies(entity, e) and is_alive(e)
     ]
 
 

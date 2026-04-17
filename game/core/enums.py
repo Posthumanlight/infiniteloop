@@ -4,6 +4,7 @@ from enum import Enum
 class EntityType(Enum):
     PLAYER = "player"
     ENEMY = "enemy"
+    ALLY = "ally"
 
 
 class DamageType(Enum):
@@ -141,6 +142,7 @@ class SessionEndReason(Enum):
 class ModifierPhase(Enum):
     PRE_HIT = "pre_hit"
     POST_HIT = "post_hit"
+    ON_SUMMON = "on_summon"
 
 
 class LevelRewardType(Enum):

@@ -18,6 +18,18 @@ if TYPE_CHECKING:
     from game.character.base_entity import BaseEntity
 
 
+_MAJOR_STAT_KEYS = frozenset({
+    "attack",
+    "hp",
+    "speed",
+    "crit_chance",
+    "crit_dmg",
+    "resistance",
+    "energy",
+    "mastery",
+})
+
+
 @dataclass(frozen=True)
 class ModifierInstance:
     """A modifier attached to an entity. Tracks stacking."""
@@ -38,6 +50,14 @@ class ResolvedModifier:
     damage_type_filter: str | None = None
     effect_id: str | None = None
     chance: float = 1.0
+
+
+@dataclass(frozen=True)
+class SummonModifierBundle:
+    major_stat_bonuses: dict[str, float]
+    minor_stat_bonuses: dict[str, float]
+    granted_skills: tuple[str, ...]
+    granted_passives: tuple[str, ...]
 
 
 def add_modifier(entity: BaseEntity, modifier_id: str) -> BaseEntity:
@@ -92,6 +112,63 @@ def collect_modifiers(
             chance=mod_data.chance,
         ))
     return tuple(result)
+
+
+def collect_summon_modifiers(
+    state: CombatState,
+    entity: BaseEntity,
+    skill: SkillData,
+    summon_id: str,
+) -> SummonModifierBundle:
+    owner_ctx = build_effective_expr_context(state, entity.entity_id)
+    major_bonuses: dict[str, float] = {}
+    minor_bonuses: dict[str, float] = {}
+    granted_skills: list[str] = []
+    granted_passives: list[str] = []
+
+    for inst in entity.skill_modifiers:
+        mod_data = load_modifier(inst.modifier_id)
+        if mod_data.phase != ModifierPhase.ON_SUMMON:
+            continue
+        if mod_data.skill_filter and mod_data.skill_filter != skill.skill_id:
+            continue
+        if mod_data.summon_filter and mod_data.summon_filter != summon_id:
+            continue
+
+        ctx: dict[str, object] = {
+            "owner": owner_ctx,
+            "attacker": owner_ctx,
+            "stack_count": inst.stack_count,
+        }
+        value = evaluate_expr(mod_data.expr, ctx)
+        if mod_data.stackable:
+            value *= inst.stack_count
+
+        match mod_data.action:
+            case "summon_stat_bonus":
+                if mod_data.summon_stat is None:
+                    continue
+                target_map = (
+                    major_bonuses
+                    if mod_data.summon_stat in _MAJOR_STAT_KEYS
+                    else minor_bonuses
+                )
+                target_map[mod_data.summon_stat] = (
+                    target_map.get(mod_data.summon_stat, 0.0) + value
+                )
+            case "summon_grant_skill":
+                if mod_data.granted_skill_id is not None:
+                    granted_skills.append(mod_data.granted_skill_id)
+            case "summon_grant_passive":
+                if mod_data.granted_passive_id is not None:
+                    granted_passives.append(mod_data.granted_passive_id)
+
+    return SummonModifierBundle(
+        major_stat_bonuses=major_bonuses,
+        minor_stat_bonuses=minor_bonuses,
+        granted_skills=tuple(dict.fromkeys(granted_skills)),
+        granted_passives=tuple(dict.fromkeys(granted_passives)),
+    )
 
 
 def apply_post_hit_modifiers(

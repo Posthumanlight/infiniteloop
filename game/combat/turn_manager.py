@@ -4,6 +4,7 @@ from game.combat.cooldowns import tick_cooldowns
 from game.combat.effects import expire_effects, is_skipped, tick_effects
 from game.combat.models import CombatState, HitResult
 from game.combat.passives import PassiveEvent, check_passives
+from game.combat.summons import tick_summon_duration_after_turn
 from game.combat.targeting import is_alive
 from game.core.dice import SeededRNG
 from game.core.enums import CombatPhase, EntityType, TriggerType
@@ -26,6 +27,12 @@ def start_round(state: CombatState, rng: SeededRNG) -> CombatState:
                 eid,
                 PassiveEvent(trigger=TriggerType.ON_ROUND_START),
             )
+
+    while state.current_turn_index < len(state.turn_order):
+        eid = state.turn_order[state.current_turn_index]
+        if is_alive(state.entities[eid]):
+            break
+        state = replace(state, current_turn_index=state.current_turn_index + 1)
 
     return state
 
@@ -68,8 +75,14 @@ def end_turn(state: CombatState, rng: SeededRNG) -> CombatState:
         PassiveEvent(trigger=TriggerType.ON_TURN_END),
     )
     state = expire_effects(state, current_id)
+    state = tick_summon_duration_after_turn(state, current_id)
 
-    next_index = state.current_turn_index + 1
+    current_still_present = current_id in state.turn_order
+    if current_still_present:
+        next_index = state.turn_order.index(current_id) + 1
+    else:
+        next_index = state.current_turn_index
+
     if next_index >= len(state.turn_order):
         return replace(state, current_turn_index=next_index, phase=CombatPhase.ROUND_END)
 

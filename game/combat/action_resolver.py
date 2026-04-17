@@ -72,7 +72,7 @@ def _resolve_skill_action(
         }
         state = replace(state, entities=new_entities)
 
-    state, hits = resolve_skill(
+    state, hits, summons_created = resolve_skill(
         state, action.actor_id, skill, action.get_target_map(), rng, constants,
     )
 
@@ -98,4 +98,5 @@ def _resolve_skill_action(
         action=action,
         hits=tuple(hits),
         self_effects_applied=tuple(self_effects),
+        summons_created=summons_created,
     )

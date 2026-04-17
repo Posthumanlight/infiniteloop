@@ -18,6 +18,8 @@ def _entity_icon(entity_type: EntityType) -> str:
     match entity_type:
         case EntityType.PLAYER:
             return "\U0001f9d1"  # person
+        case EntityType.ALLY:
+            return "\U0001f43e"  # paw prints
         case EntityType.ENEMY:
             return "\U0001f47a"  # goblin
 
@@ -32,7 +34,7 @@ def _entity_line(snap: EntitySnapshot) -> str:
     icon = _entity_icon(snap.entity_type)
     bar = _hp_bar(snap.current_hp, snap.max_hp)
     line = f"{icon} {snap.name} {bar} {snap.current_hp}/{snap.max_hp}"
-    if snap.entity_type == EntityType.PLAYER:
+    if snap.entity_type in {EntityType.PLAYER, EntityType.ALLY}:
         line += f"  \u26a1{snap.current_energy}"
     if not snap.is_alive:
         line += " \U0001f480"
@@ -51,6 +53,11 @@ def render_combat_start(
         for eid in snapshot.turn_order
         if snapshot.entities[eid].entity_type == EntityType.PLAYER
     ]
+    ally_snaps = [
+        snapshot.entities[eid]
+        for eid in snapshot.turn_order
+        if snapshot.entities[eid].entity_type == EntityType.ALLY
+    ]
     enemy_snaps = [
         snapshot.entities[eid]
         for eid in snapshot.turn_order
@@ -58,6 +65,8 @@ def render_combat_start(
     ]
 
     for snap in player_snaps:
+        lines.append(_entity_line(snap))
+    for snap in ally_snaps:
         lines.append(_entity_line(snap))
     for snap in enemy_snaps:
         lines.append(_entity_line(snap))
@@ -82,6 +91,11 @@ def render_action_result(
 
     lines: list[str] = []
     default_skill = result.action.skill_id or "attack"
+
+    for summon in result.summons_created:
+        lines.append(
+            f"\u2728 {actor_name} summons {summon.name}!"
+        )
 
     for hit in result.hits:
         target = entities.get(hit.target_id)

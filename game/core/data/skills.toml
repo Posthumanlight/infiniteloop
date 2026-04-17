@@ -173,3 +173,18 @@ hits = []
 self_effects = [
   { effect = "enlightenment" },
 ]
+
+#summoner
+[skills.summon_familiar]
+name = "Summon Familiar"
+energy_cost = 60
+action_type = "action"
+cooldown = 3
+level_eligibility = [1, 99]
+class_tags = ["summoner"]
+summary = "Summons a Familiar."
+hits = []
+self_effects = []
+summons = [
+  { summon_id = "familiar", count_expr = "1", duration_own_turns = 3 },
+]

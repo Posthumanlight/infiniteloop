@@ -33,3 +33,6 @@ mastery = 0.35
 
 [loot]
 item_quality_formula = "room_difficulty_scalar"
+
+[summons]
+max_total_per_owner = 3

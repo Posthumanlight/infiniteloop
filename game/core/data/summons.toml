@@ -1,0 +1,18 @@
+[summons.familiar]
+name = "Familiar"
+max_per_owner = 1
+skills = ["generic_enemy_attack"]
+passives = []
+
+[summons.familiar.major_stat_formulas]
+attack = "owner.attack * 0.45 + owner.mastery * 0.4"
+hp = "owner.hp * 0.25 + owner.mastery * 3"
+speed = "owner.speed * 0.9"
+crit_chance = "owner.crit_chance"
+crit_dmg = "owner.crit_dmg"
+resistance = "owner.resistance * 0.35"
+energy = "40"
+mastery = "owner.mastery * 0.6"
+
+[summons.familiar.minor_stat_formulas]
+arcane_dmg_pct = "owner.mastery * 0.01"

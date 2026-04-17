@@ -153,6 +153,13 @@ class SelfEffectData:
 
 
 @dataclass(frozen=True)
+class SkillSummonData:
+    summon_id: str
+    count_expr: str = "1"
+    duration_own_turns: int | None = None
+
+
+@dataclass(frozen=True)
 class SkillData:
     skill_id: str
     name: str
@@ -160,6 +167,7 @@ class SkillData:
     action_type: ActionType
     hits: tuple[SkillHitData, ...]
     self_effects: tuple[SelfEffectData, ...]
+    summons: tuple[SkillSummonData, ...] = ()
     cooldown: int = 0
     level_eligibility: tuple[int, int] | None = None
     class_tags: tuple[str, ...] = ()
@@ -275,6 +283,31 @@ def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
     )
 
 
+def _parse_skill_summon(
+    skill_id: str,
+    summon_raw: dict[str, Any],
+) -> SkillSummonData:
+    summon_id = str(summon_raw["summon_id"])
+    if summon_id not in load_summons():
+        raise KeyError(
+            f"Skill {skill_id}: unknown summon template '{summon_id}'",
+        )
+
+    duration = summon_raw.get("duration_own_turns")
+    if duration is not None:
+        duration = int(duration)
+        if duration <= 0:
+            raise ValueError(
+                f"Skill {skill_id}: duration_own_turns must be > 0 if provided",
+            )
+
+    return SkillSummonData(
+        summon_id=summon_id,
+        count_expr=str(summon_raw.get("count_expr", "1")),
+        duration_own_turns=duration,
+    )
+
+
 def load_skills() -> dict[str, SkillData]:
     raw = _load_toml("skills.toml")["skills"]
     result: dict[str, SkillData] = {}
@@ -287,6 +320,11 @@ def load_skills() -> dict[str, SkillData]:
                 effect_id=se["effect"],
                 duration_override=se.get("duration_override"),
             ))
+
+        summons = tuple(
+            _parse_skill_summon(sid, summon_raw)
+            for summon_raw in sdata.get("summons", [])
+        )
 
         level_eligibility = _parse_level_eligibility(
             "Skill",
@@ -307,6 +345,7 @@ def load_skills() -> dict[str, SkillData]:
             action_type=ActionType(sdata["action_type"]),
             hits=hits,
             self_effects=tuple(self_effects),
+            summons=summons,
             cooldown=sdata.get("cooldown", 0),
             level_eligibility=level_eligibility,
             class_tags=tuple(sdata.get("class_tags", [])),
@@ -420,6 +459,98 @@ def load_enemy(enemy_id: str) -> EnemyData:
 
 
 # ---------------------------------------------------------------------------
+# Summon templates
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SummonTemplateData:
+    summon_id: str
+    name: str
+    max_per_owner: int
+    skills: tuple[str, ...]
+    passives: tuple[str, ...]
+    major_stat_formulas: dict[str, str]
+    minor_stat_formulas: dict[str, str]
+
+
+_SUMMON_MAJOR_STAT_KEYS = (
+    "attack",
+    "hp",
+    "speed",
+    "crit_chance",
+    "crit_dmg",
+    "resistance",
+    "energy",
+    "mastery",
+)
+
+
+def _parse_formula_map(
+    summon_id: str,
+    section_name: str,
+    raw_section: object,
+    *,
+    required_keys: tuple[str, ...] = (),
+) -> dict[str, str]:
+    if not isinstance(raw_section, dict):
+        raise ValueError(
+            f"Summon {summon_id}: {section_name} must be a table of formulas",
+        )
+
+    formulas = {
+        str(key): str(value)
+        for key, value in raw_section.items()
+    }
+    missing = [key for key in required_keys if key not in formulas]
+    if missing:
+        raise ValueError(
+            f"Summon {summon_id}: missing required {section_name} keys {missing}",
+        )
+    return formulas
+
+
+def load_summons() -> dict[str, SummonTemplateData]:
+    raw = _load_toml("summons.toml").get("summons", {})
+    result: dict[str, SummonTemplateData] = {}
+
+    for summon_id, summon_data in raw.items():
+        max_per_owner = int(summon_data["max_per_owner"])
+        if max_per_owner <= 0:
+            raise ValueError(
+                f"Summon {summon_id}: max_per_owner must be > 0",
+            )
+
+        result[summon_id] = SummonTemplateData(
+            summon_id=summon_id,
+            name=summon_data["name"],
+            max_per_owner=max_per_owner,
+            skills=tuple(summon_data.get("skills", [])),
+            passives=tuple(summon_data.get("passives", [])),
+            major_stat_formulas=_parse_formula_map(
+                summon_id,
+                "major_stat_formulas",
+                summon_data.get("major_stat_formulas", {}),
+                required_keys=_SUMMON_MAJOR_STAT_KEYS,
+            ),
+            minor_stat_formulas=_parse_formula_map(
+                summon_id,
+                "minor_stat_formulas",
+                summon_data.get("minor_stat_formulas", {}),
+            ),
+        )
+
+    return result
+
+
+def load_summon(summon_id: str) -> SummonTemplateData:
+    summons = load_summons()
+    if summon_id not in summons:
+        raise KeyError(f"Unknown summon: {summon_id}")
+    return summons[summon_id]
+
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -441,6 +572,10 @@ def load_world_difficulty_constants() -> dict[str, Any]:
 
 def load_loot_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["loot"]
+
+
+def load_summon_constants() -> dict[str, Any]:
+    return _load_toml("constants.toml")["summons"]
 
 
 # ---------------------------------------------------------------------------
@@ -747,6 +882,10 @@ class SkillModifierData:
     damage_type_filter: str | None = None
     damage_type_override: str | None = None
     effect_id: str | None = None
+    summon_filter: str | None = None
+    summon_stat: str | None = None
+    granted_skill_id: str | None = None
+    granted_passive_id: str | None = None
     chance: float = 1.0
 
 
@@ -773,8 +912,25 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             damage_type_filter=mdata.get("damage_type_filter"),
             damage_type_override=mdata.get("damage_type_override"),
             effect_id=mdata.get("effect_id"),
+            summon_filter=mdata.get("summon_filter"),
+            summon_stat=mdata.get("summon_stat"),
+            granted_skill_id=mdata.get("granted_skill_id"),
+            granted_passive_id=mdata.get("granted_passive_id"),
             chance=chance,
         )
+
+        if result[mid].action == "summon_stat_bonus" and result[mid].summon_stat is None:
+            raise ValueError(
+                f"Modifier {mid}: summon_stat_bonus requires summon_stat",
+            )
+        if result[mid].action == "summon_grant_skill" and result[mid].granted_skill_id is None:
+            raise ValueError(
+                f"Modifier {mid}: summon_grant_skill requires granted_skill_id",
+            )
+        if result[mid].action == "summon_grant_passive" and result[mid].granted_passive_id is None:
+            raise ValueError(
+                f"Modifier {mid}: summon_grant_passive requires granted_passive_id",
+            )
     return result
 
 

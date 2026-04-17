@@ -99,7 +99,7 @@ def build_ai_target_pairs(
     return tuple(pairs)
 
 
-def build_enemy_action(
+def build_ai_action(
     state: CombatState,
     actor_id: str,
     rng: SeededRNG,
@@ -121,3 +121,11 @@ def build_enemy_action(
         )
 
     return None
+
+
+def build_enemy_action(
+    state: CombatState,
+    actor_id: str,
+    rng: SeededRNG,
+) -> ActionRequest | None:
+    return build_ai_action(state, actor_id, rng)

@@ -10,6 +10,17 @@ if TYPE_CHECKING:
     from game.world.difficulty import RoomDifficultyModifier
 
 
+class TurnOrder(tuple):
+    def __new__(
+        cls,
+        values: tuple[str, ...],
+        initiative_scores: dict[str, tuple[int, int]] | None = None,
+    ) -> "TurnOrder":
+        obj = super().__new__(cls, values)
+        obj.initiative_scores = initiative_scores or {}
+        return obj
+
+
 @dataclass(frozen=True)
 class ActionRequest:
     actor_id: str
@@ -40,11 +51,20 @@ class HitResult:
 
 
 @dataclass(frozen=True)
+class SummonSpawnResult:
+    entity_id: str
+    name: str
+    owner_id: str
+    summon_template_id: str
+
+
+@dataclass(frozen=True)
 class ActionResult:
     actor_id: str
     action: ActionRequest
     hits: tuple[HitResult, ...] = ()
     self_effects_applied: tuple[str, ...] = ()
+    summons_created: tuple[SummonSpawnResult, ...] = ()
     skipped: bool = False
 
 
@@ -60,5 +80,14 @@ class CombatState:
     action_log: tuple[ActionResult, ...] = ()
     passive_trackers: dict[str, PassiveTracker] = field(default_factory=dict)
     cooldowns: dict[str, dict[str, int]] = field(default_factory=dict)
+    initiative_scores: dict[str, tuple[int, int]] = field(default_factory=dict)
+    next_summon_order: int = 1
     rng_state: tuple | None = None
     room_difficulty: RoomDifficultyModifier | None = None
+
+    def __post_init__(self) -> None:
+        if self.initiative_scores:
+            return
+        carried_scores = getattr(self.turn_order, "initiative_scores", None)
+        if carried_scores:
+            object.__setattr__(self, "initiative_scores", dict(carried_scores))

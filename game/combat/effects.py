@@ -4,6 +4,7 @@ from typing import Any
 from game.character.base_entity import BaseEntity
 from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState, DamageResult, HitResult
+from game.combat.summons import handle_owner_death
 from game.core.data_loader import load_effect, load_modifier
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, EffectActionType, TriggerType
@@ -381,6 +382,38 @@ def tick_effects(
                     current_entity = state.entities[entity_id]
                     new_hp = max(0, current_entity.current_hp - dmg)
                     state = _update_entity(state, entity_id, current_hp=new_hp)
+                    if new_hp <= 0:
+                        state = handle_owner_death(state, entity_id)
+                        from game.combat.passives import PassiveEvent, check_passives
+                        from game.combat.targeting import get_allies
+
+                        if inst.source_id in state.entities:
+                            state, kill_results = check_passives(
+                                state,
+                                inst.source_id,
+                                PassiveEvent(
+                                    trigger=TriggerType.ON_KILL,
+                                    payload={
+                                        "killed": build_effective_expr_context(
+                                            state,
+                                            entity_id,
+                                        ),
+                                    },
+                                ),
+                                rng=rng,
+                            )
+                            results.extend(kill_results)
+
+                        for ally_id in get_allies(state, entity_id):
+                            if ally_id == entity_id:
+                                continue
+                            state, ally_results = check_passives(
+                                state,
+                                ally_id,
+                                PassiveEvent(trigger=TriggerType.ON_ALLY_DEATH),
+                                rng=rng,
+                            )
+                            results.extend(ally_results)
                     results.append(HitResult(
                         target_id=entity_id,
                         damage=DamageResult(
