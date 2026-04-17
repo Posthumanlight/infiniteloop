@@ -156,6 +156,16 @@ def test_load_passive_multi_trigger():
     )
     assert passive.trigger == TriggerType.ON_HIT
     assert passive.action.value == "grant_energy"
+    assert passive.level_eligibility == (3, 99)
+    assert passive.class_tags == ()
+
+
+def test_load_passive_offer_metadata():
+    passive = load_passive("arcane_rupture")
+
+    assert passive.level_eligibility == (6, 99)
+    assert passive.class_tags == ("mage",)
+    assert passive.cast_skill_id == "arcane_rupture"
 
 
 def test_load_item_blueprint_long_sword():

@@ -1,5 +1,23 @@
 from dataclasses import dataclass
 
+
+_VALID_REWARD_KINDS = frozenset({"modifier", "skill", "passive"})
+
+
+def build_reward_key(reward_kind: str, reward_id: str) -> str:
+    if reward_kind not in _VALID_REWARD_KINDS:
+        raise ValueError(f"Unknown reward kind: {reward_kind}")
+    if not reward_id:
+        raise ValueError("Reward id must be non-empty")
+    return f"{reward_kind}:{reward_id}"
+
+
+def parse_reward_key(reward_key: str) -> tuple[str, str]:
+    reward_kind, separator, reward_id = reward_key.partition(":")
+    if separator != ":" or reward_kind not in _VALID_REWARD_KINDS or not reward_id:
+        raise ValueError(f"Invalid reward key: {reward_key}")
+    return reward_kind, reward_id
+
 from game.combat.models import ActionResult
 from game.core.enums import EntityType, LevelRewardType, TargetType
 
@@ -128,8 +146,10 @@ class ModifierInfo:
 
 @dataclass(frozen=True)
 class RewardOfferInfo:
-    """One selectable level-up reward option (modifier or skill)."""
+    """One selectable level-up reward option (modifier, skill, or passive)."""
 
+    reward_key: str
+    reward_kind: str
     reward_id: str
     name: str
     description: str = ""

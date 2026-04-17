@@ -226,8 +226,12 @@ def reward_choice_keyboard(
 ) -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(
-            text=offer.name,
-            callback_data=f"g:rwd:{offer.reward_id}",
+            text=(
+                f"{offer.name} ({offer.reward_kind.title()})"
+                if offer.reward_kind != "modifier"
+                else offer.name
+            ),
+            callback_data=f"g:rwd:{offer.reward_key}",
         )]
         for offer in offers
     ]

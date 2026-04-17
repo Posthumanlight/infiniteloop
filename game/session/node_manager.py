@@ -15,12 +15,14 @@ from game.combat.engine import (
 from game.combat.models import ActionRequest, CombatState
 from game.core.data_loader import (
     ProgressionConfig,
+    is_passive_offerable,
     is_skill_offerable,
     load_effect,
     load_enemy_loot,
     load_event,
     load_loot_constants,
     load_modifiers,
+    load_passives,
     load_skills,
 )
 from game.core.formula_eval import evaluate_expr
@@ -37,6 +39,8 @@ from game.core.game_models import (
     LootResolutionSnapshot,
     LootRollInfo,
     LootRoundInfo,
+    build_reward_key,
+    parse_reward_key,
 )
 from game.events.engine import (
     resolve_event as _resolve_event,
@@ -352,7 +356,7 @@ class NodeManager:
         return state, tuple(combat_enemy_ids)
 
     # ------------------------------------------------------------------
-    # Level-up rewards (modifier or skill)
+    # Level-up rewards (modifier or ability)
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -445,14 +449,27 @@ class NodeManager:
     def _apply_reward_to_player(
         player: PlayerCharacter,
         reward_type: LevelRewardType,
-        reward_id: str,
+        reward_key: str,
     ) -> PlayerCharacter:
+        reward_kind, reward_id = parse_reward_key(reward_key)
+
         if reward_type == LevelRewardType.MODIFIER:
+            if reward_kind != "modifier":
+                raise ValueError("Modifier reward expected a modifier key.")
             return add_modifier(player, reward_id)
-        if reward_type == LevelRewardType.SKILL:
-            if reward_id in player.skills:
-                raise ValueError("Skill already known.")
-            return replace(player, skills=player.skills + (reward_id,))
+        if reward_type == LevelRewardType.ABILITY:
+            if reward_kind == "skill":
+                if reward_id in player.skills:
+                    raise ValueError("Skill already known.")
+                return replace(player, skills=player.skills + (reward_id,))
+            if reward_kind == "passive":
+                if reward_id in player.passive_skills:
+                    raise ValueError("Passive already known.")
+                return replace(
+                    player,
+                    passive_skills=player.passive_skills + (reward_id,),
+                )
+            raise ValueError("Ability reward expected a skill or passive key.")
         raise ValueError(f"Unknown reward type: {reward_type}")
 
     def _enqueue_level_rewards(
@@ -469,7 +486,7 @@ class NodeManager:
             new_entries = list(current)
             for level in levels:
                 reward_type = (
-                    LevelRewardType.SKILL
+                    LevelRewardType.ABILITY
                     if level in skill_reward_levels
                     else LevelRewardType.MODIFIER
                 )
@@ -513,6 +530,29 @@ class NodeManager:
                 eligible.append(skill_id)
         return eligible
 
+    @staticmethod
+    def _eligible_passive_ids(player: PlayerCharacter) -> list[str]:
+        all_passives = load_passives()
+        owned = set(player.passive_skills)
+        eligible: list[str] = []
+        for passive_id, passive in all_passives.items():
+            if passive_id in owned:
+                continue
+            if is_passive_offerable(passive, player.level, player.player_class):
+                eligible.append(passive_id)
+        return eligible
+
+    def _eligible_ability_keys(self, player: PlayerCharacter) -> list[str]:
+        skills = [
+            build_reward_key("skill", skill_id)
+            for skill_id in self._eligible_skill_ids(player)
+        ]
+        passives = [
+            build_reward_key("passive", passive_id)
+            for passive_id in self._eligible_passive_ids(player)
+        ]
+        return skills + passives
+
     def _sample_ids(self, pool: list[str], count: int) -> tuple[str, ...]:
         remaining = list(pool)
         selected: list[str] = []
@@ -534,7 +574,7 @@ class NodeManager:
         entries = list(queue.entries)
         skipped: dict[LevelRewardType, int] = {
             LevelRewardType.MODIFIER: 0,
-            LevelRewardType.SKILL: 0,
+            LevelRewardType.ABILITY: 0,
         }
 
         while entries:
@@ -543,10 +583,13 @@ class NodeManager:
                 return entries, skipped
 
             if front.reward_type == LevelRewardType.MODIFIER:
-                pool = self._eligible_modifier_ids(player)
+                pool = [
+                    build_reward_key("modifier", modifier_id)
+                    for modifier_id in self._eligible_modifier_ids(player)
+                ]
                 offer_size = 2
             else:
-                pool = self._eligible_skill_ids(player)
+                pool = self._eligible_ability_keys(player)
                 offer_size = self._progression.skill_reward_offer_size
 
             if not pool:

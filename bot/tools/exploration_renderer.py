@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Renders exploration, class selection, events, and run summary into Telegram messages.
 
-Pure functions — no aiogram imports. Takes service-layer DTOs, returns strings.
+Pure functions - no aiogram imports. Takes service-layer DTOs, returns strings.
 """
 from typing import TYPE_CHECKING
 
@@ -11,10 +11,10 @@ from game.core.enums import LevelRewardType, LocationType
 
 if TYPE_CHECKING:
     from game.core.data_loader import ClassData, LocationOption
+    from game.core.game_models import PlayerInfo, RewardOfferInfo
     from game.events.models import EventState
     from game.session.models import RunStats, SessionState
     from game.world.models import LocationVote
-    from game.core.game_models import PlayerInfo, RewardOfferInfo
 
 
 def render_class_prompt(
@@ -25,7 +25,7 @@ def render_class_prompt(
     lines = ["\U0001f3ad Choose your class!\n"]
 
     for cls in classes.values():
-        lines.append(f"  \u2022 {cls.name} — {cls.description}")
+        lines.append(f"  \u2022 {cls.name} - {cls.description}")
 
     lines.append("")
     for player in players.values():
@@ -104,20 +104,26 @@ def render_reward_choices(
     offers: tuple[RewardOfferInfo, ...],
 ) -> str:
     """Show level-up reward choices for a single player."""
-    if reward_type == LevelRewardType.SKILL:
-        header_label = "new skill"
-    else:
-        header_label = "modifier"
+    header_label = (
+        "new ability"
+        if reward_type == LevelRewardType.ABILITY
+        else "modifier"
+    )
     lines = [
         f"\u2b50 Level-up reward for {player_name}",
         f"Pick 1 {header_label} ({pending_count} pick(s) remaining):",
         "",
     ]
     for i, offer in enumerate(offers, start=1):
+        offer_name = (
+            f"{offer.name} ({offer.reward_kind.title()})"
+            if offer.reward_kind != "modifier"
+            else offer.name
+        )
         if offer.description:
-            lines.append(f"  {i}. {offer.name} — {offer.description}")
+            lines.append(f"  {i}. {offer_name} - {offer.description}")
         else:
-            lines.append(f"  {i}. {offer.name}")
+            lines.append(f"  {i}. {offer_name}")
     return "\n".join(lines)
 
 
@@ -125,7 +131,11 @@ def render_reward_notice(
     player_name: str, reward_type: LevelRewardType, skipped_count: int,
 ) -> str:
     suffix = "pick" if skipped_count == 1 else "picks"
-    pool_label = "skills" if reward_type == LevelRewardType.SKILL else "modifiers"
+    pool_label = (
+        "abilities"
+        if reward_type == LevelRewardType.ABILITY
+        else "modifiers"
+    )
     return (
         f"\u2139\ufe0f {player_name}: {skipped_count} level-up {suffix} "
         f"had no eligible {pool_label} and was skipped."
@@ -140,7 +150,7 @@ def render_run_summary(
     if victory:
         header = "\U0001f3c6 Run Complete!"
     else:
-        header = "\U0001f480 Run Over — Party Wiped!"
+        header = "\U0001f480 Run Over - Party Wiped!"
 
     lines = [
         header,

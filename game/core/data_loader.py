@@ -166,6 +166,42 @@ class SkillData:
     summary: str = ""
 
 
+def _parse_level_eligibility(
+    entry_kind: str,
+    entry_id: str,
+    raw_eligibility: object,
+) -> tuple[int, int] | None:
+    if raw_eligibility is None:
+        return None
+    if not isinstance(raw_eligibility, (list, tuple)) or len(raw_eligibility) != 2:
+        raise ValueError(
+            f"{entry_kind} {entry_id}: level_eligibility must be [min, max], got {raw_eligibility}",
+        )
+    lo = int(raw_eligibility[0])
+    hi = int(raw_eligibility[1])
+    if hi < lo:
+        raise ValueError(
+            f"{entry_kind} {entry_id}: level_eligibility max must be >= min, got {raw_eligibility}",
+        )
+    return lo, hi
+
+
+def _is_level_class_offerable(
+    level_eligibility: tuple[int, int] | None,
+    class_tags: tuple[str, ...],
+    player_level: int,
+    player_class: str,
+) -> bool:
+    if level_eligibility is None:
+        return False
+    lo, hi = level_eligibility
+    if player_level < lo or player_level > hi:
+        return False
+    if class_tags and player_class not in class_tags:
+        return False
+    return True
+
+
 _SKILL_SUMMARY_PLACEHOLDER_RE = re.compile(r"\[([A-Za-z0-9_.]+)\]")
 _SKILL_SUMMARY_BASE_KEYS = frozenset({
     "hits.count",
@@ -252,14 +288,11 @@ def load_skills() -> dict[str, SkillData]:
                 duration_override=se.get("duration_override"),
             ))
 
-        level_eligibility: tuple[int, int] | None = None
-        raw_eligibility = sdata.get("level_eligibility")
-        if raw_eligibility is not None:
-            if len(raw_eligibility) != 2:
-                raise ValueError(
-                    f"Skill {sid}: level_eligibility must be [min, max], got {raw_eligibility}",
-                )
-            level_eligibility = (int(raw_eligibility[0]), int(raw_eligibility[1]))
+        level_eligibility = _parse_level_eligibility(
+            "Skill",
+            sid,
+            sdata.get("level_eligibility"),
+        )
 
         summary = _validate_skill_summary_template(
             sid,
@@ -298,14 +331,12 @@ def is_skill_offerable(
     within [min, max] inclusive. If `class_tags` is non-empty, the player's
     class must be in the list.
     """
-    if skill.level_eligibility is None:
-        return False
-    lo, hi = skill.level_eligibility
-    if player_level < lo or player_level > hi:
-        return False
-    if skill.class_tags and player_class not in skill.class_tags:
-        return False
-    return True
+    return _is_level_class_offerable(
+        skill.level_eligibility,
+        skill.class_tags,
+        player_level,
+        player_class,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +657,8 @@ class PassiveSkillData:
     consume_effect_id: str | None = None
     target_type: TargetType = TargetType.SELF
     cooldown: int = 0
+    level_eligibility: tuple[int, int] | None = None
+    class_tags: tuple[str, ...] = ()
 
     @property
     def trigger(self) -> TriggerType:
@@ -650,8 +683,9 @@ def _parse_passive_triggers(raw: str | list[str]) -> tuple[TriggerType, ...]:
 
 def load_passives() -> dict[str, PassiveSkillData]:
     raw = _load_toml("passives.toml").get("passives", {})
-    return {
-        pid: PassiveSkillData(
+    result: dict[str, PassiveSkillData] = {}
+    for pid, pdata in raw.items():
+        result[pid] = PassiveSkillData(
             skill_id=pid,
             name=pdata["name"],
             triggers=_parse_passive_triggers(pdata["trigger"]),
@@ -665,9 +699,14 @@ def load_passives() -> dict[str, PassiveSkillData]:
             consume_effect_id=pdata.get("consume_effect_id"),
             target_type=TargetType(pdata.get("target_type", "self")),
             cooldown=pdata.get("cooldown", 0),
+            level_eligibility=_parse_level_eligibility(
+                "Passive",
+                pid,
+                pdata.get("level_eligibility"),
+            ),
+            class_tags=tuple(pdata.get("class_tags", [])),
         )
-        for pid, pdata in raw.items()
-    }
+    return result
 
 
 def load_passive(passive_id: str) -> PassiveSkillData:
@@ -675,6 +714,19 @@ def load_passive(passive_id: str) -> PassiveSkillData:
     if passive_id not in passives:
         raise KeyError(f"Unknown passive: {passive_id}")
     return passives[passive_id]
+
+
+def is_passive_offerable(
+    passive: PassiveSkillData,
+    player_level: int,
+    player_class: str,
+) -> bool:
+    return _is_level_class_offerable(
+        passive.level_eligibility,
+        passive.class_tags,
+        player_level,
+        player_class,
+    )
 
 
 # ---------------------------------------------------------------------------

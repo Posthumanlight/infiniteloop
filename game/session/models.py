@@ -12,8 +12,9 @@ from game.world.models import ExplorationState
 class PendingReward:
     """One queued level-up reward awaiting the player's pick.
 
-    `offer` lists the rolled options (modifier_ids or skill_ids depending on
-    `reward_type`). Empty tuple means the roll has not been performed yet.
+    `offer` lists the rolled typed reward keys (for example `modifier:foo`,
+    `skill:slash`, `passive:battle_master`). Empty tuple means the roll has
+    not been performed yet.
     """
 
     reward_type: LevelRewardType

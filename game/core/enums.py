@@ -145,7 +145,7 @@ class ModifierPhase(Enum):
 
 class LevelRewardType(Enum):
     MODIFIER = "modifier"
-    SKILL = "skill"
+    ABILITY = "ability"
 
 #items
 class ItemType(Enum):

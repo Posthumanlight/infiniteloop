@@ -130,10 +130,10 @@ async def cb_reward_choice(
     if player_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
-    reward_id = callback.data[6:]  # strip "g:rwd:"
+    reward_key = callback.data[6:]  # strip "g:rwd:"
 
     try:
-        game_service.submit_reward_choice(sid, player_id, reward_id)
+        game_service.submit_reward_choice(sid, player_id, reward_key)
     except ValueError as e:
         await callback.answer(str(e), show_alert=True)
         return

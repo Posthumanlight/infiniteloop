@@ -6,6 +6,7 @@ condition = ""
 action = "grant_energy"
 expr = "5"
 usage_limit = "unlimited"
+class_tags = ["warrior"]
 
 #mage
 [passives.arcane_prowess]
@@ -16,6 +17,7 @@ action = "apply_effect"
 effect_id = "empowered_arcane"
 expr = "1"
 usage_limit = "unlimited"
+class_tags = ["mage"]
 
 [passives.arcane_rupture]
 name = "Arcane Rupture"
@@ -26,3 +28,4 @@ cast_skill_id = "arcane_rupture"
 consume_effect_id = "empowered_arcane"
 expr = "0"
 usage_limit = "unlimited"
+class_tags = ["mage"]

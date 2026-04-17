@@ -65,6 +65,7 @@ from game.core.game_models import (
     SkillInfo,
     SkillSummaryPart,
     TurnBatch,
+    parse_reward_key,
 )
 
 
@@ -342,8 +343,8 @@ class GameService:
                 continue
             reward_type = queue.current_type
             offers = tuple(
-                self._build_reward_offer_info(reward_type, reward_id)
-                for reward_id in queue.current_offer
+                self._build_reward_offer_info(reward_key)
+                for reward_key in queue.current_offer
             )
             result.append(PendingRewardInfo(
                 player_id=player_id,
@@ -1162,16 +1163,20 @@ class GameService:
 
     @staticmethod
     def _build_reward_offer_info(
-        reward_type: LevelRewardType, reward_id: str,
+        reward_key: str,
     ) -> RewardOfferInfo:
-        if reward_type == LevelRewardType.MODIFIER:
+        reward_kind, reward_id = parse_reward_key(reward_key)
+
+        if reward_kind == "modifier":
             data = load_modifier(reward_id)
             return RewardOfferInfo(
+                reward_key=reward_key,
+                reward_kind=reward_kind,
                 reward_id=reward_id,
                 name=data.name,
                 description=getattr(data, "description", "") or "",
             )
-        if reward_type == LevelRewardType.SKILL:
+        if reward_kind == "skill":
             skill = load_skill(reward_id)
             parts: list[str] = []
             for hit in skill.hits:
@@ -1182,11 +1187,48 @@ class GameService:
             if skill.energy_cost > 0:
                 description = f"{skill.energy_cost} energy - {description}"
             return RewardOfferInfo(
+                reward_key=reward_key,
+                reward_kind=reward_kind,
                 reward_id=reward_id,
                 name=skill.name,
                 description=description,
             )
-        raise ValueError(f"Unknown reward type: {reward_type}")
+        if reward_kind == "passive":
+            passive = load_passive(reward_id)
+            return RewardOfferInfo(
+                reward_key=reward_key,
+                reward_kind=reward_kind,
+                reward_id=reward_id,
+                name=passive.name,
+                description=GameService._build_passive_reward_description(passive),
+            )
+        raise ValueError(f"Unknown reward kind: {reward_kind}")
+
+    @staticmethod
+    def _build_passive_reward_description(passive) -> str:
+        trigger_text = ", ".join(
+            trigger.value.replace("_", " ")
+            for trigger in passive.triggers
+        )
+
+        if passive.action.value == "grant_energy":
+            action_text = f"grant {passive.expr} energy"
+        elif passive.action.value == "apply_effect" and passive.effect_id is not None:
+            action_text = f"apply {load_effect(passive.effect_id).name}"
+        elif passive.action.value == "cast_skill" and passive.cast_skill_id is not None:
+            action_text = f"cast {load_skill(passive.cast_skill_id).name}"
+        elif passive.action.value == "consume_effect" and passive.consume_effect_id is not None:
+            action_text = f"consume {load_effect(passive.consume_effect_id).name}"
+        elif passive.action.value == "heal":
+            action_text = "heal"
+        elif passive.action.value == "damage":
+            action_text = "deal damage"
+        elif passive.action.value == "modify_stat":
+            action_text = "modify stats"
+        else:
+            action_text = passive.action.value.replace("_", " ")
+
+        return f"{trigger_text} | {action_text}"
 
     @staticmethod
     def _build_effect_info(eff) -> EffectInfo:

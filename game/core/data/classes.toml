@@ -35,3 +35,7 @@ mastery = 2
 
 [classes.mage.minor_stats]
 arcane_dmg_pct = 0.1
+
+#[classes.summoner]
+#name = "Summoner"
+#description = "
