@@ -56,3 +56,12 @@ expr = "1"
 action = "apply_effect"
 effect_id = "bleed"
 chance = 0.5
+
+[modifiers.exsanguinate]
+name = "Exsanguinate"
+phase = "post_hit"
+stackable = true
+class_tags = ["warrior"]
+expr = "1.25"
+action = "effect_damage_mult"
+effect_id = "bleed"

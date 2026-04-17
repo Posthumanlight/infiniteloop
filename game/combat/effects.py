@@ -4,7 +4,7 @@ from typing import Any
 from game.character.base_entity import BaseEntity
 from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState, DamageResult, HitResult
-from game.core.data_loader import load_effect
+from game.core.data_loader import load_effect, load_modifier
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, EffectActionType, TriggerType
 from game.core.formula_eval import ExprContext, evaluate_expr
@@ -190,6 +190,33 @@ def _build_effect_context(
     }
 
 
+def _get_effect_damage_modifier(
+    state: CombatState,
+    effect_inst: StatusEffectInstance,
+    ctx: dict[str, Any],
+) -> float:
+    if effect_inst.source_id not in state.entities:
+        return 1.0
+
+    source = state.entities[effect_inst.source_id]
+    multiplier = 1.0
+
+    for mod_inst in source.skill_modifiers:
+        mod_data = load_modifier(mod_inst.modifier_id)
+        if mod_data.action != "effect_damage_mult":
+            continue
+        if mod_data.effect_id != effect_inst.effect_id:
+            continue
+
+        value = evaluate_expr(mod_data.expr, ctx)
+        if mod_data.stackable:
+            multiplier *= 1.0 + ((value - 1.0) * mod_inst.stack_count)
+        else:
+            multiplier *= value
+
+    return multiplier
+
+
 def _apply_heal_or_energy_gain(
     state: CombatState,
     entity_id: str,
@@ -349,7 +376,8 @@ def tick_effects(
 
             match action.action_type:
                 case EffectActionType.DAMAGE:
-                    dmg = int(abs(value) * stack_mult)
+                    effect_damage_mult = _get_effect_damage_modifier(state, inst, ctx)
+                    dmg = int(abs(value) * stack_mult * effect_damage_mult)
                     current_entity = state.entities[entity_id]
                     new_hp = max(0, current_entity.current_hp - dmg)
                     state = _update_entity(state, entity_id, current_hp=new_hp)
