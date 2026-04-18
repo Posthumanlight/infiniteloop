@@ -6,7 +6,7 @@ passives = []
 
 [summons.familiar.major_stat_formulas]
 attack = "owner.attack * 0.45 + owner.mastery * 0.4"
-hp = "owner.hp * 0.25 + owner.mastery * 3"
+hp = "owner.hp * 0.25 + owner.mastery * 3 + 25"
 speed = "owner.speed * 0.9"
 crit_chance = "owner.crit_chance"
 crit_dmg = "owner.crit_dmg"
@@ -16,3 +16,22 @@ mastery = "owner.mastery * 0.6"
 
 [summons.familiar.minor_stat_formulas]
 arcane_dmg_pct = "owner.mastery * 0.01"
+
+[summons.blaze]
+name = "Blaze"
+max_per_owner = 1
+skills = ["generic_enemy_attack"]
+passives = []
+
+[summons.familiar.major_stat_formulas]
+attack = "owner.attack * 0.9 + owner.mastery * 0.4"
+hp = "10"
+speed = "owner.speed * 0.9"
+crit_chance = "owner.crit_chance"
+crit_dmg = "owner.crit_dmg"
+resistance = "0"
+energy = "40"
+mastery = "owner.mastery *2"
+
+[summons.familiar.minor_stat_formulas]
+fire_dmg_pct = "owner.mastery * 0.1"

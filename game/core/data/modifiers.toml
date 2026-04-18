@@ -77,35 +77,35 @@ expr = "5"
 action = "summon_stat_bonus"
 summon_stat = "attack"
 
-[modifiers.familiar_arcane_surge]
-name = "Familiar Arcane Surge"
-phase = "on_summon"
-stackable = true
-skill_filter = "summon_familiar"
-summon_filter = "familiar"
-class_tags = ["summoner"]
-expr = "0.05"
-action = "summon_stat_bonus"
-summon_stat = "arcane_dmg_pct"
+#[modifiers.familiar_arcane_surge]
+#name = "Familiar Arcane Surge"
+#phase = "on_summon"
+#stackable = true
+#skill_filter = "summon_familiar"
+#summon_filter = "familiar"
+#class_tags = ["summoner"]
+#expr = "0.05"
+#action = "summon_stat_bonus"
+#summon_stat = "arcane_dmg_pct"
 
-[modifiers.familiar_deep_wounds]
-name = "Familiar Deep Wounds"
-phase = "on_summon"
-stackable = false
-skill_filter = "summon_familiar"
-summon_filter = "familiar"
-class_tags = ["summoner"]
-expr = "1"
-action = "summon_grant_skill"
-granted_skill_id = "deep_wounds"
+#[modifiers.familiar_deep_wounds]
+#name = "Familiar Deep Wounds"
+#phase = "on_summon"
+#stackable = false
+#skill_filter = "summon_familiar"
+#summon_filter = "familiar"
+#class_tags = ["summoner"]
+#expr = "1"
+#action = "summon_grant_skill"
+#granted_skill_id = "deep_wounds"
 
-[modifiers.familiar_guardian_instinct]
-name = "Familiar Guardian Instinct"
-phase = "on_summon"
-stackable = false
-skill_filter = "summon_familiar"
-summon_filter = "familiar"
-class_tags = ["summoner"]
-expr = "1"
-action = "summon_grant_passive"
-granted_passive_id = "battle_master"
+#[modifiers.familiar_guardian_instinct]
+#name = "Familiar Guardian Instinct"
+#phase = "on_summon"
+#stackable = false
+#skill_filter = "summon_familiar"
+#summon_filter = "familiar"
+#class_tags = ["summoner"]
+#expr = "1"
+#action = "summon_grant_passive"
+#granted_passive_id = "battle_master"

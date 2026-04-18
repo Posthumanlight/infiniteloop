@@ -29,3 +29,15 @@ consume_effect_id = "empowered_arcane"
 expr = "0"
 usage_limit = "unlimited"
 class_tags = ["mage"]
+
+#summoner
+[passives.blaze_of_glory]
+name = "Blaze of Glory"
+trigger = "on_death"
+action = "cast_skill"
+cast_skill_id = "summon_blaze"
+expr = "0"
+usage_limit = "unlimited"
+class_tags = ["summoner"]
+
+

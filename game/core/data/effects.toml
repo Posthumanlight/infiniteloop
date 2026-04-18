@@ -50,7 +50,6 @@ stackable = false
 actions = [
   {type = "grant_energy", expr = "target.energy * 0.25 + 25"},
 ]
-duration = 1
 
 #generics
 

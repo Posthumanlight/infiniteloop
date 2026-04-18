@@ -214,3 +214,22 @@ summons = []
 summon_commands = [
   { summon_skill_id = "generic_enemy_attack", summon_types = [], cast_policy = "normal" },
 ]
+
+[skills.summon_blaze]
+name = "Summon Blaze"
+energy_cost = 50
+action_type = "action"
+cooldown = 5
+level_eligibility = [3, 99]
+class_tags = ["summoner"]
+summons = [
+  { summon_id = "familiar", count_expr = "1", duration_own_turns = 5 },
+]
+
+[skills.blaze_of_glory]
+name = "Blaze of Glory"
+energy_cost = 0
+action_type = "action"
+hits = [
+  { target_type = "all_enemies", damage_type = "fire", formula = "attacker.attack+attacker_mastery*}
+]
