@@ -222,6 +222,9 @@ action_type = "action"
 cooldown = 5
 level_eligibility = [3, 99]
 class_tags = ["summoner"]
+summary = "Summons a Blaze."
+hits = []
+self_effects = []
 summons = [
   { summon_id = "familiar", count_expr = "1", duration_own_turns = 5 },
 ]
@@ -230,6 +233,7 @@ summons = [
 name = "Blaze of Glory"
 energy_cost = 0
 action_type = "action"
+summary = "Blaze does boom boom"
 hits = [
   { target_type = "all_enemies", damage_type = "fire", formula = "attacker.attack+attacker.mastery+base_power", base_power = 1, variance = 0 }
 ]
