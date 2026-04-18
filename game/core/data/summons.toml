@@ -23,8 +23,8 @@ max_per_owner = 1
 skills = ["generic_enemy_attack"]
 passives = ["blaze_of_glory"]
 
-[summons.familiar.major_stat_formulas]
-attack = "owner.attack * 0.9 + owner.mastery * 0.4"
+[summons.blaze.major_stat_formulas]
+attack = "owner.attack * 1.1"
 hp = "10"
 speed = "owner.speed * 0.9"
 crit_chance = "owner.crit_chance"
@@ -33,5 +33,5 @@ resistance = "0"
 energy = "40"
 mastery = "owner.mastery *2"
 
-[summons.familiar.minor_stat_formulas]
+[summons.blaze.minor_stat_formulas]
 fire_dmg_pct = "owner.mastery * 0.1"
