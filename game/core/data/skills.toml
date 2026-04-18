@@ -231,5 +231,5 @@ name = "Blaze of Glory"
 energy_cost = 0
 action_type = "action"
 hits = [
-  { target_type = "all_enemies", damage_type = "fire", formula = "attacker.attack+attacker_mastery*}
+  { target_type = "all_enemies", damage_type = "fire", formula = "attacker.attack+attacker.mastery+base_power", base_power = 1, variance = 0 }
 ]
