@@ -3,6 +3,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Iterable
 
 
+from game.combat.death import resolve_death_event
 from game.combat.cooldowns import is_on_cooldown, put_on_cooldown
 from game.combat.effects import (
     apply_effect,
@@ -11,11 +12,11 @@ from game.combat.effects import (
     reset_effect_stacks,
 )
 from game.combat.models import CombatState, DamageResult, HitResult
-from game.combat.summons import handle_owner_death
-from game.combat.targeting import get_enemies
+from game.combat.skill_targeting import ActionTargetRef, iter_target_requirements
+from game.combat.targeting import get_allies, get_enemies
 from game.core.data_loader import PassiveSkillData, load_passive, load_skill
 from game.core.dice import SeededRNG
-from game.core.enums import DamageType, PassiveAction, TriggerType, UsageLimit
+from game.core.enums import DamageType, PassiveAction, TargetType, TriggerType, UsageLimit
 from game.core.formula_eval import ZeroDefaultNamespace, evaluate_expr
 from game.items.equipment_effects import get_effective_passive_ids
 
@@ -133,9 +134,7 @@ def _exec_damage(
     entity = state.entities[entity_id]
     new_hp = max(0, entity.current_hp - value)
     state = _update_entity(state, entity_id, current_hp=new_hp)
-    if new_hp <= 0:
-        state = handle_owner_death(state, entity_id)
-    return state, [HitResult(
+    results = [HitResult(
         target_id=entity_id,
         damage=DamageResult(
             amount=value,
@@ -144,6 +143,16 @@ def _exec_damage(
             formula_id=passive.skill_id,
         ),
     )]
+    if new_hp <= 0:
+        state, death_results = resolve_death_event(
+            state,
+            entity_id,
+            killer_id=None,
+            rng=rng,
+            constants=constants,
+        )
+        results.extend(death_results)
+    return state, results
 
 
 def _exec_heal(
@@ -189,26 +198,23 @@ def _exec_cast_skill(
 ) -> tuple[CombatState, list[HitResult]]:
     if passive.cast_skill_id is None or rng is None or constants is None:
         return state, []
-    from game.combat.skill_resolver import resolve_skill
+    from game.combat.action_resolver import can_cast_skill, cast_skill_now
 
     skill = load_skill(passive.cast_skill_id)
-    target_ids = get_enemies(state, entity_id)
-    if not target_ids:
+    target_refs = _build_default_target_refs_for_skill(state, entity_id, skill)
+    if target_refs is None:
         return state, []
-    selected_targets = {
-        hit_index: target_ids[0]
-        for hit_index, hit in enumerate(skill.hits)
-        if hit.target_type.value in {'single_enemy', 'single_ally'}
-    }
-    state, hits, _ = resolve_skill(
+    if not can_cast_skill(state, entity_id, passive.cast_skill_id):
+        return state, []
+    state, result = cast_skill_now(
         state,
         entity_id,
-        skill,
-        selected_targets,
+        passive.cast_skill_id,
+        target_refs,
         rng,
         constants,
     )
-    return state, hits
+    return state, list(result.hits)
 
 
 def _exec_consume_effect(
@@ -328,16 +334,51 @@ def _record_passive_fire(
     return replace(state, passive_trackers=new_trackers)
 
 
+def _build_default_target_refs_for_skill(
+    state: CombatState,
+    actor_id: str,
+    skill,
+) -> tuple[ActionTargetRef, ...] | None:
+    refs: list[ActionTargetRef] = []
+    for requirement in iter_target_requirements(skill):
+        match requirement.target_type:
+            case TargetType.SINGLE_ENEMY:
+                candidates = get_enemies(state, actor_id)
+                if not candidates:
+                    return None
+                chosen = candidates[0]
+            case TargetType.SINGLE_ALLY:
+                candidates = get_allies(state, actor_id)
+                if not candidates:
+                    return None
+                chosen = candidates[0]
+            case TargetType.SELF | TargetType.ALL_ENEMIES | TargetType.ALL_ALLIES:
+                continue
+            case _:
+                continue
+        refs.append(ActionTargetRef(
+            owner_kind=requirement.owner_kind,
+            owner_index=requirement.owner_index,
+            nested_index=requirement.nested_index,
+            entity_id=chosen,
+        ))
+    return tuple(refs)
+
+
 def check_passives(
     state: CombatState,
     entity_id: str,
     event: PassiveEvent,
     rng: SeededRNG | None = None,
     constants: dict | None = None,
+    *,
+    allow_dead: bool = False,
 ) -> tuple[CombatState, list[HitResult]]:
     """Check and fire all matching passives for an entity at a trigger point."""
     entity = state.entities.get(entity_id)
-    if entity is None or entity.current_hp <= 0:
+    if entity is None:
+        return state, []
+    if entity.current_hp <= 0 and not allow_dead:
         return state, []
 
     results: list[HitResult] = []
@@ -360,3 +401,34 @@ def check_passives(
         state = _record_passive_fire(state, entity_id, passive)
 
     return state, results
+
+
+def check_death_passives(
+    state: CombatState,
+    entity_id: str,
+    rng: SeededRNG | None = None,
+    constants: dict | None = None,
+    *,
+    dead_ctx: Any | None = None,
+    killer_ctx: Any | None = None,
+) -> tuple[CombatState, list[HitResult]]:
+    if dead_ctx is None and entity_id in state.entities:
+        dead_ctx = build_effective_expr_context(state, entity_id)
+
+    payload = {}
+    if dead_ctx is not None:
+        payload["dead"] = dead_ctx
+    if killer_ctx is not None:
+        payload["attacker"] = killer_ctx
+
+    return check_passives(
+        state,
+        entity_id,
+        PassiveEvent(
+            trigger=TriggerType.ON_DEATH,
+            payload=payload,
+        ),
+        rng=rng,
+        constants=constants,
+        allow_dead=True,
+    )

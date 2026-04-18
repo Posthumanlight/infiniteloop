@@ -35,6 +35,7 @@ class TriggerType(Enum):
     ON_ROUND_START = "on_round_start"
     ON_TAKE_DAMAGE = "on_take_damage"
     ON_COMBAT_START = "on_combat_start"
+    ON_DEATH = "on_death"
     ON_KILL = "on_kill"
     ON_ALLY_DEATH = "on_ally_death"
 
