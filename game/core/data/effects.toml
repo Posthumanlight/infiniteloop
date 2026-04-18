@@ -41,6 +41,17 @@ actions = [
   { type = "grant_energy", expr = "target.energy * 0.2", scales_with_stacks = false },
 ]
 
+#summoner
+[effects.mana_reave_effect]
+name = "Mana Reave Effect"
+trigger = "on_apply"
+duration = 1
+stackable = false
+actions = [
+  {type = "grant_energy", expr = "target.energy * 0.25 + 25"},
+]
+duration = 1
+
 #generics
 
 [effects.stun]

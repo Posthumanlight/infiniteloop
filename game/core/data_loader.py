@@ -1,6 +1,7 @@
 import tomllib
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -159,6 +160,18 @@ class SkillSummonData:
     duration_own_turns: int | None = None
 
 
+class SummonCommandCastPolicy(str, Enum):
+    NORMAL = "normal"
+    FREE = "free"
+
+
+@dataclass(frozen=True)
+class SkillSummonCommandData:
+    summon_skill_id: str
+    summon_types: tuple[str, ...] = ()
+    cast_policy: SummonCommandCastPolicy = SummonCommandCastPolicy.NORMAL
+
+
 @dataclass(frozen=True)
 class SkillData:
     skill_id: str
@@ -168,6 +181,7 @@ class SkillData:
     hits: tuple[SkillHitData, ...]
     self_effects: tuple[SelfEffectData, ...]
     summons: tuple[SkillSummonData, ...] = ()
+    summon_commands: tuple[SkillSummonCommandData, ...] = ()
     cooldown: int = 0
     level_eligibility: tuple[int, int] | None = None
     class_tags: tuple[str, ...] = ()
@@ -308,9 +322,44 @@ def _parse_skill_summon(
     )
 
 
+def _parse_skill_summon_command(
+    skill_id: str,
+    command_raw: dict[str, Any],
+    *,
+    available_skill_ids: set[str],
+    available_summon_ids: set[str],
+) -> SkillSummonCommandData:
+    summon_skill_id = str(command_raw["summon_skill_id"])
+    if summon_skill_id not in available_skill_ids:
+        raise KeyError(
+            f"Skill {skill_id}: unknown summon command skill '{summon_skill_id}'",
+        )
+
+    summon_types = tuple(str(value) for value in command_raw.get("summon_types", ()))
+    unknown_summons = [
+        summon_id
+        for summon_id in summon_types
+        if summon_id not in available_summon_ids
+    ]
+    if unknown_summons:
+        raise KeyError(
+            f"Skill {skill_id}: unknown summon type(s) {unknown_summons}",
+        )
+
+    return SkillSummonCommandData(
+        summon_skill_id=summon_skill_id,
+        summon_types=summon_types,
+        cast_policy=SummonCommandCastPolicy(
+            command_raw.get("cast_policy", SummonCommandCastPolicy.NORMAL.value),
+        ),
+    )
+
+
 def load_skills() -> dict[str, SkillData]:
     raw = _load_toml("skills.toml")["skills"]
     result: dict[str, SkillData] = {}
+    available_skill_ids = set(raw)
+    available_summon_ids = set(load_summons())
     for sid, sdata in raw.items():
         hits = tuple(_parse_hit(h) for h in sdata.get("hits", []))
 
@@ -324,6 +373,15 @@ def load_skills() -> dict[str, SkillData]:
         summons = tuple(
             _parse_skill_summon(sid, summon_raw)
             for summon_raw in sdata.get("summons", [])
+        )
+        summon_commands = tuple(
+            _parse_skill_summon_command(
+                sid,
+                command_raw,
+                available_skill_ids=available_skill_ids,
+                available_summon_ids=available_summon_ids,
+            )
+            for command_raw in sdata.get("summon_commands", [])
         )
 
         level_eligibility = _parse_level_eligibility(
@@ -346,6 +404,7 @@ def load_skills() -> dict[str, SkillData]:
             hits=hits,
             self_effects=tuple(self_effects),
             summons=summons,
+            summon_commands=summon_commands,
             cooldown=sdata.get("cooldown", 0),
             level_eligibility=level_eligibility,
             class_tags=tuple(sdata.get("class_tags", [])),

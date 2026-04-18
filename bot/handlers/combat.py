@@ -31,7 +31,14 @@ from bot.tools.keyboards import (
     target_keyboard,
 )
 from bot.tools.session_lookup import entity_id_for_tg_user
+from game.combat.skill_targeting import (
+    ActionTargetRef,
+    ManualTargetRequirement,
+    TargetOwnerKind,
+    iter_manual_target_requirements,
+)
 from game.combat.models import ActionRequest
+from game.combat.summons import commandable_summons_for_skill
 from game.core.enums import ActionType, SessionEndReason, SessionPhase, TargetType
 from game_service import GameService
 
@@ -86,6 +93,38 @@ def _parse_skill_page(callback_data: str, prefix: str) -> int | None:
         return max(0, int(callback_data.removeprefix(prefix)))
     except ValueError:
         return None
+
+
+def _serialize_target_requirement(
+    requirement: ManualTargetRequirement,
+) -> dict[str, object]:
+    return {
+        "owner_kind": requirement.owner_kind.value,
+        "owner_index": requirement.owner_index,
+        "nested_index": requirement.nested_index,
+        "target_type": requirement.target_type.value,
+    }
+
+
+def _deserialize_target_requirement(payload: dict[str, object]) -> ManualTargetRequirement:
+    return ManualTargetRequirement(
+        owner_kind=TargetOwnerKind(str(payload["owner_kind"])),
+        owner_index=int(payload["owner_index"]),
+        nested_index=int(payload["nested_index"]),
+        target_type=TargetType(str(payload["target_type"])),
+    )
+
+
+def _target_candidates_for_requirement(
+    game_service: GameService,
+    session_id: str,
+    requirement: ManualTargetRequirement,
+):
+    return (
+        game_service.get_alive_enemies(session_id)
+        if requirement.target_type == TargetType.SINGLE_ENEMY
+        else game_service.get_alive_allies(session_id)
+    )
 
 
 # ------------------------------------------------------------------
@@ -168,41 +207,49 @@ async def cb_skill(
 
     data = await state.get_data()
     current_page = int(data.get("combat_skill_page", 0) or 0)
+    if skill.summon_commands:
+        combat_state = game_service._get_session(sid).state.combat
+        if combat_state is not None and not commandable_summons_for_skill(
+            combat_state,
+            actor_id,
+            skill,
+        ):
+            await callback.answer(
+                "You have no eligible summons for this command.",
+                show_alert=True,
+            )
+            return
 
-    # Build queue of hit indices that need single-target selection.
-    pending_hits: list[int] = [
-        idx for idx, hit in enumerate(skill.hits)
-        if hit.share_with is None
-        and hit.target_type in (TargetType.SINGLE_ENEMY, TargetType.SINGLE_ALLY)
-    ]
+    pending_requirements = list(iter_manual_target_requirements(skill))
 
-    if not pending_hits:
+    if not pending_requirements:
         # No target selection needed — submit immediately
         action = ActionRequest(
             actor_id=actor_id,
             action_type=ActionType.ACTION,
             skill_id=skill_id,
-            target_ids=(),
+            target_refs=(),
         )
         await _submit_action(callback, game_service, sid, action, state, db_pool)
         return
 
-    # Need target selection — store skill_id and show target picker for first pending hit
     await state.update_data(
         pending_skill=skill_id,
-        pending_hit_queue=pending_hits,
-        collected_targets=[],
+        pending_target_requirements=[
+            _serialize_target_requirement(requirement)
+            for requirement in pending_requirements
+        ],
+        collected_target_refs=[],
         pending_skill_page=current_page,
     )
     await state.set_state(GameStates.combat_target)
-    first_hit_index = pending_hits[0]
-    first_hit = skill.hits[first_hit_index]
-    candidates = (
-        game_service.get_alive_enemies(sid)
-        if first_hit.target_type == TargetType.SINGLE_ENEMY
-        else game_service.get_alive_allies(sid)
+    first_requirement = pending_requirements[0]
+    candidates = _target_candidates_for_requirement(
+        game_service,
+        sid,
+        first_requirement,
     )
-    prompt = _target_prompt(skill.name, first_hit_index, len(skill.hits))
+    prompt = _target_prompt(skill.name, 0, len(pending_requirements))
     await callback.message.edit_text(
         prompt,
         reply_markup=target_keyboard(candidates, back_page=current_page),
@@ -210,10 +257,10 @@ async def cb_skill(
     await callback.answer()
 
 
-def _target_prompt(skill_name: str, hit_index: int, total_hits: int) -> str:
-    if total_hits <= 1:
+def _target_prompt(skill_name: str, target_index: int, total_targets: int) -> str:
+    if total_targets <= 1:
         return f"Pick a target for {skill_name}:"
-    return f"Pick a target for {skill_name} (hit {hit_index + 1}/{total_hits}):"
+    return f"Pick a target for {skill_name} ({target_index + 1}/{total_targets}):"
 
 
 # ------------------------------------------------------------------
@@ -277,9 +324,14 @@ async def cb_target(
     # Retrieve the pending skill from FSM state data
     data = await state.get_data()
     skill_id = data.get("pending_skill")
-    pending_hit_queue: list[int] = list(data.get("pending_hit_queue") or [])
-    collected: list[list] = list(data.get("collected_targets") or [])
-    if skill_id is None or not pending_hit_queue:
+    pending_requirements = [
+        _deserialize_target_requirement(payload)
+        for payload in (data.get("pending_target_requirements") or [])
+    ]
+    collected_payloads: list[dict[str, object]] = list(
+        data.get("collected_target_refs") or [],
+    )
+    if skill_id is None or not pending_requirements:
         await callback.answer("No skill selected. Pick a skill first.", show_alert=True)
         return
 
@@ -304,25 +356,33 @@ async def cb_target(
         )
         return
 
-    current_hit_index = pending_hit_queue.pop(0)
-    collected.append([current_hit_index, target_id])
+    current_requirement = pending_requirements.pop(0)
+    collected_payloads.append({
+        "owner_kind": current_requirement.owner_kind.value,
+        "owner_index": current_requirement.owner_index,
+        "nested_index": current_requirement.nested_index,
+        "entity_id": target_id,
+    })
     current_page = int(
         data.get("pending_skill_page", data.get("combat_skill_page", 0)) or 0,
     )
 
-    if pending_hit_queue:
-        # Still more hits to target — show next picker
-        next_hit_index = pending_hit_queue[0]
-        next_hit = skill.hits[next_hit_index]
-        candidates = (
-            game_service.get_alive_enemies(sid)
-            if next_hit.target_type == TargetType.SINGLE_ENEMY
-            else game_service.get_alive_allies(sid)
+    if pending_requirements:
+        next_requirement = pending_requirements[0]
+        candidates = _target_candidates_for_requirement(
+            game_service,
+            sid,
+            next_requirement,
         )
-        prompt = _target_prompt(skill.name, next_hit_index, len(skill.hits))
+        completed = len(collected_payloads)
+        total = completed + len(pending_requirements)
+        prompt = _target_prompt(skill.name, completed, total)
         await state.update_data(
-            pending_hit_queue=pending_hit_queue,
-            collected_targets=collected,
+            pending_target_requirements=[
+                _serialize_target_requirement(requirement)
+                for requirement in pending_requirements
+            ],
+            collected_target_refs=collected_payloads,
         )
         await callback.message.edit_text(
             prompt,
@@ -331,15 +391,24 @@ async def cb_target(
         await callback.answer()
         return
 
-    # All targets collected — submit action
     action = ActionRequest(
         actor_id=actor_id,
         action_type=ActionType.ACTION,
         skill_id=skill_id,
-        target_ids=tuple((idx, tid) for idx, tid in collected),
+        target_refs=tuple(
+            ActionTargetRef(
+                owner_kind=TargetOwnerKind(str(payload["owner_kind"])),
+                owner_index=int(payload["owner_index"]),
+                nested_index=int(payload["nested_index"]),
+                entity_id=str(payload["entity_id"]),
+            )
+            for payload in collected_payloads
+        ),
     )
     await state.update_data(
-        pending_skill=None, pending_hit_queue=[], collected_targets=[],
+        pending_skill=None,
+        pending_target_requirements=[],
+        collected_target_refs=[],
     )
     await _submit_action(callback, game_service, sid, action, state, db_pool)
 
@@ -533,8 +602,8 @@ def _not_enough_energy_message(current_energy: int, energy_cost: int) -> str:
 async def _clear_pending_combat_selection(state: FSMContext) -> None:
     await state.update_data(
         pending_skill=None,
-        pending_hit_queue=[],
-        collected_targets=[],
+        pending_target_requirements=[],
+        collected_target_refs=[],
         pending_skill_page=None,
     )
 
@@ -562,3 +631,5 @@ async def _restore_skill_prompt(
         page=page,
         edit=True,
     )
+
+

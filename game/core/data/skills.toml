@@ -186,5 +186,31 @@ summary = "Summons a Familiar."
 hits = []
 self_effects = []
 summons = [
-  { summon_id = "familiar", count_expr = "1", duration_own_turns = 3 },
+  { summon_id = "familiar", count_expr = "1", duration_own_turns = 5 },
+]
+
+[skills.mana_reave]
+name = "Mana Reave"
+energy_cost = 0
+action_type = "action"
+class_tags = ["summoner"]
+summary = "Deal damage and restore energy"
+hits = [
+  { target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack*0.5", base_power = 1, variance = 0.0 }
+]
+self_effects = [
+  { effect = "mana_reave_effect" },
+]
+
+[skills.command_spell]
+name = "Command Spell"
+energy_cost = 10
+action_type = "action"
+class_tags = ["summoner"]
+summary = "Orders your summons to attack the chosen enemy."
+hits = []
+self_effects = []
+summons = []
+summon_commands = [
+  { summon_skill_id = "generic_enemy_attack", summon_types = [], cast_policy = "normal" },
 ]

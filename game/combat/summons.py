@@ -6,7 +6,11 @@ from dataclasses import dataclass, replace
 from game.character.base_entity import BaseEntity
 from game.character.stats import MajorStats, MinorStats
 from game.combat.initiative import insert_into_turn_order, roll_initiative_pair
-from game.combat.models import CombatState, SummonSpawnResult
+from game.combat.models import CombatState, SummonSpawnResult, TriggeredActionResult
+from game.combat.skill_targeting import (
+    build_forwarded_command_target_refs,
+    target_refs_are_still_valid,
+)
 from game.core.data_loader import (
     SkillData,
     SkillSummonData,
@@ -59,6 +63,26 @@ def _iter_owner_summons(
             summons.append(entity)
     summons.sort(key=lambda entity: entity.spawn_order)
     return summons
+
+
+def ordered_owned_summons(
+    state: CombatState,
+    owner_id: str,
+    *,
+    summon_types: tuple[str, ...] = (),
+) -> tuple[SummonEntity, ...]:
+    allowed = set(summon_types)
+    summons: list[SummonEntity] = []
+    for entity_id in state.turn_order:
+        entity = state.entities.get(entity_id)
+        if not isinstance(entity, SummonEntity):
+            continue
+        if entity.owner_id != owner_id or entity.current_hp <= 0:
+            continue
+        if allowed and entity.summon_template_id not in allowed:
+            continue
+        summons.append(entity)
+    return tuple(summons)
 
 
 def despawn_entity(
@@ -331,3 +355,83 @@ def spawn_skill_summons(
             results.append(result)
 
     return state, tuple(results)
+
+
+def commandable_summons_for_skill(
+    state: CombatState,
+    owner_id: str,
+    skill: SkillData,
+) -> tuple[str, ...]:
+    summon_ids: list[str] = []
+    from game.combat.action_resolver import can_cast_skill, options_for_command_policy
+
+    for command in skill.summon_commands:
+        options = options_for_command_policy(command.cast_policy)
+        for summon in ordered_owned_summons(
+            state,
+            owner_id,
+            summon_types=command.summon_types,
+        ):
+            if not can_cast_skill(
+                state,
+                summon.entity_id,
+                command.summon_skill_id,
+                options=options,
+            ):
+                continue
+            summon_ids.append(summon.entity_id)
+
+    return tuple(dict.fromkeys(summon_ids))
+
+
+def execute_summon_commands(
+    state: CombatState,
+    owner_id: str,
+    skill: SkillData,
+    action,
+    rng: SeededRNG,
+    constants: dict,
+) -> tuple[CombatState, tuple[TriggeredActionResult, ...]]:
+    if not skill.summon_commands:
+        return state, ()
+
+    from game.combat.action_resolver import cast_skill_now, options_for_command_policy
+
+    triggered: list[TriggeredActionResult] = []
+
+    for command_index, command in enumerate(skill.summon_commands):
+        summoned_skill = load_skill(command.summon_skill_id)
+        options = options_for_command_policy(command.cast_policy)
+        command_target_refs = build_forwarded_command_target_refs(action, command_index)
+
+        for summon in ordered_owned_summons(
+            state,
+            owner_id,
+            summon_types=command.summon_types,
+        ):
+            if summon.current_hp <= 0:
+                continue
+            if not target_refs_are_still_valid(
+                state,
+                summon.entity_id,
+                summoned_skill,
+                command_target_refs,
+            ):
+                continue
+
+            try:
+                state, child = cast_skill_now(
+                    state,
+                    summon.entity_id,
+                    command.summon_skill_id,
+                    command_target_refs,
+                    rng,
+                    constants,
+                    options=options,
+                )
+            except ValueError:
+                continue
+
+            triggered.append(child)
+
+    return state, tuple(triggered)

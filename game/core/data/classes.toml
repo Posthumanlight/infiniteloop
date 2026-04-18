@@ -39,7 +39,7 @@ arcane_dmg_pct = 0.1
 [classes.summoner]
 name = "Summoner"
 description = "Summons creatures and enables whole team with buffs"
-starting_skills = ["summon_familiar"]
+starting_skills = ["mana_reave", "summon_familiar", "command_spell"]
 starting_passives = []
 
 [classes.summoner.major_stats]

@@ -97,6 +97,29 @@ def render_action_result(
             f"\u2728 {actor_name} summons {summon.name}!"
         )
 
+    triggered_pieces: list[str] = []
+    for child in result.triggered_actions:
+        child_actor = entities.get(child.actor_id)
+        child_name = child_actor.name if child_actor else child.actor_id
+
+        for hit in child.hits:
+            target = entities.get(hit.target_id)
+            target_name = target.name if target else hit.target_id
+            if hit.damage is not None:
+                triggered_pieces.append(
+                    f"{child_name} hits {target_name} for {hit.damage.amount}"
+                )
+
+    if result.triggered_actions:
+        if triggered_pieces:
+            lines.append(
+                f"\u2728 {actor_name} uses {default_skill}: " + "; ".join(triggered_pieces)
+            )
+        else:
+            lines.append(
+                f"\u2728 {actor_name} uses {default_skill}, but no summons can act."
+            )
+
     for hit in result.hits:
         target = entities.get(hit.target_id)
         target_name = target.name if target else hit.target_id

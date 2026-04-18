@@ -21,3 +21,10 @@ speed = 1
 energy = 5
 mastery = 5
 resistance = 1
+
+[level_scaling.summoner]
+attack = 4
+hp = 15
+speed = 1
+resistance = 2
+mastery = 7

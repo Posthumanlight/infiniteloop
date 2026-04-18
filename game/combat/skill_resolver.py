@@ -9,23 +9,30 @@ from game.combat.effects import (
 from game.combat.models import CombatState, HitResult, SummonSpawnResult
 from game.combat.passives import PassiveEvent, check_passives
 from game.combat.skill_modifiers import apply_post_hit_modifiers, collect_modifiers
-from game.combat.summons import handle_owner_death, spawn_skill_summons
+from game.combat.summons import (
+    execute_summon_commands,
+    handle_owner_death,
+    spawn_skill_summons,
+)
 from game.combat.targeting import get_allies, resolve_targets
 from game.core.data_loader import SkillData
 from game.core.dice import SeededRNG
 from game.core.enums import ModifierPhase, TriggerType
+from game.combat.models import ActionRequest, SkillResolutionResult
 
 
-def resolve_skill(
+def _resolve_skill_core(
     state: CombatState,
     actor_id: str,
     skill: SkillData,
-    selected_targets: dict[int, str],
+    action: ActionRequest,
     rng: SeededRNG,
     constants: dict,
-) -> tuple[CombatState, list[HitResult], tuple[SummonSpawnResult, ...]]:
+) -> tuple[CombatState, SkillResolutionResult]:
     all_hits: list[HitResult] = []
-    summon_results = ()
+    summon_results: tuple[SummonSpawnResult, ...] = ()
+    triggered_actions = ()
+    selected_targets = action.targets_for_hits()
 
     # Collect modifiers for this actor + skill (damage_type filter re-checked per hit)
     actor = state.entities[actor_id]
@@ -160,4 +167,54 @@ def resolve_skill(
         constants,
     )
 
-    return state, all_hits, summon_results
+    state, triggered_actions = execute_summon_commands(
+        state,
+        actor_id,
+        skill,
+        action,
+        rng,
+        constants,
+    )
+
+    return state, SkillResolutionResult(
+        hits=tuple(all_hits),
+        self_effects_applied=tuple(se.effect_id for se in skill.self_effects),
+        summons_created=summon_results,
+        triggered_actions=triggered_actions,
+    )
+
+
+def resolve_skill_request(
+    state: CombatState,
+    actor_id: str,
+    skill: SkillData,
+    action: ActionRequest,
+    rng: SeededRNG,
+    constants: dict,
+) -> tuple[CombatState, SkillResolutionResult]:
+    return _resolve_skill_core(state, actor_id, skill, action, rng, constants)
+
+
+def resolve_skill(
+    state: CombatState,
+    actor_id: str,
+    skill: SkillData,
+    selected_targets: dict[int, str],
+    rng: SeededRNG,
+    constants: dict,
+) -> tuple[CombatState, list[HitResult], tuple[SummonSpawnResult, ...]]:
+    action = ActionRequest(
+        actor_id=actor_id,
+        action_type=skill.action_type,
+        skill_id=skill.skill_id,
+        target_ids=tuple(sorted(selected_targets.items())),
+    )
+    state, resolution = _resolve_skill_core(
+        state,
+        actor_id,
+        skill,
+        action,
+        rng,
+        constants,
+    )
+    return state, list(resolution.hits), resolution.summons_created

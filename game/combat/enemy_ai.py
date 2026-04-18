@@ -1,10 +1,15 @@
 from game.combat.cooldowns import is_on_cooldown
 from game.combat.effects import get_effective_skill_access
 from game.combat.models import ActionRequest, CombatState
-from game.combat.targeting import get_allies, get_enemies
+from game.combat.skill_targeting import (
+    ActionTargetRef,
+    build_ai_target_refs as build_target_refs_for_ai,
+    skill_has_targets_available,
+)
+from game.combat.summons import commandable_summons_for_skill
 from game.core.data_loader import SkillData, load_skill
 from game.core.dice import SeededRNG
-from game.core.enums import ActionType, TargetType
+from game.core.enums import ActionType
 
 
 def iter_priority_skill_ids(
@@ -41,62 +46,26 @@ def is_skill_usable(
     if actor.current_energy < skill.energy_cost:
         return False
 
-    for hit in skill.hits:
-        if hit.share_with is not None:
-            continue
+    if not skill_has_targets_available(state, actor_id, skill):
+        return False
 
-        match hit.target_type:
-            case TargetType.SINGLE_ENEMY | TargetType.ALL_ENEMIES:
-                if not get_enemies(state, actor_id):
-                    return False
-            case TargetType.SINGLE_ALLY | TargetType.ALL_ALLIES:
-                if not get_allies(state, actor_id):
-                    return False
-            case TargetType.SELF:
-                continue
+    if skill.summon_commands and not commandable_summons_for_skill(
+        state,
+        actor_id,
+        skill,
+    ):
+        return False
 
     return True
 
 
-def build_ai_target_pairs(
+def build_ai_target_refs(
     state: CombatState,
     actor_id: str,
     skill: SkillData,
     rng: SeededRNG,
-) -> tuple[tuple[int, str], ...] | None:
-    pairs: list[tuple[int, str]] = []
-
-    for hit_index, hit in enumerate(skill.hits):
-        if hit.share_with is not None:
-            continue
-
-        match hit.target_type:
-            case TargetType.SINGLE_ENEMY:
-                candidates = get_enemies(state, actor_id)
-                if not candidates:
-                    return None
-                chosen = candidates[rng.d(len(candidates)) - 1]
-                pairs.append((hit_index, chosen))
-
-            case TargetType.SINGLE_ALLY:
-                candidates = get_allies(state, actor_id)
-                if not candidates:
-                    return None
-                chosen = candidates[rng.d(len(candidates)) - 1]
-                pairs.append((hit_index, chosen))
-
-            case TargetType.ALL_ENEMIES:
-                if not get_enemies(state, actor_id):
-                    return None
-
-            case TargetType.ALL_ALLIES:
-                if not get_allies(state, actor_id):
-                    return None
-
-            case TargetType.SELF:
-                continue
-
-    return tuple(pairs)
+) -> tuple[ActionTargetRef, ...] | None:
+    return build_target_refs_for_ai(state, actor_id, skill, rng)
 
 
 def build_ai_action(
@@ -109,15 +78,15 @@ def build_ai_action(
         if not is_skill_usable(state, actor_id, skill):
             continue
 
-        target_ids = build_ai_target_pairs(state, actor_id, skill, rng)
-        if target_ids is None:
+        target_refs = build_ai_target_refs(state, actor_id, skill, rng)
+        if target_refs is None:
             continue
 
         return ActionRequest(
             actor_id=actor_id,
             action_type=ActionType.ACTION,
             skill_id=skill.skill_id,
-            target_ids=target_ids,
+            target_refs=target_refs,
         )
 
     return None

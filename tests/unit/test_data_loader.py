@@ -119,7 +119,20 @@ def test_load_skill_summon_familiar():
     assert len(skill.summons) == 1
     assert skill.summons[0].summon_id == "familiar"
     assert skill.summons[0].count_expr == "1"
-    assert skill.summons[0].duration_own_turns == 3
+    assert skill.summons[0].duration_own_turns == 5
+
+
+def test_load_skill_command_spell():
+    skill = load_skill("command_spell")
+
+    assert skill.skill_id == "command_spell"
+    assert skill.hits == ()
+    assert skill.self_effects == ()
+    assert skill.summons == ()
+    assert len(skill.summon_commands) == 1
+    assert skill.summon_commands[0].summon_skill_id == "generic_enemy_attack"
+    assert skill.summon_commands[0].summon_types == ()
+    assert skill.summon_commands[0].cast_policy.value == "normal"
 
 
 def test_load_summon_familiar():

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from game.combat.skill_targeting import ActionTargetRef, TargetOwnerKind
 from game.core.enums import ActionType, CombatPhase, DamageType
 
 if TYPE_CHECKING:
@@ -27,10 +28,48 @@ class ActionRequest:
     action_type: ActionType
     skill_id: str | None = None
     target_ids: tuple[tuple[int, str], ...] = ()  # (hit_index, entity_id) pairs for single-target hits
+    target_refs: tuple[ActionTargetRef, ...] = ()
     item_id: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.target_refs and not self.target_ids:
+            hit_pairs = tuple(
+                (ref.owner_index, ref.entity_id)
+                for ref in self.target_refs
+                if ref.owner_kind == TargetOwnerKind.HIT
+            )
+            object.__setattr__(self, "target_ids", hit_pairs)
+            return
+
+        if self.target_ids and not self.target_refs:
+            refs = tuple(
+                ActionTargetRef(
+                    owner_kind=TargetOwnerKind.HIT,
+                    owner_index=hit_index,
+                    nested_index=0,
+                    entity_id=entity_id,
+                )
+                for hit_index, entity_id in self.target_ids
+            )
+            object.__setattr__(self, "target_refs", refs)
+
     def get_target_map(self) -> dict[int, str]:
-        return dict(self.target_ids)
+        return self.targets_for_hits()
+
+    def targets_for_hits(self) -> dict[int, str]:
+        return {
+            ref.owner_index: ref.entity_id
+            for ref in self.target_refs
+            if ref.owner_kind == TargetOwnerKind.HIT
+        }
+
+    def targets_for_command(self, command_index: int) -> dict[int, str]:
+        return {
+            ref.nested_index: ref.entity_id
+            for ref in self.target_refs
+            if ref.owner_kind == TargetOwnerKind.SUMMON_COMMAND
+            and ref.owner_index == command_index
+        }
 
 
 @dataclass(frozen=True)
@@ -59,12 +98,31 @@ class SummonSpawnResult:
 
 
 @dataclass(frozen=True)
+class TriggeredActionResult:
+    actor_id: str
+    skill_id: str
+    hits: tuple[HitResult, ...] = ()
+    self_effects_applied: tuple[str, ...] = ()
+    summons_created: tuple[SummonSpawnResult, ...] = ()
+    triggered_actions: tuple["TriggeredActionResult", ...] = ()
+
+
+@dataclass(frozen=True)
+class SkillResolutionResult:
+    hits: tuple[HitResult, ...] = ()
+    self_effects_applied: tuple[str, ...] = ()
+    summons_created: tuple[SummonSpawnResult, ...] = ()
+    triggered_actions: tuple[TriggeredActionResult, ...] = ()
+
+
+@dataclass(frozen=True)
 class ActionResult:
     actor_id: str
     action: ActionRequest
     hits: tuple[HitResult, ...] = ()
     self_effects_applied: tuple[str, ...] = ()
     summons_created: tuple[SummonSpawnResult, ...] = ()
+    triggered_actions: tuple[TriggeredActionResult, ...] = ()
     skipped: bool = False
 
 
