@@ -21,7 +21,7 @@ arcane_dmg_pct = "owner.mastery * 0.01"
 name = "Blaze"
 max_per_owner = 1
 skills = ["generic_enemy_attack"]
-passives = []
+passives = ["blaze_of_glory"]
 
 [summons.familiar.major_stat_formulas]
 attack = "owner.attack * 0.9 + owner.mastery * 0.4"
