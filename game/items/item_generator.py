@@ -37,6 +37,8 @@ def generate_item(
         item_type=blueprint.item_type,
         quality=int(quality),
         effects=tuple(effects),
+        item_sets=blueprint.item_sets,
+        unique=blueprint.unique,
     )
 
 

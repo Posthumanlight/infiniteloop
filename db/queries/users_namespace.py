@@ -217,6 +217,11 @@ class UserCharactersData(UserData):
             parsed_additional = additional_data
         else:
             parsed_additional = {}
+        raw_item_sets = parsed_additional.get("item_sets", ())
+        if isinstance(raw_item_sets, (list, tuple)):
+            item_sets = tuple(str(set_id) for set_id in raw_item_sets)
+        else:
+            item_sets = ()
         return ItemInstance(
             instance_id=str(row["instance_id"]),
             blueprint_id=str(row["blueprint_id"]),
@@ -224,6 +229,8 @@ class UserCharactersData(UserData):
             item_type=ItemType(str(row["item_type"])),
             quality=int(row["quality"] or 1),
             effects=cls._parse_generated_effects(row["generated_effects"]),
+            item_sets=item_sets,
+            unique=bool(parsed_additional.get("unique", False)),
         )
 
     @staticmethod
@@ -236,7 +243,11 @@ class UserCharactersData(UserData):
             "generated_effects": UserCharactersData._serialize_generated_effects(
                 item.effects,
             ),
-            "additional_data": json.dumps({"name": item.name}),
+            "additional_data": json.dumps({
+                "name": item.name,
+                "item_sets": list(item.item_sets),
+                "unique": item.unique,
+            }),
         }
 
     @classmethod

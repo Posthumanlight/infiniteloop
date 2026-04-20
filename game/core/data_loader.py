@@ -23,7 +23,12 @@ from game.core.enums import (
     TriggerType,
     UsageLimit,
 )
-from game.items.items import ItemBlueprint, ItemBlueprintEffect
+from game.items.items import (
+    ItemBlueprint,
+    ItemBlueprintEffect,
+    ItemSetBonusData,
+    ItemSetData,
+)
 from game.events.models import (
     ChoiceDef,
     EventDef,
@@ -745,10 +750,82 @@ def _parse_item_effect(raw: dict[str, Any]) -> ItemBlueprintEffect:
     )
 
 
+def _parse_item_set_bonus(
+    set_id: str,
+    raw: dict[str, Any],
+) -> ItemSetBonusData:
+    required_count = int(raw["required_count"])
+    if required_count <= 0:
+        raise ValueError(
+            f"Item set {set_id}: required_count must be positive",
+        )
+
+    effects = tuple(
+        _parse_item_effect(effect_raw)
+        for effect_raw in raw.get("effects", [])
+    )
+    if not effects:
+        raise ValueError(
+            f"Item set {set_id}: bonus at {required_count} requires effects",
+        )
+
+    return ItemSetBonusData(
+        required_count=required_count,
+        effects=effects,
+    )
+
+
+def load_item_sets() -> dict[str, ItemSetData]:
+    raw = _load_toml("item_sets.toml").get("item_sets", {})
+    result: dict[str, ItemSetData] = {}
+
+    for set_id, set_data in raw.items():
+        bonuses = tuple(
+            _parse_item_set_bonus(set_id, bonus_raw)
+            for bonus_raw in set_data.get("bonuses", [])
+        )
+        required_counts = [bonus.required_count for bonus in bonuses]
+        if len(required_counts) != len(set(required_counts)):
+            raise ValueError(
+                f"Item set {set_id}: duplicate required_count values",
+            )
+
+        result[set_id] = ItemSetData(
+            set_id=set_id,
+            name=set_data["name"],
+            bonuses=tuple(sorted(
+                bonuses,
+                key=lambda bonus: bonus.required_count,
+            )),
+        )
+
+    return result
+
+
 def load_item_blueprints() -> dict[str, ItemBlueprint]:
     raw = _load_toml("items.toml").get("items", {})
-    return {
-        item_id: ItemBlueprint(
+    item_sets = load_item_sets()
+    result: dict[str, ItemBlueprint] = {}
+
+    for item_id, item_data in raw.items():
+        if "item_set" in item_data:
+            raise ValueError(
+                f"Item {item_id}: use item_sets, not item_set",
+            )
+
+        raw_item_sets = item_data.get("item_sets", [])
+        if not isinstance(raw_item_sets, list):
+            raise ValueError(f"Item {item_id}: item_sets must be a list")
+        parsed_item_sets = tuple(str(set_id) for set_id in raw_item_sets)
+        if len(parsed_item_sets) != len(set(parsed_item_sets)):
+            raise ValueError(f"Item {item_id}: duplicate item_sets entries")
+        for set_id in parsed_item_sets:
+            if set_id not in item_sets:
+                raise ValueError(
+                    f"Item {item_id}: unknown item set '{set_id}'",
+                )
+
+        result[item_id] = ItemBlueprint(
             blueprint_id=item_id,
             name=item_data["name"],
             item_type=ItemType(item_data["item_type"]),
@@ -756,9 +833,11 @@ def load_item_blueprints() -> dict[str, ItemBlueprint]:
                 _parse_item_effect(effect_raw)
                 for effect_raw in item_data.get("effects", [])
             ),
+            item_sets=parsed_item_sets,
+            unique=bool(item_data.get("unique", False)),
         )
-        for item_id, item_data in raw.items()
-    }
+
+    return result
 
 
 def load_item_blueprint(blueprint_id: str) -> ItemBlueprint:

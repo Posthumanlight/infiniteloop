@@ -10,6 +10,7 @@ from game.core.data_loader import (
     load_enemy,
     load_enemy_loot,
     load_item_blueprint,
+    load_item_sets,
     load_loot_constants,
     load_modifier,
     load_passive,
@@ -17,6 +18,7 @@ from game.core.data_loader import (
     load_summon,
     load_summon_constants,
 )
+import game.core.data_loader as data_loader
 from game.core.enums import (
     ActionType,
     DamageType,
@@ -226,6 +228,108 @@ def test_load_item_blueprint_long_sword():
     assert item.effects[0].effect_type == ItemEffect.MODIFY_STAT
     assert item.effects[0].stat == "attack"
     assert item.effects[0].expr == "10 + quality"
+
+
+def test_load_item_blueprint_with_sets_and_unique():
+    item = load_item_blueprint("crocodile_tears")
+
+    assert item.item_type == ItemType.RELIC
+    assert item.item_sets == ("crocodile_regalia",)
+    assert item.unique is True
+
+
+def test_load_item_sets():
+    item_sets = load_item_sets()
+    crocodile = item_sets["crocodile_regalia"]
+
+    assert crocodile.name == "Crocodile Regalia"
+    assert [bonus.required_count for bonus in crocodile.bonuses] == [2, 3]
+    assert crocodile.bonuses[0].effects[0].effect_type == ItemEffect.MODIFY_STAT
+    assert crocodile.bonuses[1].effects[0].effect_type == ItemEffect.GRANT_PASSIVE
+
+
+def test_item_loader_rejects_singular_item_set(monkeypatch):
+    def fake_load_toml(filename: str):
+        if filename == "item_sets.toml":
+            return {"item_sets": {}}
+        if filename == "items.toml":
+            return {
+                "items": {
+                    "bad": {
+                        "name": "Bad",
+                        "item_type": "relic",
+                        "item_set": "legacy",
+                    },
+                },
+            }
+        raise AssertionError(filename)
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="use item_sets"):
+        data_loader.load_item_blueprints()
+
+
+def test_item_loader_rejects_unknown_item_set(monkeypatch):
+    def fake_load_toml(filename: str):
+        if filename == "item_sets.toml":
+            return {"item_sets": {}}
+        if filename == "items.toml":
+            return {
+                "items": {
+                    "bad": {
+                        "name": "Bad",
+                        "item_type": "relic",
+                        "item_sets": ["missing"],
+                    },
+                },
+            }
+        raise AssertionError(filename)
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="unknown item set"):
+        data_loader.load_item_blueprints()
+
+
+def test_item_set_loader_rejects_duplicate_thresholds(monkeypatch):
+    def fake_load_toml(filename: str):
+        if filename == "item_sets.toml":
+            return {
+                "item_sets": {
+                    "bad": {
+                        "name": "Bad",
+                        "bonuses": [
+                            {
+                                "required_count": 2,
+                                "effects": [
+                                    {
+                                        "type": "modify_stat",
+                                        "stat": "attack",
+                                        "expr": "1",
+                                    },
+                                ],
+                            },
+                            {
+                                "required_count": 2,
+                                "effects": [
+                                    {
+                                        "type": "modify_stat",
+                                        "stat": "speed",
+                                        "expr": "1",
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                },
+            }
+        raise AssertionError(filename)
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="duplicate required_count"):
+        data_loader.load_item_sets()
 
 
 def test_load_item_blueprint_sealed_talisman():

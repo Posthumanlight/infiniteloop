@@ -9,11 +9,21 @@
       .replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
+  function isPercentStat(stat: string): boolean {
+    return stat === 'crit_chance' || stat === 'crit_dmg' || stat.endsWith('_pct');
+  }
+
+  function formatEffectValue(stat: string, value: number): string {
+    const sign = value > 0 ? '+' : '';
+    if (isPercentStat(stat)) {
+      return `${sign}${(value * 100).toFixed(1)}%`;
+    }
+    return `${sign}${Number.isInteger(value) ? value : value.toFixed(1)}`;
+  }
+
   function describeEffect(effect: ItemEffect): string {
     if (effect.effect_type === 'modify_stat' && effect.stat && effect.value !== null) {
-      const sign = effect.value > 0 ? '+' : '';
-      const value = Number.isInteger(effect.value) ? effect.value : effect.value.toFixed(1);
-      return `${sign}${value} ${formatLabel(effect.stat)}`;
+      return `${formatEffectValue(effect.stat, effect.value)} ${formatLabel(effect.stat)}`;
     }
     if (effect.effect_type === 'grant_skill' && effect.skill_id) return `Grants ${formatLabel(effect.skill_id)}`;
     if (effect.effect_type === 'block_skill' && effect.skill_id) return `Blocks ${formatLabel(effect.skill_id)}`;
@@ -32,6 +42,16 @@
     <div>
       <p class="type">{formatLabel(item.item_type)}</p>
       <h3>{item.name}</h3>
+      {#if item.unique || item.item_set_names.length > 0}
+        <div class="meta">
+          {#if item.unique}
+            <span>Unique</span>
+          {/if}
+          {#each item.item_set_names as setName}
+            <span>{setName}</span>
+          {/each}
+        </div>
+      {/if}
     </div>
     <span class="quality">Q{item.quality}</span>
   </header>
@@ -82,6 +102,24 @@
   h3 {
     margin: 0;
     font-size: 1rem;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+  }
+
+  .meta span {
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(255, 210, 74, 0.12);
+    color: #ffe08a;
+    border: 1px solid rgba(255, 210, 74, 0.18);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
 
   .quality {

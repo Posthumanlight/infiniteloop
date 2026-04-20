@@ -76,6 +76,14 @@ class Inventory:
 
     def equip(self, instance_id: str, relic_slot: int | None = None) -> "Inventory":
         item = self.get_item(instance_id)
+        if item.unique:
+            for equipped in self.equipped_items():
+                if equipped.instance_id == instance_id:
+                    continue
+                if equipped.blueprint_id == item.blueprint_id:
+                    raise ValueError(
+                        "Only one copy of this unique item can be equipped",
+                    )
         equipment = self._without_instance_equipped(instance_id)
 
         if item.item_type == ItemType.WEAPON:

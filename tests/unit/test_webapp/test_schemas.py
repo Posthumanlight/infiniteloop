@@ -2,12 +2,18 @@ from game.core.enums import TargetType
 from game.core.game_models import (
     CharacterSheet,
     EffectInfo,
+    EquipmentSlotInfo,
+    InventorySnapshot,
+    ItemEffectInfo,
+    ItemInfo,
+    ItemSetBonusInfo,
+    ItemSetInfo,
     ModifierInfo,
     PassiveInfo,
     SkillHitInfo,
     SkillInfo,
 )
-from webapp.schemas import CharacterSheetOut
+from webapp.schemas import CharacterSheetOut, InventoryOut
 
 
 def test_character_sheet_out_serializes_nested_domain_objects():
@@ -71,3 +77,67 @@ def test_character_sheet_out_serializes_nested_domain_objects():
     assert payload.active_effects[0].is_buff is True
     assert payload.active_effects[0].granted_skills == ["rampage"]
     assert payload.active_effects[0].blocked_skills == ["slash"]
+
+
+def test_inventory_out_serializes_item_sets():
+    item = ItemInfo(
+        instance_id="i1",
+        blueprint_id="crocodile_tears",
+        name="Crocodile Tears",
+        item_type="relic",
+        quality=1,
+        equipped_slot="relic",
+        equipped_index=0,
+        effects=(
+            ItemEffectInfo(
+                effect_type="modify_stat",
+                stat="crit_chance",
+                value=0.045,
+            ),
+        ),
+        item_sets=("crocodile_regalia",),
+        item_set_names=("Crocodile Regalia",),
+        unique=True,
+    )
+    snapshot = InventorySnapshot(
+        items=(item,),
+        unequipped_items=(),
+        equipment_slots=(
+            EquipmentSlotInfo(
+                slot_type="relic",
+                slot_index=0,
+                label="Relic 1",
+                accepts_item_type="relic",
+                item=item,
+            ),
+        ),
+        can_manage_equipment=True,
+        item_sets=(
+            ItemSetInfo(
+                set_id="crocodile_regalia",
+                name="Crocodile Regalia",
+                equipped_count=1,
+                bonuses=(
+                    ItemSetBonusInfo(
+                        required_count=2,
+                        active=False,
+                        effects=(
+                            ItemEffectInfo(
+                                effect_type="modify_stat",
+                                stat="crit_chance",
+                                value=0.1,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    payload = InventoryOut.from_domain(snapshot)
+
+    assert payload.items[0].item_sets == ["crocodile_regalia"]
+    assert payload.items[0].item_set_names == ["Crocodile Regalia"]
+    assert payload.items[0].unique is True
+    assert payload.item_sets[0].bonuses[0].active is False
+    assert payload.item_sets[0].bonuses[0].effects[0].value == 0.1

@@ -211,6 +211,9 @@ class ItemOut(BaseModel):
     equipped_slot: str | None
     equipped_index: int | None
     effects: list[ItemEffectOut]
+    item_sets: list[str]
+    item_set_names: list[str]
+    unique: bool
 
 
 class EquipmentSlotOut(BaseModel):
@@ -221,10 +224,24 @@ class EquipmentSlotOut(BaseModel):
     item: ItemOut | None
 
 
+class ItemSetBonusOut(BaseModel):
+    required_count: int
+    active: bool
+    effects: list[ItemEffectOut]
+
+
+class ItemSetOut(BaseModel):
+    set_id: str
+    name: str
+    equipped_count: int
+    bonuses: list[ItemSetBonusOut]
+
+
 class InventoryOut(BaseModel):
     items: list[ItemOut]
     unequipped_items: list[ItemOut]
     equipment_slots: list[EquipmentSlotOut]
+    item_sets: list[ItemSetOut]
     can_manage_equipment: bool
     equipment_lock_reason: str | None
 
@@ -249,6 +266,9 @@ class InventoryOut(BaseModel):
                     )
                     for effect in item.effects
                 ],
+                item_sets=list(item.item_sets),
+                item_set_names=list(item.item_set_names),
+                unique=item.unique,
             )
             for item in snapshot.items
         }
@@ -270,6 +290,31 @@ class InventoryOut(BaseModel):
                     ),
                 )
                 for slot in snapshot.equipment_slots
+            ],
+            item_sets=[
+                ItemSetOut(
+                    set_id=item_set.set_id,
+                    name=item_set.name,
+                    equipped_count=item_set.equipped_count,
+                    bonuses=[
+                        ItemSetBonusOut(
+                            required_count=bonus.required_count,
+                            active=bonus.active,
+                            effects=[
+                                ItemEffectOut(
+                                    effect_type=effect.effect_type,
+                                    stat=effect.stat,
+                                    value=effect.value,
+                                    skill_id=effect.skill_id,
+                                    passive_id=effect.passive_id,
+                                )
+                                for effect in bonus.effects
+                            ],
+                        )
+                        for bonus in item_set.bonuses
+                    ],
+                )
+                for item_set in snapshot.item_sets
             ],
             can_manage_equipment=snapshot.can_manage_equipment,
             equipment_lock_reason=snapshot.equipment_lock_reason,

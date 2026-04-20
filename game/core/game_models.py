@@ -229,6 +229,24 @@ class ItemInfo:
     equipped_slot: str | None
     equipped_index: int | None
     effects: tuple[ItemEffectInfo, ...]
+    item_sets: tuple[str, ...] = ()
+    item_set_names: tuple[str, ...] = ()
+    unique: bool = False
+
+
+@dataclass(frozen=True)
+class ItemSetBonusInfo:
+    required_count: int
+    active: bool
+    effects: tuple[ItemEffectInfo, ...]
+
+
+@dataclass(frozen=True)
+class ItemSetInfo:
+    set_id: str
+    name: str
+    equipped_count: int
+    bonuses: tuple[ItemSetBonusInfo, ...]
 
 
 @dataclass(frozen=True)
@@ -247,6 +265,7 @@ class InventorySnapshot:
     equipment_slots: tuple[EquipmentSlotInfo, ...]
     can_manage_equipment: bool
     equipment_lock_reason: str | None = None
+    item_sets: tuple[ItemSetInfo, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,7 @@
 from db.queries.users_namespace import UserCharactersData
 from game.combat.skill_modifiers import ModifierInstance
-from game.core.enums import ItemEffect
-from game.items.items import GeneratedItemEffect
+from game.core.enums import ItemEffect, ItemType
+from game.items.items import GeneratedItemEffect, ItemInstance
 
 
 def test_parse_modifiers_accepts_json_string_with_stacks():
@@ -54,3 +54,42 @@ def test_generated_effects_round_trip():
     parsed = UserCharactersData._parse_generated_effects(serialized)
 
     assert parsed == effects
+
+
+def test_item_instance_serialization_preserves_sets_and_unique():
+    item = ItemInstance(
+        instance_id="i1",
+        blueprint_id="crocodile_tears",
+        name="Crocodile Tears",
+        item_type=ItemType.RELIC,
+        quality=2,
+        effects=(),
+        item_sets=("crocodile_regalia", "predator_trinkets"),
+        unique=True,
+    )
+
+    payload = UserCharactersData._serialize_item_instance(item)
+    parsed = UserCharactersData._deserialize_item_instance({
+        "instance_id": payload["instance_id"],
+        "blueprint_id": payload["blueprint_id"],
+        "item_type": payload["item_type"],
+        "quality": payload["quality"],
+        "generated_effects": payload["generated_effects"],
+        "additional_data": payload["additional_data"],
+    })
+
+    assert parsed == item
+
+
+def test_old_item_instance_data_does_not_backfill_sets_or_unique():
+    parsed = UserCharactersData._deserialize_item_instance({
+        "instance_id": "i1",
+        "blueprint_id": "crocodile_tears",
+        "item_type": "relic",
+        "quality": 1,
+        "generated_effects": "[]",
+        "additional_data": '{"name": "Old Crocodile Tears"}',
+    })
+
+    assert parsed.item_sets == ()
+    assert parsed.unique is False

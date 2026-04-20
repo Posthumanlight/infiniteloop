@@ -19,6 +19,7 @@ from game.core.data_loader import (
     load_classes,
     load_constants,
     load_effect,
+    load_item_sets,
     load_modifier,
     load_passive,
     load_skill,
@@ -36,9 +37,11 @@ from game.core.enums import (
 from game.core.formula_eval import ExprContext, evaluate_expr
 from game.character.player_character import PlayerCharacter
 from game.items.equipment_effects import (
+    collect_equipped_item_set_counts,
     get_effective_passive_ids,
     get_effective_player_major_stat,
     get_effective_player_minor_stat,
+    resolve_item_set_bonus_effects,
 )
 from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.factories import build_player
@@ -53,6 +56,8 @@ from game.core.game_models import (
     InventorySnapshot,
     ItemEffectInfo,
     ItemInfo,
+    ItemSetBonusInfo,
+    ItemSetInfo,
     LootResolutionSnapshot,
     ModifierInfo,
     PendingRewardInfo,
@@ -1265,11 +1270,59 @@ class GameService:
         )
 
     @staticmethod
+    def _item_effect_to_info(effect) -> ItemEffectInfo:
+        return ItemEffectInfo(
+            effect_type=effect.effect_type.value,
+            stat=effect.stat,
+            value=effect.value,
+            skill_id=effect.skill_id,
+            passive_id=effect.passive_id,
+        )
+
+    @staticmethod
+    def _build_item_set_infos(player: PlayerCharacter) -> tuple[ItemSetInfo, ...]:
+        item_sets = load_item_sets()
+        counts = collect_equipped_item_set_counts(player.inventory)
+        infos: list[ItemSetInfo] = []
+
+        for set_id, equipped_count in sorted(counts.items()):
+            item_set = item_sets.get(set_id)
+            if item_set is None:
+                continue
+
+            bonuses: list[ItemSetBonusInfo] = []
+            for bonus in item_set.bonuses:
+                active = equipped_count >= bonus.required_count
+                display_count = equipped_count if active else bonus.required_count
+                effects = tuple(
+                    GameService._item_effect_to_info(effect)
+                    for effect in resolve_item_set_bonus_effects(
+                        bonus,
+                        equipped_count=display_count,
+                    )
+                )
+                bonuses.append(ItemSetBonusInfo(
+                    required_count=bonus.required_count,
+                    active=active,
+                    effects=effects,
+                ))
+
+            infos.append(ItemSetInfo(
+                set_id=set_id,
+                name=item_set.name,
+                equipped_count=equipped_count,
+                bonuses=tuple(bonuses),
+            ))
+
+        return tuple(infos)
+
+    @staticmethod
     def _build_inventory_snapshot(
         player: PlayerCharacter,
         *,
         in_combat: bool,
     ) -> InventorySnapshot:
+        item_sets = load_item_sets()
         items = sorted(
             player.inventory.items.values(),
             key=lambda item: (item.item_type.value, item.name, item.instance_id),
@@ -1284,15 +1337,16 @@ class GameService:
                 equipped_slot=player.inventory.equipped_slot(item.instance_id)[0],
                 equipped_index=player.inventory.equipped_slot(item.instance_id)[1],
                 effects=tuple(
-                    ItemEffectInfo(
-                        effect_type=effect.effect_type.value,
-                        stat=effect.stat,
-                        value=effect.value,
-                        skill_id=effect.skill_id,
-                        passive_id=effect.passive_id,
-                    )
+                    GameService._item_effect_to_info(effect)
                     for effect in item.effects
                 ),
+                item_sets=item.item_sets,
+                item_set_names=tuple(
+                    item_sets[set_id].name
+                    for set_id in item.item_sets
+                    if set_id in item_sets
+                ),
+                unique=item.unique,
             )
             for item in items
         )
@@ -1341,6 +1395,7 @@ class GameService:
                 "Equipment changes are disabled in combat."
                 if in_combat else None
             ),
+            item_sets=GameService._build_item_set_infos(player),
         )
 
     # ------------------------------------------------------------------

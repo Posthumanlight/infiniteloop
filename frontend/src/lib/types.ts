@@ -100,6 +100,9 @@ export interface Item {
   equipped_slot: string | null;
   equipped_index: number | null;
   effects: ItemEffect[];
+  item_sets: string[];
+  item_set_names: string[];
+  unique: boolean;
 }
 
 export interface EquipmentSlot {
@@ -110,10 +113,24 @@ export interface EquipmentSlot {
   item: Item | null;
 }
 
+export interface ItemSetBonus {
+  required_count: number;
+  active: boolean;
+  effects: ItemEffect[];
+}
+
+export interface ItemSet {
+  set_id: string;
+  name: string;
+  equipped_count: number;
+  bonuses: ItemSetBonus[];
+}
+
 export interface InventorySnapshot {
   items: Item[];
   unequipped_items: Item[];
   equipment_slots: EquipmentSlot[];
+  item_sets: ItemSet[];
   can_manage_equipment: boolean;
   equipment_lock_reason: string | null;
 }

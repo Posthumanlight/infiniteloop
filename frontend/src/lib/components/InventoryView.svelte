@@ -3,7 +3,7 @@
   import InventoryGrid from '$components/InventoryGrid.svelte';
   import SectionCard from '$components/SectionCard.svelte';
   import { moveInventoryItem } from '$lib/api';
-  import type { InventoryMoveResponse, InventorySnapshot, Item } from '$lib/types';
+  import type { InventoryMoveResponse, InventorySnapshot, Item, ItemEffect } from '$lib/types';
 
   type Selection =
     | { source: 'inventory'; item: Item }
@@ -84,6 +84,35 @@
     }
 
     return `${selected.item.name} selected. Tap the inventory area to unequip it.`;
+  }
+
+  function formatLabel(value: string): string {
+    return value
+      .replaceAll('_', ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function isPercentStat(stat: string): boolean {
+    return stat === 'crit_chance' || stat === 'crit_dmg' || stat.endsWith('_pct');
+  }
+
+  function formatEffectValue(stat: string, value: number): string {
+    const sign = value > 0 ? '+' : '';
+    if (isPercentStat(stat)) {
+      return `${sign}${(value * 100).toFixed(1)}%`;
+    }
+    return `${sign}${Number.isInteger(value) ? value : value.toFixed(1)}`;
+  }
+
+  function describeEffect(effect: ItemEffect): string {
+    if (effect.effect_type === 'modify_stat' && effect.stat && effect.value !== null) {
+      return `${formatEffectValue(effect.stat, effect.value)} ${formatLabel(effect.stat)}`;
+    }
+    if (effect.effect_type === 'grant_skill' && effect.skill_id) return `Grants ${formatLabel(effect.skill_id)}`;
+    if (effect.effect_type === 'block_skill' && effect.skill_id) return `Blocks ${formatLabel(effect.skill_id)}`;
+    if (effect.effect_type === 'grant_passive' && effect.passive_id) return `Grants ${formatLabel(effect.passive_id)}`;
+    if (effect.effect_type === 'block_passive' && effect.passive_id) return `Blocks ${formatLabel(effect.passive_id)}`;
+    return formatLabel(effect.effect_type);
   }
 
   function selectInventoryItem(item: Item): void {
@@ -189,6 +218,34 @@
     />
   </SectionCard>
 
+  {#if inventory.item_sets.length > 0}
+    <SectionCard title="Item Sets" eyebrow="Bonuses">
+      <div class="set-list">
+        {#each inventory.item_sets as itemSet}
+          <article class="set-card">
+            <header>
+              <div>
+                <p class="set-count">{itemSet.equipped_count} equipped</p>
+                <h3>{itemSet.name}</h3>
+              </div>
+            </header>
+            <ul>
+              {#each itemSet.bonuses as bonus}
+                <li class:active={bonus.active}>
+                  <span class="threshold">{bonus.required_count} pieces</span>
+                  <span class="state">{bonus.active ? 'Active' : 'Locked'}</span>
+                  <span class="bonus-lines">
+                    {bonus.effects.map(describeEffect).join(', ')}
+                  </span>
+                </li>
+              {/each}
+            </ul>
+          </article>
+        {/each}
+      </div>
+    </SectionCard>
+  {/if}
+
   <SectionCard title="Inventory" eyebrow="Tap To Unequip">
     <InventoryGrid
       items={inventory.unequipped_items}
@@ -233,5 +290,78 @@
     border: 1px solid rgba(122, 193, 255, 0.18);
     color: rgba(228, 239, 252, 0.92);
     font-size: 0.94rem;
+  }
+
+  .set-list {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .set-card {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.95rem 1rem;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+  }
+
+  .set-card header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .set-count {
+    margin: 0 0 0.25rem;
+    color: rgba(255, 210, 74, 0.82);
+    font-size: 0.72rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+  }
+
+  .set-card h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .set-card ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .set-card li {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 0.55rem;
+    align-items: center;
+    color: rgba(232, 239, 250, 0.7);
+    font-size: 0.86rem;
+  }
+
+  .set-card li.active {
+    color: rgba(242, 248, 255, 0.96);
+  }
+
+  .threshold,
+  .state {
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .set-card li.active .state {
+    background: rgba(93, 214, 142, 0.16);
+    color: #9ff0bd;
+  }
+
+  .bonus-lines {
+    min-width: 0;
   }
 </style>

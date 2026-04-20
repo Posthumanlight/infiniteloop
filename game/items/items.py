@@ -18,6 +18,21 @@ class ItemBlueprint:
     name: str
     item_type: ItemType
     effects: tuple[ItemBlueprintEffect, ...]
+    item_sets: tuple[str, ...] = ()
+    unique: bool = False
+
+
+@dataclass(frozen=True)
+class ItemSetBonusData:
+    required_count: int
+    effects: tuple[ItemBlueprintEffect, ...]
+
+
+@dataclass(frozen=True)
+class ItemSetData:
+    set_id: str
+    name: str
+    bonuses: tuple[ItemSetBonusData, ...]
 
 
 @dataclass(frozen=True)
@@ -37,3 +52,5 @@ class ItemInstance:
     item_type: ItemType
     quality: int
     effects: tuple[GeneratedItemEffect, ...]
+    item_sets: tuple[str, ...] = ()
+    unique: bool = False
