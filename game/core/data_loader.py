@@ -642,6 +642,10 @@ def load_summon_constants() -> dict[str, Any]:
     return _load_toml("constants.toml")["summons"]
 
 
+def load_item_dissolve_constants() -> dict[str, Any]:
+    return _load_toml("constants.toml")["item_dissolve"]
+
+
 # ---------------------------------------------------------------------------
 # Loot tables
 # ---------------------------------------------------------------------------
@@ -824,6 +828,9 @@ def load_item_blueprints() -> dict[str, ItemBlueprint]:
                 raise ValueError(
                     f"Item {item_id}: unknown item set '{set_id}'",
                 )
+        rarity = str(item_data.get("rarity", "common")).strip()
+        if not rarity:
+            raise ValueError(f"Item {item_id}: rarity must be a non-empty string")
 
         result[item_id] = ItemBlueprint(
             blueprint_id=item_id,
@@ -835,6 +842,7 @@ def load_item_blueprints() -> dict[str, ItemBlueprint]:
             ),
             item_sets=parsed_item_sets,
             unique=bool(item_data.get("unique", False)),
+            rarity=rarity,
         )
 
     return result

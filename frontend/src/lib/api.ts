@@ -1,4 +1,8 @@
-import type { InventoryMoveResponse, WebAppBootstrap } from '$lib/types';
+import type {
+  InventoryDissolveResponse,
+  InventoryMoveResponse,
+  WebAppBootstrap
+} from '$lib/types';
 
 async function parseJson<T>(response: Response, fallbackMessage: string): Promise<T> {
   if (!response.ok) {
@@ -48,4 +52,22 @@ export async function moveInventoryItem(
   });
 
   return parseJson<InventoryMoveResponse>(response, 'Failed to move the selected item.');
+}
+
+export async function dissolveInventoryItems(
+  initData: string,
+  instanceIds: string[],
+): Promise<InventoryDissolveResponse> {
+  const response = await fetch('/api/webapp/inventory/dissolve', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      init_data: initData,
+      instance_ids: instanceIds
+    })
+  });
+
+  return parseJson<InventoryDissolveResponse>(response, 'Failed to dissolve selected items.');
 }

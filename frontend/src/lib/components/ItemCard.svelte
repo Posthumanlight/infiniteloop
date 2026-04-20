@@ -50,8 +50,11 @@
     <div>
       <p class="type">{formatLabel(item.item_type)}</p>
       <h3>{item.name}</h3>
-      {#if item.unique || item.item_set_names.length > 0}
+      {#if item.rarity || item.unique || item.item_set_names.length > 0}
         <div class="meta">
+          {#if item.rarity}
+            <span>{formatLabel(item.rarity)}</span>
+          {/if}
           {#if item.unique}
             <span>Unique</span>
           {/if}

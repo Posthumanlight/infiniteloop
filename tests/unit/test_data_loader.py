@@ -9,6 +9,7 @@ from game.core.data_loader import (
     load_effect,
     load_enemy,
     load_enemy_loot,
+    load_item_dissolve_constants,
     load_item_blueprint,
     load_item_sets,
     load_loot_constants,
@@ -184,6 +185,14 @@ def test_load_constants():
     assert c["turn_timer_seconds"] == 45
 
 
+def test_load_item_dissolve_constants():
+    c = load_item_dissolve_constants()
+
+    assert c["currency_name"] == "Fortuna Motes"
+    assert c["rarity_values"]["common"] == 1
+    assert c["rarity_values"]["rare"] == 8
+
+
 def test_load_modifier_with_class_tags():
     m = load_modifier("slash_power")
     assert m.modifier_id == "slash_power"
@@ -225,6 +234,7 @@ def test_load_item_blueprint_long_sword():
 
     assert item.blueprint_id == "long_sword"
     assert item.item_type == ItemType.WEAPON
+    assert item.rarity == "common"
     assert item.effects[0].effect_type == ItemEffect.MODIFY_STAT
     assert item.effects[0].stat == "attack"
     assert item.effects[0].expr == "5 + quality*2"
@@ -234,6 +244,7 @@ def test_load_item_blueprint_with_sets_and_unique():
     item = load_item_blueprint("crocodile_tears")
 
     assert item.item_type == ItemType.RELIC
+    assert item.rarity == "rare"
     assert item.item_sets == ("wrath_of_beasts",)
     assert item.unique is True
 
@@ -293,6 +304,28 @@ def test_item_loader_rejects_unknown_item_set(monkeypatch):
     monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
 
     with pytest.raises(ValueError, match="unknown item set"):
+        data_loader.load_item_blueprints()
+
+
+def test_item_loader_rejects_empty_rarity(monkeypatch):
+    def fake_load_toml(filename: str):
+        if filename == "item_sets.toml":
+            return {"item_sets": {}}
+        if filename == "items.toml":
+            return {
+                "items": {
+                    "bad": {
+                        "name": "Bad",
+                        "item_type": "relic",
+                        "rarity": "",
+                    },
+                },
+            }
+        raise AssertionError(filename)
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="rarity must be"):
         data_loader.load_item_blueprints()
 
 

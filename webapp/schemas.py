@@ -207,6 +207,7 @@ class ItemOut(BaseModel):
     blueprint_id: str
     name: str
     item_type: str
+    rarity: str
     quality: int
     equipped_slot: str | None
     equipped_index: int | None
@@ -244,6 +245,8 @@ class InventoryOut(BaseModel):
     item_sets: list[ItemSetOut]
     can_manage_equipment: bool
     equipment_lock_reason: str | None
+    dissolve_currency_name: str
+    dissolve_rarity_values: dict[str, int]
 
     @classmethod
     def from_domain(cls, snapshot: InventorySnapshot) -> "InventoryOut":
@@ -253,6 +256,7 @@ class InventoryOut(BaseModel):
                 blueprint_id=item.blueprint_id,
                 name=item.name,
                 item_type=item.item_type,
+                rarity=item.rarity,
                 quality=item.quality,
                 equipped_slot=item.equipped_slot,
                 equipped_index=item.equipped_index,
@@ -318,6 +322,8 @@ class InventoryOut(BaseModel):
             ],
             can_manage_equipment=snapshot.can_manage_equipment,
             equipment_lock_reason=snapshot.equipment_lock_reason,
+            dissolve_currency_name=snapshot.dissolve_currency_name,
+            dissolve_rarity_values=dict(snapshot.dissolve_rarity_values or {}),
         )
 
 
@@ -344,3 +350,21 @@ class InventoryMoveIn(BaseModel):
 class InventoryMoveOut(BaseModel):
     sheet: CharacterSheetOut
     inventory: InventoryOut
+
+
+class InventoryDissolveIn(BaseModel):
+    init_data: str
+    instance_ids: list[str]
+
+
+class CurrencyBalanceOut(BaseModel):
+    currency_name: str
+    current_value: int
+
+
+class InventoryDissolveOut(BaseModel):
+    sheet: CharacterSheetOut
+    inventory: InventoryOut
+    dissolved_item_ids: list[str]
+    currency_delta: int
+    currency: CurrencyBalanceOut

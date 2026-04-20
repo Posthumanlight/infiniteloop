@@ -85,6 +85,7 @@ def test_inventory_out_serializes_item_sets():
         blueprint_id="crocodile_tears",
         name="Crocodile Tears",
         item_type="relic",
+        rarity="rare",
         quality=1,
         equipped_slot="relic",
         equipped_index=0,
@@ -138,6 +139,9 @@ def test_inventory_out_serializes_item_sets():
 
     assert payload.items[0].item_sets == ["crocodile_regalia"]
     assert payload.items[0].item_set_names == ["Crocodile Regalia"]
+    assert payload.items[0].rarity == "rare"
     assert payload.items[0].unique is True
     assert payload.item_sets[0].bonuses[0].active is False
     assert payload.item_sets[0].bonuses[0].effects[0].value == 0.1
+    assert payload.dissolve_currency_name == "Fortuna Motes"
+    assert payload.dissolve_rarity_values == {}

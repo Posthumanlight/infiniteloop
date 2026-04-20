@@ -5,6 +5,7 @@
   let {
     items,
     selectedInstanceId,
+    selectedInstanceIds = new Set<string>(),
     inventoryTargetActive,
     canManageEquipment,
     onItemTap,
@@ -12,6 +13,7 @@
   }: {
     items: Item[];
     selectedInstanceId: string | null;
+    selectedInstanceIds?: Set<string>;
     inventoryTargetActive: boolean;
     canManageEquipment: boolean;
     onItemTap: (item: Item) => void;
@@ -46,7 +48,7 @@
       {#each items as item}
         <button
           type="button"
-          class:selected={selectedInstanceId === item.instance_id}
+          class:selected={selectedInstanceId === item.instance_id || selectedInstanceIds.has(item.instance_id)}
           class="item-button"
           onclick={(event) => {
             event.stopPropagation();

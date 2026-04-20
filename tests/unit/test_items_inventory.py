@@ -22,6 +22,7 @@ from game.items.equipment_effects import (
     get_effective_player_major_stat,
     get_effective_player_minor_stat,
 )
+from game.items.dissolve import dissolve_value_for_items
 from game.items.item_generator import generate_item, generate_item_from_blueprint_id
 from game.core.data_loader import clear_cache, load_item_blueprint
 
@@ -53,6 +54,7 @@ def _test_relic(
     item_sets: tuple[str, ...] = (),
     blueprint_id: str | None = None,
     unique: bool = False,
+    rarity: str = "common",
 ) -> ItemInstance:
     return ItemInstance(
         instance_id=instance_id,
@@ -63,6 +65,7 @@ def _test_relic(
         effects=effects,
         item_sets=item_sets,
         unique=unique,
+        rarity=rarity,
     )
 
 
@@ -71,6 +74,7 @@ def test_generate_item_carries_sets_and_unique_flag():
 
     assert item.item_sets == ("wrath_of_beasts",)
     assert item.unique is True
+    assert item.rarity == "rare"
 
 
 def test_generate_item_resolves_percent_stat_formula():
@@ -113,6 +117,64 @@ def test_inventory_equip_and_remove_rules():
     inventory = inventory.remove_item(sword.instance_id)
 
     assert sword.instance_id not in inventory.items
+
+
+def test_inventory_dissolve_items_removes_unequipped_items_atomically():
+    warrior = make_warrior()
+    common = _test_relic("common_relic")
+    rare = _test_relic("rare_relic", rarity="rare")
+    equipped = _test_relic("equipped_relic")
+    inventory = (
+        warrior.inventory
+        .add_item(common)
+        .add_item(rare)
+        .add_item(equipped)
+        .equip(equipped.instance_id, relic_slot=0)
+    )
+
+    updated, dissolved = inventory.dissolve_items((common.instance_id, rare.instance_id))
+
+    assert [item.instance_id for item in dissolved] == ["common_relic", "rare_relic"]
+    assert common.instance_id not in updated.items
+    assert rare.instance_id not in updated.items
+    assert equipped.instance_id in updated.items
+    assert updated.equipment.relic_ids[0] == equipped.instance_id
+
+
+def test_inventory_dissolve_rejects_invalid_selection_without_mutating():
+    warrior = make_warrior()
+    item = _test_relic("item")
+    equipped = _test_relic("equipped")
+    inventory = (
+        warrior.inventory
+        .add_item(item)
+        .add_item(equipped)
+        .equip(equipped.instance_id, relic_slot=0)
+    )
+
+    with pytest.raises(ValueError, match="Duplicate"):
+        inventory.dissolve_items((item.instance_id, item.instance_id))
+    with pytest.raises(ValueError, match="Equipped"):
+        inventory.dissolve_items((equipped.instance_id,))
+    with pytest.raises(KeyError):
+        inventory.dissolve_items(("missing",))
+
+    assert item.instance_id in inventory.items
+    assert equipped.instance_id in inventory.items
+
+
+def test_dissolve_value_uses_rarity_config_and_common_fallback():
+    common = _test_relic("common")
+    rare = _test_relic("rare", rarity="rare")
+    weird = _test_relic("weird", rarity="mythic")
+    config = {
+        "rarity_values": {
+            "common": 1,
+            "rare": 8,
+        },
+    }
+
+    assert dissolve_value_for_items((common, rare, weird), config) == 10
 
 
 def test_unique_item_rejects_duplicate_equipped_blueprint():

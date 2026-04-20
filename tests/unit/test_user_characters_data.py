@@ -1,7 +1,38 @@
-from db.queries.users_namespace import UserCharactersData
+import asyncio
+
+from db.queries.users_namespace import UserCharactersData, UserCurrenciesDB
 from game.combat.skill_modifiers import ModifierInstance
 from game.core.enums import ItemEffect, ItemType
 from game.items.items import GeneratedItemEffect, ItemInstance
+
+
+class _FakeAcquire:
+    def __init__(self, conn):
+        self._conn = conn
+
+    async def __aenter__(self):
+        return self._conn
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakePool:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def acquire(self):
+        return _FakeAcquire(self._conn)
+
+
+class _FakeCurrencyConn:
+    def __init__(self, row):
+        self.row = row
+        self.calls = []
+
+    async def fetchrow(self, sql, *args):
+        self.calls.append((sql, args))
+        return self.row
 
 
 def test_parse_modifiers_accepts_json_string_with_stacks():
@@ -66,6 +97,7 @@ def test_item_instance_serialization_preserves_sets_and_unique():
         effects=(),
         item_sets=("crocodile_regalia", "predator_trinkets"),
         unique=True,
+        rarity="rare",
     )
 
     payload = UserCharactersData._serialize_item_instance(item)
@@ -93,3 +125,39 @@ def test_old_item_instance_data_does_not_backfill_sets_or_unique():
 
     assert parsed.item_sets == ()
     assert parsed.unique is False
+    assert parsed.rarity == "common"
+
+
+def test_user_currency_add_uses_composite_currency_key():
+    conn = _FakeCurrencyConn({
+        "currency_name": "Fortuna Motes",
+        "current_value": 8,
+    })
+
+    balance = asyncio.run(
+        UserCurrenciesDB(_FakePool(conn)).add_currency(
+            123,
+            "Fortuna Motes",
+            8,
+        ),
+    )
+
+    sql, args = conn.calls[0]
+    assert "ON CONFLICT (tg_id, currency_name)" in sql
+    assert args == (123, "Fortuna Motes", 8)
+    assert balance.currency_name == "Fortuna Motes"
+    assert balance.current_value == 8
+
+
+def test_user_currency_get_missing_returns_zero():
+    conn = _FakeCurrencyConn(None)
+
+    balance = asyncio.run(
+        UserCurrenciesDB(_FakePool(conn)).get_currency(
+            123,
+            "Fortuna Motes",
+        ),
+    )
+
+    assert balance.currency_name == "Fortuna Motes"
+    assert balance.current_value == 0

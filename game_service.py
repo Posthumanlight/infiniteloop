@@ -19,6 +19,7 @@ from game.core.data_loader import (
     load_classes,
     load_constants,
     load_effect,
+    load_item_dissolve_constants,
     load_item_sets,
     load_modifier,
     load_passive,
@@ -36,6 +37,11 @@ from game.core.enums import (
 )
 from game.core.formula_eval import ExprContext, evaluate_expr
 from game.character.player_character import PlayerCharacter
+from game.items.dissolve import (
+    dissolve_currency_name,
+    dissolve_rarity_values,
+    dissolve_value_for_items,
+)
 from game.items.equipment_effects import (
     collect_equipped_item_set_counts,
     get_effective_passive_ids,
@@ -44,6 +50,7 @@ from game.items.equipment_effects import (
     resolve_item_set_bonus_effects,
 )
 from game.items.item_generator import generate_item_from_blueprint_id
+from game.items.items import ItemInstance
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.session.models import SessionState
@@ -245,6 +252,35 @@ class GameService:
         )
         updated = self._reconcile_current_resources(updated)
         self._replace_runtime_player(session, updated)
+
+    def preview_dissolve_inventory_items(
+        self,
+        session_id: str,
+        entity_id: str,
+        instance_ids: tuple[str, ...],
+    ) -> tuple[tuple[ItemInstance, ...], int]:
+        session = self._get_session(session_id)
+        self._assert_not_in_combat(session)
+        player = self._get_runtime_player(session, entity_id)
+        items = player.inventory.get_dissolvable_items(instance_ids)
+        total = dissolve_value_for_items(items, load_item_dissolve_constants())
+        return items, total
+
+    def dissolve_inventory_items(
+        self,
+        session_id: str,
+        entity_id: str,
+        instance_ids: tuple[str, ...],
+    ) -> tuple[PlayerCharacter, tuple[ItemInstance, ...], int]:
+        session = self._get_session(session_id)
+        self._assert_not_in_combat(session)
+        player = self._get_runtime_player(session, entity_id)
+        inventory, dissolved = player.inventory.dissolve_items(instance_ids)
+        total = dissolve_value_for_items(dissolved, load_item_dissolve_constants())
+        updated = replace(player, inventory=inventory)
+        updated = self._reconcile_current_resources(updated)
+        self._replace_runtime_player(session, updated)
+        return updated, dissolved, total
 
     # ------------------------------------------------------------------
     # Class selection
@@ -1333,6 +1369,7 @@ class GameService:
                 blueprint_id=item.blueprint_id,
                 name=item.name,
                 item_type=item.item_type.value,
+                rarity=item.rarity,
                 quality=item.quality,
                 equipped_slot=player.inventory.equipped_slot(item.instance_id)[0],
                 equipped_index=player.inventory.equipped_slot(item.instance_id)[1],
@@ -1396,6 +1433,12 @@ class GameService:
                 if in_combat else None
             ),
             item_sets=GameService._build_item_set_infos(player),
+            dissolve_currency_name=dissolve_currency_name(
+                load_item_dissolve_constants(),
+            ),
+            dissolve_rarity_values=dissolve_rarity_values(
+                load_item_dissolve_constants(),
+            ),
         )
 
     # ------------------------------------------------------------------

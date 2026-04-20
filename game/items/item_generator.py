@@ -41,6 +41,7 @@ def generate_item(
         effects=tuple(effects),
         item_sets=blueprint.item_sets,
         unique=blueprint.unique,
+        rarity=blueprint.rarity,
     )
 
 

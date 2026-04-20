@@ -225,6 +225,7 @@ class ItemInfo:
     blueprint_id: str
     name: str
     item_type: str
+    rarity: str
     quality: int
     equipped_slot: str | None
     equipped_index: int | None
@@ -266,6 +267,8 @@ class InventorySnapshot:
     can_manage_equipment: bool
     equipment_lock_reason: str | None = None
     item_sets: tuple[ItemSetInfo, ...] = ()
+    dissolve_currency_name: str = "Fortuna Motes"
+    dissolve_rarity_values: dict[str, int] | None = None
 
 
 @dataclass(frozen=True)

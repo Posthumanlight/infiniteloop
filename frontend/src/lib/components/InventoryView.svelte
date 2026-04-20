@@ -2,7 +2,7 @@
   import EquipmentBoard from '$components/EquipmentBoard.svelte';
   import InventoryGrid from '$components/InventoryGrid.svelte';
   import SectionCard from '$components/SectionCard.svelte';
-  import { moveInventoryItem } from '$lib/api';
+  import { dissolveInventoryItems, moveInventoryItem } from '$lib/api';
   import type { InventoryMoveResponse, InventorySnapshot, Item, ItemEffect } from '$lib/types';
 
   type Selection =
@@ -26,14 +26,22 @@
 
   let selected = $state<Selection | null>(null);
   let movePending = $state(false);
+  let dissolveMode = $state(false);
+  let dissolvePending = $state(false);
+  let dissolveSelection = $state<Set<string>>(new Set());
   let moveError = $state('');
+  let dissolveNotice = $state('');
 
   function clearSelection(): void {
     selected = null;
   }
 
   function canManage(): boolean {
-    return inventory.can_manage_equipment && !movePending;
+    return inventory.can_manage_equipment && !movePending && !dissolvePending && !dissolveMode;
+  }
+
+  function canUseDissolveMode(): boolean {
+    return inventory.can_manage_equipment && !movePending && !dissolvePending;
   }
 
   function isTargetSlot(slotType: 'weapon' | 'armor' | 'relic', slotIndex: number | null, acceptsItemType: string): boolean {
@@ -65,6 +73,13 @@
   }
 
   function describeSelection(): string {
+    if (dissolveMode) {
+      if (dissolveSelection.size === 0) {
+        return `Select unequipped items to dissolve into ${inventory.dissolve_currency_name}.`;
+      }
+      return `${dissolveSelection.size} selected for ${selectedDissolveValue()} ${inventory.dissolve_currency_name}.`;
+    }
+
     if (!selected) {
       return 'Tap an inventory item, then tap an equipment slot. Tap an equipped item, then tap the inventory area to unequip.';
     }
@@ -123,6 +138,47 @@
     return formatLabel(effect.effect_type);
   }
 
+  function dissolveValueFor(item: Item): number {
+    return inventory.dissolve_rarity_values[item.rarity]
+      ?? inventory.dissolve_rarity_values.common
+      ?? 0;
+  }
+
+  function selectedDissolveItems(): Item[] {
+    return inventory.unequipped_items.filter((item) => dissolveSelection.has(item.instance_id));
+  }
+
+  function selectedDissolveValue(): number {
+    return selectedDissolveItems().reduce((total, item) => total + dissolveValueFor(item), 0);
+  }
+
+  function startDissolveMode(): void {
+    if (!canUseDissolveMode()) return;
+    clearSelection();
+    moveError = '';
+    dissolveNotice = '';
+    dissolveSelection = new Set();
+    dissolveMode = true;
+  }
+
+  function cancelDissolveMode(): void {
+    dissolveSelection = new Set();
+    dissolveMode = false;
+  }
+
+  function toggleDissolveItem(item: Item): void {
+    if (!dissolveMode || !canUseDissolveMode()) return;
+    moveError = '';
+    dissolveNotice = '';
+    const next = new Set(dissolveSelection);
+    if (next.has(item.instance_id)) {
+      next.delete(item.instance_id);
+    } else {
+      next.add(item.instance_id);
+    }
+    dissolveSelection = next;
+  }
+
   function selectInventoryItem(item: Item): void {
     if (!canManage()) return;
     moveError = '';
@@ -131,6 +187,29 @@
       return;
     }
     selected = { source: 'inventory', item };
+  }
+
+  async function confirmDissolve(): Promise<void> {
+    if (!dissolveMode || dissolveSelection.size === 0 || !canUseDissolveMode()) {
+      return;
+    }
+
+    dissolvePending = true;
+    moveError = '';
+    dissolveNotice = '';
+    try {
+      const nextState = await dissolveInventoryItems(
+        initData,
+        Array.from(dissolveSelection),
+      );
+      onStateUpdate(nextState);
+      dissolveNotice = `Dissolved ${nextState.dissolved_item_ids.length} item${nextState.dissolved_item_ids.length === 1 ? '' : 's'} for ${nextState.currency_delta} ${nextState.currency.currency_name}.`;
+      cancelDissolveMode();
+    } catch (error) {
+      moveError = error instanceof Error ? error.message : 'Failed to dissolve selected items.';
+    } finally {
+      dissolvePending = false;
+    }
   }
 
   function selectEquippedItem(
@@ -213,13 +292,45 @@
     <div class="error">{moveError}</div>
   {/if}
 
+  {#if dissolveNotice}
+    <div class="notice">{dissolveNotice}</div>
+  {/if}
+
   <div class="hint">{describeSelection()}</div>
+
+  <div class="inventory-actions">
+    {#if dissolveMode}
+      <button
+        type="button"
+        class="secondary"
+        onclick={cancelDissolveMode}
+        disabled={dissolvePending}
+      >
+        Cancel
+      </button>
+      <button
+        type="button"
+        onclick={confirmDissolve}
+        disabled={dissolveSelection.size === 0 || !canUseDissolveMode()}
+      >
+        Confirm Dissolve ({selectedDissolveValue()} {inventory.dissolve_currency_name})
+      </button>
+    {:else}
+      <button
+        type="button"
+        onclick={startDissolveMode}
+        disabled={!canUseDissolveMode() || inventory.unequipped_items.length === 0}
+      >
+        Dissolve Items
+      </button>
+    {/if}
+  </div>
 
   <SectionCard title="Equipment" eyebrow="Tap To Equip">
     <EquipmentBoard
       slots={inventory.equipment_slots}
       selectedInstanceId={selected?.item.instance_id ?? null}
-      canManageEquipment={canManage()}
+      canManageEquipment={!dissolveMode && canManage()}
       isTargetSlot={isTargetSlot}
       onItemTap={selectEquippedItem}
       onSlotTap={handleSlotTap}
@@ -254,13 +365,14 @@
     </SectionCard>
   {/if}
 
-  <SectionCard title="Inventory" eyebrow="Tap To Unequip">
+  <SectionCard title="Inventory" eyebrow={dissolveMode ? 'Select To Dissolve' : 'Tap To Unequip'}>
     <InventoryGrid
       items={inventory.unequipped_items}
-      selectedInstanceId={selected?.item.instance_id ?? null}
-      inventoryTargetActive={isInventoryTarget()}
-      canManageEquipment={canManage()}
-      onItemTap={selectInventoryItem}
+      selectedInstanceId={dissolveMode ? null : selected?.item.instance_id ?? null}
+      selectedInstanceIds={dissolveMode ? dissolveSelection : undefined}
+      inventoryTargetActive={!dissolveMode && isInventoryTarget()}
+      canManageEquipment={dissolveMode ? canUseDissolveMode() : canManage()}
+      onItemTap={dissolveMode ? toggleDissolveItem : selectInventoryItem}
       onInventoryTap={handleInventoryTap}
     />
   </SectionCard>
@@ -298,6 +410,34 @@
     border: 1px solid rgba(122, 193, 255, 0.18);
     color: rgba(228, 239, 252, 0.92);
     font-size: 0.94rem;
+  }
+
+  .inventory-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+  }
+
+  .inventory-actions button {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, #ffd24a, #ff9f43);
+    color: #201306;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .inventory-actions button.secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(232, 239, 250, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .inventory-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 
   .set-list {

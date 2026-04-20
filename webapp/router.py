@@ -5,12 +5,18 @@ from fastapi import APIRouter, HTTPException, Request
 from bot.tools.character_renderer import render_character_sheet
 from bot.tools.session_lookup import entity_id_for_tg_user
 from config import settings
+from db.queries.users_namespace import UserCurrenciesDB
+from game.core.data_loader import load_item_dissolve_constants
+from game.items.dissolve import dissolve_currency_name
 from webapp.auth import parse_telegram_init_data
 from webapp.links import WebAppEntry, parse_char_session_id, parse_webapp_entry
 from webapp.schemas import (
     CharacterBootstrapIn,
     CharacterBootstrapOut,
     CharacterSheetOut,
+    CurrencyBalanceOut,
+    InventoryDissolveIn,
+    InventoryDissolveOut,
     InventoryMoveIn,
     InventoryMoveOut,
     InventoryOut,
@@ -153,4 +159,74 @@ async def move_inventory_item(
     return InventoryMoveOut(
         sheet=CharacterSheetOut.from_domain(sheet),
         inventory=InventoryOut.from_domain(inventory),
+    )
+
+
+@router.post("/inventory/dissolve", response_model=InventoryDissolveOut)
+async def dissolve_inventory_items(
+    payload: InventoryDissolveIn,
+    request: Request,
+) -> InventoryDissolveOut:
+    init_data, entry = _parse_entry(payload.init_data)
+    game_service, entity_id = _resolve_entity_id(request, init_data, entry.session_id)
+
+    instance_ids = tuple(payload.instance_ids)
+    if not instance_ids:
+        raise HTTPException(status_code=400, detail="No items selected")
+
+    try:
+        dissolved_preview, payout = game_service.preview_dissolve_inventory_items(
+            entry.session_id,
+            entity_id,
+            instance_ids,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Item is not in your inventory") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    currency_name = dissolve_currency_name(load_item_dissolve_constants())
+    try:
+        currency = await UserCurrenciesDB(
+            request.app.state.db_pool,
+        ).add_currency(
+            init_data.user.id,
+            currency_name,
+            payout,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to grant dissolve currency",
+        ) from exc
+
+    try:
+        _player, dissolved_items, confirmed_payout = game_service.dissolve_inventory_items(
+            entry.session_id,
+            entity_id,
+            instance_ids,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Item is not in your inventory") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    sheet = game_service.get_character_sheet(entry.session_id, entity_id)
+    inventory = game_service.get_inventory(entry.session_id, entity_id)
+    dissolved_ids = [
+        item.instance_id
+        for item in dissolved_items
+    ]
+    if not dissolved_ids:
+        dissolved_ids = [item.instance_id for item in dissolved_preview]
+
+    return InventoryDissolveOut(
+        sheet=CharacterSheetOut.from_domain(sheet),
+        inventory=InventoryOut.from_domain(inventory),
+        dissolved_item_ids=dissolved_ids,
+        currency_delta=confirmed_payout,
+        currency=CurrencyBalanceOut(
+            currency_name=currency.currency_name,
+            current_value=currency.current_value,
+        ),
     )

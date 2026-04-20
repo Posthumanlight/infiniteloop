@@ -1,5 +1,6 @@
 [items.long_sword]
 name = "Long Sword"
+rarity = "common"
 effects = [
     { type = "modify_stat", stat = "attack", expr = "5 + quality*2" }
 ]
@@ -8,6 +9,7 @@ item_type = "weapon"
 [items.iron_armor]
 name = "Iron Armor"
 item_type = "armor"
+rarity = "common"
 effects = [
     { type = "modify_stat", stat = "resistance", expr = "10 + quality*3" }
 ]
@@ -15,6 +17,7 @@ effects = [
 [items.crocodile_tears]
 name = "Crocodile Tears"
 item_type = "relic"
+rarity = "rare"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [
@@ -24,6 +27,7 @@ effects = [
 [items.wolf_pelt]
 name = "Wolf Pelt"
 item_type = "relic"
+rarity = "uncommon"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [
@@ -33,6 +37,7 @@ effects = [
 [items.giant_snake_skull]
 name = "Giant Snake`s Skull"
 item_type = "relic"
+rarity = "epic"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [

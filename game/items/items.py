@@ -20,6 +20,7 @@ class ItemBlueprint:
     effects: tuple[ItemBlueprintEffect, ...]
     item_sets: tuple[str, ...] = ()
     unique: bool = False
+    rarity: str = "common"
 
 
 @dataclass(frozen=True)
@@ -54,3 +55,4 @@ class ItemInstance:
     effects: tuple[GeneratedItemEffect, ...]
     item_sets: tuple[str, ...] = ()
     unique: bool = False
+    rarity: str = "common"

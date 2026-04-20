@@ -37,6 +37,36 @@ class Inventory:
         del new_items[instance_id]
         return replace(self, items=new_items)
 
+    def get_dissolvable_items(
+        self,
+        instance_ids: tuple[str, ...],
+    ) -> tuple[ItemInstance, ...]:
+        if not instance_ids:
+            raise ValueError("No items selected")
+        if len(instance_ids) != len(set(instance_ids)):
+            raise ValueError("Duplicate item selection")
+
+        equipped_ids = set(self.equipped_instance_ids)
+        items: list[ItemInstance] = []
+        for instance_id in instance_ids:
+            if instance_id in equipped_ids:
+                raise ValueError("Equipped items cannot be dissolved")
+            item = self.items.get(instance_id)
+            if item is None:
+                raise KeyError(instance_id)
+            items.append(item)
+        return tuple(items)
+
+    def dissolve_items(
+        self,
+        instance_ids: tuple[str, ...],
+    ) -> tuple["Inventory", tuple[ItemInstance, ...]]:
+        dissolved = self.get_dissolvable_items(instance_ids)
+        new_items = dict(self.items)
+        for item in dissolved:
+            del new_items[item.instance_id]
+        return replace(self, items=new_items), dissolved
+
     def get_item(self, instance_id: str) -> ItemInstance:
         item = self.items.get(instance_id)
         if item is None:

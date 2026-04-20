@@ -96,6 +96,7 @@ export interface Item {
   blueprint_id: string;
   name: string;
   item_type: string;
+  rarity: string;
   quality: number;
   equipped_slot: string | null;
   equipped_index: number | null;
@@ -133,6 +134,8 @@ export interface InventorySnapshot {
   item_sets: ItemSet[];
   can_manage_equipment: boolean;
   equipment_lock_reason: string | null;
+  dissolve_currency_name: string;
+  dissolve_rarity_values: Record<string, number>;
 }
 
 export interface WebAppBootstrap {
@@ -145,4 +148,17 @@ export interface WebAppBootstrap {
 export interface InventoryMoveResponse {
   sheet: CharacterSheet;
   inventory: InventorySnapshot;
+}
+
+export interface CurrencyBalance {
+  currency_name: string;
+  current_value: number;
+}
+
+export interface InventoryDissolveResponse {
+  sheet: CharacterSheet;
+  inventory: InventorySnapshot;
+  dissolved_item_ids: string[];
+  currency_delta: number;
+  currency: CurrencyBalance;
 }

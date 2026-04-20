@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import dataclass
 
 import asyncpg
 
@@ -11,6 +12,14 @@ from game.items.items import GeneratedItemEffect, ItemInstance
 from game.session.lobby_manager import CharacterRecord, SavedCharacterSummary
 
 logger = logging.getLogger(__name__)
+
+FORTUNA_MOTES = "Fortuna Motes"
+
+
+@dataclass(frozen=True)
+class UserCurrencyBalance:
+    currency_name: str
+    current_value: int
 
 
 class UserData:
@@ -75,6 +84,83 @@ class UserSettingsDB:
                 await conn.execute(sql, *values)
         except Exception as exc:
             logger.error(f"DB error in upsert_settings for tg_id={tg_id}: {exc}")
+
+
+class UserCurrenciesDB:
+    def __init__(self, pool: asyncpg.Pool):
+        self.pool = pool
+
+    async def get_currency(
+        self,
+        tg_id: int,
+        currency_name: str,
+    ) -> UserCurrencyBalance:
+        sql = """
+            SELECT currency_name, current_value
+            FROM public.game_user_currencies
+            WHERE tg_id = $1 AND currency_name = $2
+            LIMIT 1
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(sql, int(tg_id), currency_name)
+        except Exception as exc:
+            logger.error(
+                "DB error in get_currency "
+                f"for tg_id={tg_id}, currency_name={currency_name}: {exc}",
+            )
+            raise
+
+        if row is None:
+            return UserCurrencyBalance(currency_name=currency_name, current_value=0)
+        return UserCurrencyBalance(
+            currency_name=str(row["currency_name"]),
+            current_value=int(row["current_value"] or 0),
+        )
+
+    async def add_currency(
+        self,
+        tg_id: int,
+        currency_name: str,
+        amount: int,
+    ) -> UserCurrencyBalance:
+        if amount < 0:
+            raise ValueError("Currency amount must be non-negative")
+
+        sql = """
+            INSERT INTO public.game_user_currencies (
+                tg_id,
+                currency_name,
+                current_value
+            )
+            VALUES ($1, $2, $3)
+            ON CONFLICT (tg_id, currency_name)
+            DO UPDATE SET current_value =
+                COALESCE(game_user_currencies.current_value, 0)
+                + EXCLUDED.current_value
+            RETURNING currency_name, current_value
+        """
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    sql,
+                    int(tg_id),
+                    currency_name,
+                    int(amount),
+                )
+        except Exception as exc:
+            logger.error(
+                "DB error in add_currency "
+                f"for tg_id={tg_id}, currency_name={currency_name}: {exc}",
+            )
+            raise
+
+        if row is None:
+            raise RuntimeError("Currency update did not return a row")
+        return UserCurrencyBalance(
+            currency_name=str(row["currency_name"]),
+            current_value=int(row["current_value"] or 0),
+        )
 
 
 class UserCharactersData(UserData):
@@ -231,6 +317,7 @@ class UserCharactersData(UserData):
             effects=cls._parse_generated_effects(row["generated_effects"]),
             item_sets=item_sets,
             unique=bool(parsed_additional.get("unique", False)),
+            rarity=str(parsed_additional.get("rarity", "common") or "common"),
         )
 
     @staticmethod
@@ -247,6 +334,7 @@ class UserCharactersData(UserData):
                 "name": item.name,
                 "item_sets": list(item.item_sets),
                 "unique": item.unique,
+                "rarity": item.rarity,
             }),
         }
 
