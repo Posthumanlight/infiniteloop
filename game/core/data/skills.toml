@@ -237,3 +237,28 @@ summary = "Blaze does boom boom"
 hits = [
   { target_type = "all_enemies", damage_type = "fire", formula = "attacker.attack+attacker.mastery+base_power", base_power = 1, variance = 0 }
 ]
+
+[skills.self_immolation]
+name = "Self-Immolation"
+energy_cost = 10
+action_type = "action"
+class_tags = ["summoner"]
+level_eligibility = [3, 99]
+cooldown = 4
+summary = "Orders your summons to attack the chosen enemy."
+hits = []
+self_effects = []
+summons = []
+summon_commands = [
+  { summon_skill_id = "self_immolation_summon", summon_types = [], cast_policy = "normal" },
+]
+
+[skills.self_immolation_summon]
+name = "Self-Immolation Summon"
+energy_cost = 0
+action_type = "action"
+summary = "self immolation on summoner side"
+hits = [
+  {target_type = "self", damage_type = "fire", formula = "attacker.current_hp * 0.5 + base_power", base_power = 10, variance = 0},
+  {target_type = "all_enemies", damage_type = "fire", formula = "attacker.attack*1+base_power*(attacker.mastery*0.1)", base_power = 10, variance = 0.0}
+]

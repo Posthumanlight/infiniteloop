@@ -1,7 +1,7 @@
 [summons.familiar]
 name = "Familiar"
 max_per_owner = 1
-skills = ["generic_enemy_attack"]
+skills = ["generic_enemy_attack", "self_immolation_summon"]
 passives = []
 
 [summons.familiar.major_stat_formulas]
@@ -20,7 +20,7 @@ arcane_dmg_pct = "owner.mastery * 0.01"
 [summons.blaze]
 name = "Blaze"
 max_per_owner = 1
-skills = ["generic_enemy_attack"]
+skills = ["generic_enemy_attack", "self_immolation_summon"]
 passives = ["blaze_of_glory"]
 
 [summons.blaze.major_stat_formulas]
