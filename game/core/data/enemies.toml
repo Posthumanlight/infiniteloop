@@ -35,6 +35,23 @@ energy = 50
 mastery = 2
 [enemies.goblin_boss.minor_stats]
 
+[enemies.goblin_shaman]
+name = "Goblin Shaman"
+skills = ["generic_enemy_attack"]
+passives = []
+xp_reward = 20
+combat_type = "normal"
+tags = ["forest", "cave"]
+[enemies.goblin.major_stats]
+attack = 2
+hp = 50
+speed = 1
+crit_chance = 0.00
+crit_dmg = 1.3
+resistance = 60
+energy = 50
+mastery = 4
+[enemies.goblin.minor_stats]
 
 [enemies.bandit]
 name = "Bandit"
@@ -174,3 +191,4 @@ energy = 70
 mastery = 6
 [enemies.fire_imp.minor_stats]
 fire_dmg_pct = 0.15
+

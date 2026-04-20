@@ -81,3 +81,13 @@ stackable = true
 actions = [
   {type = "damage", expr = "attacker.attack*0.25", damage_type = "piercing"}
 ]
+
+#goblin_shaman
+[effects.goblin_shaman_healing_rain_effect]
+name = "Healing Rain"
+trigger = "on_apply"
+duration = 1
+stackable = false
+actions = [
+  { type = "heal", expr = "10 + target.hp * 0.1", scales_with_stacks = false },
+]

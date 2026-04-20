@@ -17,7 +17,7 @@ effects = [
 [items.crocodile_tears]
 name = "Crocodile Tears"
 item_type = "relic"
-rarity = "rare"
+rarity = "common"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [
@@ -27,7 +27,7 @@ effects = [
 [items.wolf_pelt]
 name = "Wolf Pelt"
 item_type = "relic"
-rarity = "uncommon"
+rarity = common"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [
@@ -37,7 +37,7 @@ effects = [
 [items.giant_snake_skull]
 name = "Giant Snake`s Skull"
 item_type = "relic"
-rarity = "epic"
+rarity = "common"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [

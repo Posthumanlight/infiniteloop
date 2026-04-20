@@ -42,6 +42,18 @@ hits = [
   {target_type = "all_enemies", damage_type = "piercing", formula = "attacker.attack*0.5", base_power = 1, variance = 0.5, on_hit_effects = [{effect = "titanoboa_poison", chance = 1.0}]}
 ]
 
+#goblin_shaman
+[skills.goblin_shaman_healing_rain]
+name = "Healing Rain"
+energy_cost = 10
+action_type = "action"
+cooldown = 3
+summary = "goblin heal allies"
+hits = [
+   { target_type = "all_allies", damage_type = "arcane", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{ effect = "goblin_shaman_healing_rain_effect", chance = 1.0 }] },
+]
+
+
 #PLAYERS
 #warrior
 [skills.slash]
@@ -197,7 +209,7 @@ summary = "Summons a Familiar."
 hits = []
 self_effects = []
 summons = [
-  { summon_id = "familiar", count_expr = "1", duration_own_turns = 5 },
+  { summon_id = "familiar", count_expr = "1", duration_own_turns = 10 },
 ]
 
 [skills.mana_reave]
@@ -272,4 +284,28 @@ summary = "self immolation on summoner side"
 hits = [
   {target_type = "self", damage_type = "fire", formula = "attacker.current_hp * 0.5 + base_power", base_power = 10, variance = 0},
   {target_type = "all_enemies", damage_type = "fire", formula = "attacker.attack*1+base_power*(attacker.mastery*0.1)", base_power = 10, variance = 0.0}
+]
+
+[skills.summon_ice_golem]
+name = "Summon Ice Golem"
+energy_cost = 70
+action_type = "action"
+cooldown = 10
+level_eligibility = [6, 99]
+class_tags = ["summoner"]
+summary = "Summons an Ice Golem."
+hits = []
+self_effects = []
+summons = [
+  { summon_id = "ice_golem", count_expr = "1", duration_own_turns = 99 },
+]
+
+[skills.blizzard]
+name = "Blizzard"
+energy_cost = 0
+action_type = "action"
+summary = "damages all enemies"
+cooldown = 3
+hits = [
+  {target_type = "all_enemies", damage_type = "ice", formula = "(attacker.attack+base_power+attacker.mastery)", base_power = 1, variance = 0.0}
 ]
