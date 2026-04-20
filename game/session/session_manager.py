@@ -165,7 +165,11 @@ class SessionManager:
                     raise ValueError(
                         f"Event location {location.location_id} has no event_id"
                     )
-                return self._node.enter_event(state, location.event_id)
+                return self._node.enter_event(
+                    state,
+                    location.event_id,
+                    room_difficulty=location.room_difficulty,
+                )
             case _:
                 raise ValueError(
                     f"Unknown location type: {location.location_type}"
@@ -229,7 +233,7 @@ class SessionManager:
     def resolve_event(self, state: SessionState) -> SessionState:
         self._assert_phase(state, SessionPhase.IN_EVENT)
 
-        state, combat_enemy_ids = self._node.resolve_event(state)
+        state, combat_enemy_ids, room_difficulty = self._node.resolve_event(state)
 
         # Chain into combat if START_COMBAT outcome triggered
         if combat_enemy_ids:
@@ -239,6 +243,10 @@ class SessionManager:
                     phase=SessionPhase.ENDED,
                     end_reason=SessionEndReason.PARTY_WIPED,
                 )
-            return self._node.enter_combat(state, combat_enemy_ids)
+            return self._node.enter_combat(
+                state,
+                combat_enemy_ids,
+                room_difficulty=room_difficulty,
+            )
 
         return self._check_end_conditions(state)

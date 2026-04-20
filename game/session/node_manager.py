@@ -290,6 +290,7 @@ class NodeManager:
         self,
         state: SessionState,
         event_id: str,
+        room_difficulty: RoomDifficultyModifier | None = None,
     ) -> SessionState:
         """Load event from TOML and start an event encounter."""
         event_def = load_event(event_id)
@@ -299,6 +300,7 @@ class NodeManager:
             event_def=event_def,
             player_ids=player_ids,
             seed=self._next_seed(),
+            room_difficulty=room_difficulty,
         )
         return replace(
             state,
@@ -318,15 +320,15 @@ class NodeManager:
     def resolve_event(
         self,
         state: SessionState,
-    ) -> tuple[SessionState, tuple[str, ...]]:
-        """Resolve event votes, apply outcomes, return combat enemies if any.
+    ) -> tuple[SessionState, tuple[str, ...], RoomDifficultyModifier | None]:
+        """Resolve event votes, apply outcomes, and preserve combat difficulty."""
+        event = state.event
+        if event is None:
+            raise ValueError("No active event to resolve.")
 
-        Returns:
-            (updated_state, combat_enemy_ids) — combat_enemy_ids is non-empty
-            if a START_COMBAT outcome was triggered.
-        """
+        room_difficulty = event.room_difficulty
         event_state, resolution = _resolve_event(
-            state.event, list(state.players),
+            event, list(state.players),
         )
         state = replace(
             state,
@@ -353,7 +355,7 @@ class NodeManager:
         if not combat_enemy_ids:
             state = self._restore_between_nodes(state, self._restoration_formula)
 
-        return state, tuple(combat_enemy_ids)
+        return state, tuple(combat_enemy_ids), room_difficulty
 
     # ------------------------------------------------------------------
     # Level-up rewards (modifier or ability)

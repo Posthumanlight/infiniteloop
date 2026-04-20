@@ -5,7 +5,7 @@ skills = ["generic_enemy_attack", "self_immolation_summon"]
 passives = []
 
 [summons.familiar.major_stat_formulas]
-attack = "owner.attack * 0.45 + owner.mastery * 0.4"
+attack = "owner.attack * 0.45 + owner.mastery * 0.4 + 5"
 hp = "owner.hp * 0.25 + owner.mastery * 3 + 25"
 speed = "owner.speed * 0.9"
 crit_chance = "owner.crit_chance"

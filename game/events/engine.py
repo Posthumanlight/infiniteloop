@@ -1,6 +1,7 @@
 import uuid
 from collections import Counter
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from game.character.player_character import PlayerCharacter
 from game.core.dice import SeededRNG
@@ -8,12 +9,16 @@ from game.core.enums import EventPhase, EventType
 from game.events.models import EventDef, EventResolution, EventState, Vote
 from game.events.outcomes import resolve_outcomes
 
+if TYPE_CHECKING:
+    from game.world.difficulty import RoomDifficultyModifier
+
 
 def start_event(
     session_id: str,
     event_def: EventDef,
     player_ids: list[str],
     seed: int,
+    room_difficulty: "RoomDifficultyModifier | None" = None,
 ) -> EventState:
     """Create a new event and return the initial state.
 
@@ -34,6 +39,7 @@ def start_event(
         phase=EventPhase.PRESENTING,
         player_ids=tuple(player_ids),
         rng_state=rng.get_state(),
+        room_difficulty=room_difficulty,
     )
 
 

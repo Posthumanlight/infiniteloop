@@ -226,7 +226,7 @@ summary = "Summons a Blaze."
 hits = []
 self_effects = []
 summons = [
-  { summon_id = "familiar", count_expr = "1", duration_own_turns = 5 },
+  { summon_id = "blaze", count_expr = "1", duration_own_turns = 5 },
 ]
 
 [skills.blaze_of_glory]

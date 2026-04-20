@@ -1,6 +1,10 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from game.core.enums import EventPhase, EventType, OutcomeAction, OutcomeTarget
+
+if TYPE_CHECKING:
+    from game.world.difficulty import RoomDifficultyModifier
 
 
 # ---------------------------------------------------------------------------
@@ -101,3 +105,4 @@ class EventState:
     votes: tuple[Vote, ...] = ()
     resolution: EventResolution | None = None
     rng_state: tuple | None = None
+    room_difficulty: "RoomDifficultyModifier | None" = None
