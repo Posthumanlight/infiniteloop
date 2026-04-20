@@ -42,7 +42,7 @@ passives = []
 xp_reward = 20
 combat_type = "normal"
 tags = ["forest", "cave"]
-[enemies.goblin.major_stats]
+[enemies.goblin_shaman.major_stats]
 attack = 2
 hp = 50
 speed = 1
@@ -51,7 +51,7 @@ crit_dmg = 1.3
 resistance = 60
 energy = 50
 mastery = 4
-[enemies.goblin.minor_stats]
+[enemies.goblin_shaman.minor_stats]
 
 [enemies.bandit]
 name = "Bandit"
