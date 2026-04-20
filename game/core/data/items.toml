@@ -16,7 +16,6 @@ effects = [
 name = "Crocodile Tears"
 item_type = "relic"
 unique = true
-item_sets = ["crocodile_regalia"]
 effects = [
     { type = "modify_stat", stat = "crit_chance", expr = "0.04 + quality*0.005" }
 ]
