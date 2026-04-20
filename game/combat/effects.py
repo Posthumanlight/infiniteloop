@@ -9,7 +9,10 @@ from game.core.data_loader import load_constants, load_effect, load_modifier
 from game.core.dice import SeededRNG
 from game.core.enums import DamageType, EffectActionType, TriggerType
 from game.core.formula_eval import ExprContext, evaluate_expr
-from game.items.equipment_effects import collect_equipped_item_effects
+from game.items.equipment_effects import (
+    apply_equipped_stat_modifiers,
+    collect_equipped_item_effects,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -610,7 +613,11 @@ def get_effective_major_stat(
 
     if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
         item_effects = collect_equipped_item_effects(entity.inventory)
-        base_value += item_effects.stat_modifiers.get(stat_name, 0.0)
+        base_value = apply_equipped_stat_modifiers(
+            item_effects,
+            stat_name,
+            base_value,
+        )
 
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)
@@ -653,7 +660,11 @@ def get_effective_minor_stat(
 
     if isinstance(entity, PlayerCharacter) and entity.inventory is not None:
         item_effects = collect_equipped_item_effects(entity.inventory)
-        base_value += item_effects.stat_modifiers.get(stat_key, 0.0)
+        base_value = apply_equipped_stat_modifiers(
+            item_effects,
+            stat_key,
+            base_value,
+        )
 
     for inst in entity.active_effects:
         effect_def = load_effect(inst.effect_id)

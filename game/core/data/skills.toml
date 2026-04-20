@@ -31,6 +31,17 @@ hits = [
   {target_type = "single_enemy", damage_type = "piercing", formula = "attacker.attack*2", base_power = 10, variance = 0.25, on_hit_effects = [{effect = "stun", chance = 1.0}]}
 ]
 
+#titanoboa
+[skills.titanoboa_poison]
+name = "Titanoboa Poison"
+energy_cost = 0
+action_type = "action"
+cooldown = 2
+summary = Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
+hits = [
+  {target_type = "all_enemies", damage_type = "piercing", formula = "attacker.attack*0.5", base_power = 1, variance = 0.5, on_hit_effects = [{effect = "titanoboa_poison", chance = 1.0}]}
+]
+
 #PLAYERS
 #warrior
 [skills.slash]

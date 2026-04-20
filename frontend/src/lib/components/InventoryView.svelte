@@ -104,9 +104,17 @@
     return `${sign}${Number.isInteger(value) ? value : value.toFixed(1)}`;
   }
 
+  function formatPercentValue(value: number): string {
+    const sign = value > 0 ? '+' : '';
+    return `${sign}${(value * 100).toFixed(1)}%`;
+  }
+
   function describeEffect(effect: ItemEffect): string {
     if (effect.effect_type === 'modify_stat' && effect.stat && effect.value !== null) {
       return `${formatEffectValue(effect.stat, effect.value)} ${formatLabel(effect.stat)}`;
+    }
+    if (effect.effect_type === 'modify_stat_percent' && effect.stat && effect.value !== null) {
+      return `${formatPercentValue(effect.value)} ${formatLabel(effect.stat)}`;
     }
     if (effect.effect_type === 'grant_skill' && effect.skill_id) return `Grants ${formatLabel(effect.skill_id)}`;
     if (effect.effect_type === 'block_skill' && effect.skill_id) return `Blocks ${formatLabel(effect.skill_id)}`;

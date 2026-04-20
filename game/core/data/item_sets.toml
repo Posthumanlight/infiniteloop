@@ -1,0 +1,14 @@
+[item_sets.wrath_of_beasts]
+name = "Wrath of Beasts"
+
+[[item_sets.wrath_of_beasts.bonuses]]
+required_count = 2
+effects = [
+  { type = "modify_stat", stat = "crit_dmg", expr = "0.10" },
+]
+
+[[item_sets.wrath_of_beasts.bonuses]]
+required_count = 3
+effects = [
+  { type = "modify_stat_percent", stat = "attack", expr = "0.10" },
+]

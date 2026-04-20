@@ -227,25 +227,29 @@ def test_load_item_blueprint_long_sword():
     assert item.item_type == ItemType.WEAPON
     assert item.effects[0].effect_type == ItemEffect.MODIFY_STAT
     assert item.effects[0].stat == "attack"
-    assert item.effects[0].expr == "10 + quality"
+    assert item.effects[0].expr == "5 + quality*2"
 
 
 def test_load_item_blueprint_with_sets_and_unique():
     item = load_item_blueprint("crocodile_tears")
 
     assert item.item_type == ItemType.RELIC
-    assert item.item_sets == ("crocodile_regalia",)
+    assert item.item_sets == ("wrath_of_beasts",)
     assert item.unique is True
 
 
 def test_load_item_sets():
     item_sets = load_item_sets()
-    crocodile = item_sets["crocodile_regalia"]
+    wrath = item_sets["wrath_of_beasts"]
 
-    assert crocodile.name == "Crocodile Regalia"
-    assert [bonus.required_count for bonus in crocodile.bonuses] == [2, 3]
-    assert crocodile.bonuses[0].effects[0].effect_type == ItemEffect.MODIFY_STAT
-    assert crocodile.bonuses[1].effects[0].effect_type == ItemEffect.GRANT_PASSIVE
+    assert wrath.name == "Wrath of Beasts"
+    assert [bonus.required_count for bonus in wrath.bonuses] == [2, 3]
+    assert wrath.bonuses[0].effects[0].effect_type == ItemEffect.MODIFY_STAT
+    assert wrath.bonuses[0].effects[0].stat == "crit_dmg"
+    assert wrath.bonuses[0].effects[0].expr == "0.10"
+    assert wrath.bonuses[1].effects[0].effect_type == ItemEffect.MODIFY_STAT_PERCENT
+    assert wrath.bonuses[1].effects[0].stat == "attack"
+    assert wrath.bonuses[1].effects[0].expr == "0.10"
 
 
 def test_item_loader_rejects_singular_item_set(monkeypatch):
@@ -292,6 +296,33 @@ def test_item_loader_rejects_unknown_item_set(monkeypatch):
         data_loader.load_item_blueprints()
 
 
+def test_item_loader_rejects_percent_stat_effect_without_expr(monkeypatch):
+    def fake_load_toml(filename: str):
+        if filename == "item_sets.toml":
+            return {"item_sets": {}}
+        if filename == "items.toml":
+            return {
+                "items": {
+                    "bad": {
+                        "name": "Bad",
+                        "item_type": "relic",
+                        "effects": [
+                            {
+                                "type": "modify_stat_percent",
+                                "stat": "attack",
+                            },
+                        ],
+                    },
+                },
+            }
+        raise AssertionError(filename)
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="requires stat and expr"):
+        data_loader.load_item_blueprints()
+
+
 def test_item_set_loader_rejects_duplicate_thresholds(monkeypatch):
     def fake_load_toml(filename: str):
         if filename == "item_sets.toml":
@@ -332,12 +363,14 @@ def test_item_set_loader_rejects_duplicate_thresholds(monkeypatch):
         data_loader.load_item_sets()
 
 
-def test_load_item_blueprint_sealed_talisman():
-    item = load_item_blueprint("sealed_talisman")
+def test_load_item_blueprint_wolf_pelt():
+    item = load_item_blueprint("wolf_pelt")
 
     assert item.item_type == ItemType.RELIC
-    assert item.effects[0].effect_type == ItemEffect.BLOCK_SKILL
-    assert item.effects[0].skill_id == "slash"
+    assert item.item_sets == ("wrath_of_beasts",)
+    assert item.unique is True
+    assert item.effects[0].effect_type == ItemEffect.MODIFY_STAT
+    assert item.effects[0].stat == "crit_chance"
 
 
 def test_load_loot_constants():

@@ -134,6 +134,26 @@ mastery = 1
 [enemies.crocodile.minor_stats]
 slashing_def_pct = 0.15
 
+[enemies.titanoboa]
+name = "Titanoboa"
+skills = ["titanoboa_poison", "generic_enemy_attack"]
+passives = []
+xp_reward = 40
+combat_type = "elite"
+tags = ["forest", "wild"]
+[enemies.titanoboa.major_stats]
+attack = 12
+hp = 60
+speed = 5
+crit_chance = 0.0
+crit_dmg = 1.3
+resistance = 100
+energy = 60
+mastery = 1
+[enemies.titanoboa.minor_stats]
+
+
+
 
 #demons
 [enemies.fire_imp]

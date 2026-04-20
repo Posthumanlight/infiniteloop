@@ -695,7 +695,7 @@ def load_enemy_loot(enemy_id: str) -> tuple[LootDropData, ...]:
 # Item definitions
 # ---------------------------------------------------------------------------
 
-_ITEM_STAT_EFFECTS = {ItemEffect.MODIFY_STAT}
+_ITEM_STAT_EFFECTS = {ItemEffect.MODIFY_STAT, ItemEffect.MODIFY_STAT_PERCENT}
 _ITEM_SKILL_EFFECTS = {
     ItemEffect.GRANT_SKILL,
     ItemEffect.BLOCK_SKILL,

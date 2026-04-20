@@ -12,6 +12,7 @@ from game.items.items import GeneratedItemEffect, ItemSetBonusData
 @dataclass(frozen=True)
 class EquippedItemEffects:
     stat_modifiers: dict[str, float]
+    stat_percent_modifiers: dict[str, float]
     granted_skills: tuple[str, ...]
     blocked_skills: tuple[str, ...]
     granted_passives: tuple[str, ...]
@@ -21,6 +22,7 @@ class EquippedItemEffects:
 @dataclass
 class _EffectAccumulator:
     stats: dict[str, float]
+    stat_percents: dict[str, float]
     grant_skills: list[str]
     block_skills: list[str]
     grant_passives: list[str]
@@ -49,6 +51,13 @@ def _apply_generated_effect(
             acc.stats[effect.stat] = acc.stats.get(effect.stat, 0.0) + float(
                 effect.value or 0.0,
             )
+        case ItemEffect.MODIFY_STAT_PERCENT:
+            if effect.stat is None:
+                return
+            acc.stat_percents[effect.stat] = acc.stat_percents.get(
+                effect.stat,
+                0.0,
+            ) + float(effect.value or 0.0)
         case ItemEffect.GRANT_SKILL:
             if effect.skill_id is not None:
                 acc.grant_skills.append(effect.skill_id)
@@ -83,7 +92,10 @@ def resolve_item_set_bonus_effects(
     }
     for effect in bonus.effects:
         value = None
-        if effect.effect_type == ItemEffect.MODIFY_STAT:
+        if effect.effect_type in {
+            ItemEffect.MODIFY_STAT,
+            ItemEffect.MODIFY_STAT_PERCENT,
+        }:
             value = evaluate_expr(effect.expr or "0", ctx)
 
         resolved.append(GeneratedItemEffect(
@@ -100,6 +112,7 @@ def resolve_item_set_bonus_effects(
 def collect_equipped_item_effects(inventory: Inventory) -> EquippedItemEffects:
     acc = _EffectAccumulator(
         stats={},
+        stat_percents={},
         grant_skills=[],
         block_skills=[],
         grant_passives=[],
@@ -126,11 +139,22 @@ def collect_equipped_item_effects(inventory: Inventory) -> EquippedItemEffects:
 
     return EquippedItemEffects(
         stat_modifiers=acc.stats,
+        stat_percent_modifiers=acc.stat_percents,
         granted_skills=_ordered_unique(acc.grant_skills),
         blocked_skills=_ordered_unique(acc.block_skills),
         granted_passives=_ordered_unique(acc.grant_passives),
         blocked_passives=_ordered_unique(acc.block_passives),
     )
+
+
+def apply_equipped_stat_modifiers(
+    item_effects: EquippedItemEffects,
+    stat_name: str,
+    base_value: float,
+) -> float:
+    base_with_flats = base_value + item_effects.stat_modifiers.get(stat_name, 0.0)
+    percent_bonus = item_effects.stat_percent_modifiers.get(stat_name, 0.0)
+    return base_with_flats + base_with_flats * percent_bonus
 
 
 def get_effective_passive_ids(entity: BaseEntity) -> tuple[str, ...]:
@@ -156,7 +180,7 @@ def get_effective_player_major_stat(
     if player.inventory is None:
         return base_value
     item_effects = collect_equipped_item_effects(player.inventory)
-    return base_value + item_effects.stat_modifiers.get(stat_name, 0.0)
+    return apply_equipped_stat_modifiers(item_effects, stat_name, base_value)
 
 
 def get_effective_player_minor_stat(
@@ -167,4 +191,4 @@ def get_effective_player_minor_stat(
     if player.inventory is None:
         return base_value
     item_effects = collect_equipped_item_effects(player.inventory)
-    return base_value + item_effects.stat_modifiers.get(stat_key, 0.0)
+    return apply_equipped_stat_modifiers(item_effects, stat_key, base_value)

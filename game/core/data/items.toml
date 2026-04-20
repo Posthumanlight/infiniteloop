@@ -1,7 +1,7 @@
 [items.long_sword]
 name = "Long Sword"
 effects = [
-    { type = "modify_stat", stat = "attack", expr = "10 + quality" }
+    { type = "modify_stat", stat = "attack", expr = "5 + quality*2" }
 ]
 item_type = "weapon"
 
@@ -9,13 +9,33 @@ item_type = "weapon"
 name = "Iron Armor"
 item_type = "armor"
 effects = [
-    { type = "modify_stat", stat = "resistance", expr = "10 + quality" }
+    { type = "modify_stat", stat = "resistance", expr = "10 + quality*3" }
 ]
 
 [items.crocodile_tears]
 name = "Crocodile Tears"
 item_type = "relic"
 unique = true
+item_sets = ["wrath_of_beasts"]
 effects = [
     { type = "modify_stat", stat = "crit_chance", expr = "0.04 + quality*0.005" }
+]
+
+[items.wolf_pelt]
+name = "Wolf Pelt"
+item_type = "relic"
+unique = true
+item_sets = ["wrath_of_beasts"]
+effects = [
+    {type = "modify_stat", stat = "crit_chance", expr = "0.08 + quality*0.01"}
+]
+
+[items.giant_snake_skull]
+name = "Giant Snake`s Skull"
+item_type = "relic"
+unique = true
+item_sets = ["wrath_of_beasts"]
+effects = [
+{ type = "modify_stat", stat = "crit_chance", expr = "0.02 + quality*0.003" },
+{type = "modify_stat", stat = "crit_chance", expr = "0.04 + quality*0.005"}
 ]

@@ -70,3 +70,14 @@ stackable = false
 actions = [
   { type = "damage_taken_mult", expr = "0.75" },
 ]
+
+#enemies
+#titanoboa
+[effects.titanoboa_poison]
+name = "Poison (Titanoboa)"
+trigger = "on_turn_start"
+duration = 5
+stackable = true
+actions = [
+  {type = "damage", expr = "attacker.attack*0.25", damage_type = "piercing"}
+]

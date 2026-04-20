@@ -158,6 +158,7 @@ class ItemType(Enum):
 
 class ItemEffect(Enum):
     MODIFY_STAT = "modify_stat"
+    MODIFY_STAT_PERCENT = "modify_stat_percent"
     GRANT_SKILL = "grant_skill"
     BLOCK_SKILL = "block_skill"
     GRANT_PASSIVE = "grant_passive"

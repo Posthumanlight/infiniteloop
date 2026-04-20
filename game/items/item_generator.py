@@ -14,8 +14,10 @@ def generate_item(
 ) -> ItemInstance:
     effects: list[GeneratedItemEffect] = []
 
+    stat_effects = {ItemEffect.MODIFY_STAT, ItemEffect.MODIFY_STAT_PERCENT}
+
     for effect in blueprint.effects:
-        if effect.effect_type == ItemEffect.MODIFY_STAT:
+        if effect.effect_type in stat_effects:
             value = evaluate_expr(effect.expr or "0", {"quality": quality})
             effects.append(GeneratedItemEffect(
                 effect_type=effect.effect_type,

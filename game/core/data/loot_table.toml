@@ -18,3 +18,17 @@ item_id = "crocodile_tears"
 min_quantity = 1
 max_quantity = 1
 drop_rate = 1.0
+
+[[drops]]
+enemy_id = "wolf"
+item_id = "wolf_pelt"
+min_quantity = 1
+max_quantity = 1
+drop_rate = 0.1
+
+[[drops]]
+enemy_id = "titanoboa"
+item_id = "giant_snake_skull"
+min_quantity = 1
+max_quantity = 1
+drop_rate = 1.0
