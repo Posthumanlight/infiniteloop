@@ -20,6 +20,13 @@ from game.core.enums import ModifierPhase, TriggerType
 from game.combat.models import ActionRequest, SkillResolutionResult
 
 
+def _live_target_entity(state: CombatState, target_id: str):
+    target = state.entities.get(target_id)
+    if target is None or target.current_hp <= 0:
+        return None
+    return target
+
+
 def _resolve_skill_core(
     state: CombatState,
     actor_id: str,
@@ -58,11 +65,10 @@ def _resolve_skill_core(
         )
 
         for target_id in target_ids:
-            attacker = state.entities[actor_id]
-            defender = state.entities[target_id]
-
-            if defender.current_hp <= 0:
+            defender = _live_target_entity(state, target_id)
+            if defender is None:
                 continue
+            attacker = state.entities[actor_id]
 
             effect_mult = get_damage_multiplier(state, actor_id, target_id, hit.damage_type)
 
