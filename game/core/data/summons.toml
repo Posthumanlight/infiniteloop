@@ -39,10 +39,10 @@ fire_dmg_pct = "owner.mastery * 0.3"
 [summons.ice_golem]
 name = "Ice Golem"
 max_per_owner = 1
-skills = ["blizzard", generic_enemy_attack", "self_immolation_summon"]
+skills = ["blizzard", "generic_enemy_attack", "self_immolation_summon"]
 passives = []
 
-[summons.blaze.major_stat_formulas]
+[summons.ice_golem.major_stat_formulas]
 attack = "owner.attack"
 hp = "25 + owner.hp"
 speed = "owner.speed * 0.9"
@@ -52,5 +52,5 @@ resistance = "0"
 energy = "40"
 mastery = "owner.mastery *1.5"
 
-[summons.blaze.minor_stat_formulas]
+[summons.ice_golem.minor_stat_formulas]
 ice_dmg_pct = "owner.mastery * 0.1"
