@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
+from game.character.hero_upgrades import HeroUpgradePreview, HeroUpgradeService
 from game.character.player_character import PlayerCharacter
 from game.combat.models import CombatState
 from game.core.game_models import (
@@ -92,6 +93,7 @@ class LobbyService(ActiveSessionProvider):
         self._view_builder = view_builder
         self._progression = load_progression()
         self._base_stats = _build_base_stats_map()
+        self._hero_upgrades = HeroUpgradeService()
 
     @property
     def lobby_manager(self) -> LobbyManager:
@@ -223,6 +225,54 @@ class LobbyService(ActiveSessionProvider):
         tg_user_id: int,
     ) -> tuple[SavedCharacterSummary, ...]:
         return tuple(await self._chars_db.get_user_characters(tg_user_id))
+
+    async def list_hero_upgrades(
+        self,
+        target: CharacterTarget,
+    ) -> tuple[HeroUpgradePreview, ...]:
+        record = await self._record_for_upgrade_target(target)
+        return self._hero_upgrades.list_previews(record)
+
+    async def preview_hero_upgrade(
+        self,
+        target: CharacterTarget,
+        hero_class_id: str,
+    ) -> HeroUpgradePreview:
+        record = await self._record_for_upgrade_target(target)
+        return self._hero_upgrades.preview(record, hero_class_id)
+
+    async def apply_hero_upgrade(
+        self,
+        target: CharacterTarget,
+        hero_class_id: str,
+    ) -> CharacterSelection:
+        record = await self._record_for_upgrade_target(target)
+        updated = self._hero_upgrades.apply(record, hero_class_id)
+        await self._persist_saved_player(record.character_id, updated)
+
+        if target.kind == "lobby":
+            if target.session_id is None:
+                raise ValueError("Invalid lobby character target")
+            lobby = self.get_lobby(target.session_id)
+            lobby_player = lobby.players.get(target.tg_user_id)
+            if lobby_player is not None:
+                await self._lobby_manager.refresh_player_characters(
+                    target.session_id,
+                    target.tg_user_id,
+                )
+                lobby_player.available_characters = tuple(
+                    replace(
+                        summary,
+                        class_id=updated.player_class,
+                        level=updated.level,
+                        xp=updated.xp,
+                    )
+                    if summary.character_id == record.character_id else summary
+                    for summary in lobby_player.available_characters
+                )
+            self._selected_cache[(target.session_id, target.tg_user_id)] = updated
+
+        return await self.get_character_selection(target)
 
     def target_for_session_user(
         self,
@@ -508,13 +558,56 @@ class LobbyService(ActiveSessionProvider):
         await self._chars_db.save_character_progress(
             character_id=character_id,
             character_name=record.character_name or f"#{character_id}",
+            class_id=player.player_class,
             level=player.level,
             xp=player.xp,
             skills=player.skills,
+            passive_skills=player.passive_skills,
             skill_modifiers=player.skill_modifiers,
             inventory=player.inventory,
             flags=player.flags,
         )
+
+    async def _record_for_upgrade_target(
+        self,
+        target: CharacterTarget,
+    ):
+        if target.kind == "run":
+            raise ValueError("Hero upgrades are not available during a run")
+
+        if target.kind == "saved":
+            if target.character_id is None:
+                raise ValueError("Invalid saved character target")
+            record = await self._chars_db.get_character(target.character_id)
+            if record.tg_id != target.tg_user_id:
+                raise ValueError("Character does not belong to this player")
+            return record
+
+        if target.kind == "lobby":
+            if target.session_id is None:
+                raise ValueError("Invalid lobby character target")
+            lobby = self.get_lobby(target.session_id)
+            lobby_player = lobby.players.get(target.tg_user_id)
+            if lobby_player is None:
+                raise ValueError("You are not in this lobby")
+            if (
+                lobby_player.selection_mode != LobbySelectionMode.SAVED
+                or lobby_player.selected_character_id is None
+            ):
+                raise ValueError("Hero upgrades require a saved character")
+            if (
+                target.character_id is not None
+                and target.character_id != lobby_player.selected_character_id
+            ):
+                raise ValueError("Character does not belong to this lobby selection")
+            record = await self._chars_db.get_character(
+                lobby_player.selected_character_id,
+            )
+            if record.tg_id != target.tg_user_id:
+                raise ValueError("Character does not belong to this player")
+            return record
+
+        raise ValueError("Unsupported character target")
 
     def _target_for_lobby_player(
         self,

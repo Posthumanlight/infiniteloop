@@ -15,7 +15,7 @@ from game.combat.models import ActionRequest, ActionResult
 from game.core.dice import SeededRNG
 from game.core.data_loader import (
     ClassData,
-    load_class,
+    load_character_class,
     load_classes,
     load_constants,
     load_effect,
@@ -523,7 +523,7 @@ class GameService:
         if player_info.class_id is None:
             raise ValueError("Choose a class first")
 
-        class_data = load_class(player_info.class_id)
+        class_data = load_character_class(player_info.class_id)
         in_combat = combat_state is not None
         entity = (
             combat_state.entities.get(player.entity_id, player)
@@ -615,7 +615,7 @@ class GameService:
     ) -> CharacterSheet:
         return self._sheet_from_class_template(
             replace(player_info, class_id=class_id),
-            load_class(class_id),
+            load_character_class(class_id),
         )
 
     def inventory_for_player(
@@ -633,14 +633,14 @@ class GameService:
     ) -> CharacterSheet:
         """Build a character sheet from class template (lobby phase)."""
         major = class_data.major_stats
-        template_player = build_player(
-            class_data.class_id,
-            entity_id=player_info.entity_id,
+        template_player = (
+            build_player(class_data.class_id, entity_id=player_info.entity_id)
+            if class_data.starting_skills else None
         )
         skills = tuple(
             self._build_skill_info(template_player, sid)
             for sid in class_data.starting_skills
-        )
+        ) if template_player is not None else ()
         passives = tuple(
             self._build_passive_info(pid)
             for pid in class_data.starting_passives

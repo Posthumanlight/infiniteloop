@@ -36,6 +36,7 @@ from game.events.models import (
     EventStageDef,
     OutcomeDef,
 )
+from game.character.flags import CharacterFlag, JsonValue
 
 if TYPE_CHECKING:
     from game.world.difficulty import RoomDifficultyModifier
@@ -458,6 +459,101 @@ class ClassData:
     starting_passives: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class HeroItemRequirement:
+    blueprint_id: str
+    count: int = 1
+
+
+@dataclass(frozen=True)
+class HeroFlagRequirement:
+    flag_name: str
+    flag_value: JsonValue | None = None
+    require_value: bool = False
+
+
+@dataclass(frozen=True)
+class HeroModifierStack:
+    modifier_id: str
+    stacks: int = 1
+
+
+@dataclass(frozen=True)
+class HeroUpgradeRequirements:
+    min_level: int | None = None
+    class_ids: tuple[str, ...] = ()
+    min_stats: dict[str, float] = field(default_factory=dict)
+    items: tuple[HeroItemRequirement, ...] = ()
+    flags: tuple[HeroFlagRequirement, ...] = ()
+    skills: tuple[str, ...] = ()
+    passive_skills: tuple[str, ...] = ()
+    modifiers: tuple[HeroModifierStack, ...] = ()
+
+
+@dataclass(frozen=True)
+class HeroUpgradeDelta:
+    levels: int = 0
+    skills: tuple[str, ...] = ()
+    passive_skills: tuple[str, ...] = ()
+    items: tuple[HeroItemRequirement, ...] = ()
+    flags: tuple[str | CharacterFlag, ...] = ()
+    modifiers: tuple[HeroModifierStack, ...] = ()
+
+
+@dataclass(frozen=True)
+class HeroClassData:
+    class_id: str
+    name: str
+    description: str
+    major_stats: dict[str, float]
+    minor_stats: dict[str, float]
+    level_scaling: dict[str, float]
+    requirements: HeroUpgradeRequirements
+    gains: HeroUpgradeDelta = field(default_factory=HeroUpgradeDelta)
+    losses: HeroUpgradeDelta = field(default_factory=HeroUpgradeDelta)
+
+    @property
+    def starting_skills(self) -> tuple[str, ...]:
+        return ()
+
+    @property
+    def starting_passives(self) -> tuple[str, ...]:
+        return ()
+
+    def to_class_data(self) -> ClassData:
+        return ClassData(
+            class_id=self.class_id,
+            name=self.name,
+            description=self.description,
+            major_stats=dict(self.major_stats),
+            minor_stats=dict(self.minor_stats),
+            starting_skills=(),
+            starting_passives=(),
+        )
+
+
+@dataclass(frozen=True)
+class CharacterClassCatalog:
+    base_classes: dict[str, ClassData]
+    hero_classes: dict[str, HeroClassData]
+
+    def get_base_class(self, class_id: str) -> ClassData:
+        try:
+            return self.base_classes[class_id]
+        except KeyError as exc:
+            raise KeyError(f"Unknown base class: {class_id}") from exc
+
+    def get_character_class(self, class_id: str) -> ClassData:
+        if class_id in self.base_classes:
+            return self.base_classes[class_id]
+        if class_id in self.hero_classes:
+            return self.hero_classes[class_id].to_class_data()
+        raise KeyError(f"Unknown class: {class_id}")
+
+    def is_hero_class(self, class_id: str) -> bool:
+        return class_id in self.hero_classes
+
+
 def load_classes() -> dict[str, ClassData]:
     raw = _load_toml("classes.toml")["classes"]
     return {
@@ -479,6 +575,204 @@ def load_class(class_id: str) -> ClassData:
     if class_id not in classes:
         raise KeyError(f"Unknown class: {class_id}")
     return classes[class_id]
+
+
+def load_character_class(class_id: str) -> ClassData:
+    return load_class_catalog().get_character_class(class_id)
+
+
+def _parse_hero_item_requirements(
+    raw_items: list[dict[str, Any]] | None,
+) -> tuple[HeroItemRequirement, ...]:
+    result: list[HeroItemRequirement] = []
+    for raw in raw_items or []:
+        count = int(raw.get("count", 1))
+        if count <= 0:
+            raise ValueError("Hero item requirement count must be positive")
+        result.append(HeroItemRequirement(
+            blueprint_id=str(raw["blueprint_id"]),
+            count=count,
+        ))
+    return tuple(result)
+
+
+def _parse_hero_flags(
+    raw_flags: list[dict[str, Any]] | None,
+) -> tuple[HeroFlagRequirement, ...]:
+    result: list[HeroFlagRequirement] = []
+    for raw in raw_flags or []:
+        if "flag_name" not in raw:
+            raise ValueError("Hero flag requirement requires flag_name")
+        result.append(HeroFlagRequirement(
+            flag_name=str(raw["flag_name"]).strip(),
+            flag_value=raw.get("flag_value"),
+            require_value="flag_value" in raw,
+        ))
+    return tuple(result)
+
+
+def _parse_hero_modifier_stacks(
+    raw_modifiers: list[dict[str, Any]] | None,
+) -> tuple[HeroModifierStack, ...]:
+    result: list[HeroModifierStack] = []
+    for raw in raw_modifiers or []:
+        stacks = int(raw.get("stacks", 1))
+        if stacks <= 0:
+            raise ValueError("Hero modifier stack count must be positive")
+        result.append(HeroModifierStack(
+            modifier_id=str(raw["modifier_id"]),
+            stacks=stacks,
+        ))
+    return tuple(result)
+
+
+def _parse_hero_requirements(raw: dict[str, Any] | None) -> HeroUpgradeRequirements:
+    raw = raw or {}
+    return HeroUpgradeRequirements(
+        min_level=raw.get("min_level"),
+        class_ids=tuple(str(value) for value in raw.get("class_ids", ())),
+        min_stats={
+            str(stat_name): float(value)
+            for stat_name, value in raw.get("min_stats", {}).items()
+        },
+        items=_parse_hero_item_requirements(raw.get("items")),
+        flags=_parse_hero_flags(raw.get("flags")),
+        skills=tuple(str(value) for value in raw.get("skills", ())),
+        passive_skills=tuple(str(value) for value in raw.get("passive_skills", ())),
+        modifiers=_parse_hero_modifier_stacks(raw.get("modifiers")),
+    )
+
+
+def _parse_hero_gain_flags(
+    raw_flags: list[dict[str, Any]] | None,
+) -> tuple[CharacterFlag, ...]:
+    result: list[CharacterFlag] = []
+    for raw in raw_flags or []:
+        result.append(CharacterFlag(
+            flag_name=str(raw["flag_name"]),
+            flag_value=raw.get("flag_value"),
+            flag_persistence=bool(raw.get("flag_persistence", True)),
+        ))
+    return tuple(result)
+
+
+def _parse_hero_delta(
+    raw: dict[str, Any] | None,
+    *,
+    gains: bool,
+) -> HeroUpgradeDelta:
+    raw = raw or {}
+    levels = int(raw.get("levels", 0))
+    if levels < 0:
+        raise ValueError("Hero level gains/losses must be non-negative")
+    raw_flags = raw.get("flags", ())
+    flags: tuple[str | CharacterFlag, ...]
+    if gains:
+        flags = _parse_hero_gain_flags(raw_flags)
+    else:
+        flags = tuple(str(value) for value in raw_flags)
+    return HeroUpgradeDelta(
+        levels=levels,
+        skills=tuple(str(value) for value in raw.get("skills", ())),
+        passive_skills=tuple(str(value) for value in raw.get("passive_skills", ())),
+        items=_parse_hero_item_requirements(raw.get("items")),
+        flags=flags,
+        modifiers=_parse_hero_modifier_stacks(raw.get("modifiers")),
+    )
+
+
+def _validate_hero_class(
+    hero: HeroClassData,
+    *,
+    base_class_ids: set[str],
+    skill_ids: set[str],
+    passive_ids: set[str],
+    modifier_ids: set[str],
+    item_ids: set[str],
+) -> None:
+    if hero.class_id in base_class_ids:
+        raise ValueError(f"Hero class '{hero.class_id}' collides with a base class")
+
+    def validate_skills(values: tuple[str, ...], label: str) -> None:
+        unknown = sorted(set(values) - skill_ids)
+        if unknown:
+            raise ValueError(f"Hero {hero.class_id}: unknown {label} {unknown}")
+
+    def validate_passives(values: tuple[str, ...], label: str) -> None:
+        unknown = sorted(set(values) - passive_ids)
+        if unknown:
+            raise ValueError(f"Hero {hero.class_id}: unknown {label} {unknown}")
+
+    def validate_modifiers(values: tuple[HeroModifierStack, ...], label: str) -> None:
+        unknown = sorted({value.modifier_id for value in values} - modifier_ids)
+        if unknown:
+            raise ValueError(f"Hero {hero.class_id}: unknown {label} {unknown}")
+
+    def validate_items(values: tuple[HeroItemRequirement, ...], label: str) -> None:
+        unknown = sorted({value.blueprint_id for value in values} - item_ids)
+        if unknown:
+            raise ValueError(f"Hero {hero.class_id}: unknown {label} {unknown}")
+
+    validate_skills(hero.requirements.skills, "required skills")
+    validate_skills(hero.gains.skills, "gained skills")
+    validate_skills(hero.losses.skills, "lost skills")
+    validate_passives(hero.requirements.passive_skills, "required passives")
+    validate_passives(hero.gains.passive_skills, "gained passives")
+    validate_passives(hero.losses.passive_skills, "lost passives")
+    validate_modifiers(hero.requirements.modifiers, "required modifiers")
+    validate_modifiers(hero.gains.modifiers, "gained modifiers")
+    validate_modifiers(hero.losses.modifiers, "lost modifiers")
+    validate_items(hero.requirements.items, "required items")
+    validate_items(hero.gains.items, "gained items")
+    validate_items(hero.losses.items, "lost items")
+
+
+def load_hero_classes() -> dict[str, HeroClassData]:
+    raw = _load_toml("hero_classes.toml").get("hero_classes", {})
+    base_classes = load_classes()
+    skill_ids = set(load_skills())
+    passive_ids = set(load_passives())
+    modifier_ids = set(load_modifiers())
+    item_ids = set(load_item_blueprints())
+    result: dict[str, HeroClassData] = {}
+
+    for class_id, data in raw.items():
+        hero = HeroClassData(
+            class_id=class_id,
+            name=data["name"],
+            description=data["description"],
+            major_stats=dict(data["major_stats"]),
+            minor_stats=dict(data.get("minor_stats", {})),
+            level_scaling=dict(data.get("level_scaling", {})),
+            requirements=_parse_hero_requirements(data.get("requirements")),
+            gains=_parse_hero_delta(data.get("gains"), gains=True),
+            losses=_parse_hero_delta(data.get("losses"), gains=False),
+        )
+        _validate_hero_class(
+            hero,
+            base_class_ids=set(base_classes),
+            skill_ids=skill_ids,
+            passive_ids=passive_ids,
+            modifier_ids=modifier_ids,
+            item_ids=item_ids,
+        )
+        result[class_id] = hero
+
+    known_class_ids = set(base_classes) | set(result)
+    for hero in result.values():
+        unknown = sorted(set(hero.requirements.class_ids) - known_class_ids)
+        if unknown:
+            raise ValueError(
+                f"Hero {hero.class_id}: unknown required classes {unknown}",
+            )
+    return result
+
+
+def load_class_catalog() -> CharacterClassCatalog:
+    return CharacterClassCatalog(
+        base_classes=load_classes(),
+        hero_classes=load_hero_classes(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1320,6 +1614,11 @@ def load_progression() -> ProgressionConfig:
         scaling[class_id] = LevelScalingConfig(
             class_id=class_id,
             stat_gains=dict(gains),
+        )
+    for class_id, hero in load_hero_classes().items():
+        scaling[class_id] = LevelScalingConfig(
+            class_id=class_id,
+            stat_gains=dict(hero.level_scaling),
         )
     return ProgressionConfig(
         xp_thresholds=thresholds,

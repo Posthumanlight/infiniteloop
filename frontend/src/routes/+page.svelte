@@ -5,10 +5,12 @@
   import SkillList from '$components/SkillList.svelte';
   import StatPill from '$components/StatPill.svelte';
   import TagList from '$components/TagList.svelte';
-  import { bootstrapWebApp } from '$lib/api';
+  import { applyHeroUpgrade, bootstrapWebApp } from '$lib/api';
   import { applyTelegramTheme, getTelegramWebApp } from '$lib/telegram';
   import type {
     CharacterSheet,
+    HeroUpgradeDelta,
+    HeroUpgradePreview,
     InventoryMoveResponse,
     SavedCharacter,
     WebAppBootstrap,
@@ -22,6 +24,7 @@
   let error = '';
   let loading = true;
   let chooserPending = false;
+  let upgradePending = '';
 
   function minorStatEntries(sheet: CharacterSheet): string[] {
     return Object.entries(sheet.minor_stats)
@@ -84,6 +87,39 @@
 
   function savedCharacterName(character: SavedCharacter): string {
     return character.character_name || `#${character.character_id}`;
+  }
+
+  function deltaEntries(delta: HeroUpgradeDelta): string[] {
+    const entries: string[] = [];
+    if (delta.levels > 0) entries.push(`${delta.levels} level${delta.levels === 1 ? '' : 's'}`);
+    entries.push(...delta.skills.map((skill) => `skill ${skill}`));
+    entries.push(...delta.passive_skills.map((passive) => `passive ${passive}`));
+    entries.push(...delta.items.map((item) => `${item.count} item ${item.blueprint_id}`));
+    entries.push(...delta.flags.map((flag) => `flag ${flag.flag_name}`));
+    entries.push(
+      ...delta.modifiers.map((modifier) =>
+        `${modifier.stacks} modifier ${modifier.modifier_id}`
+      )
+    );
+    return entries;
+  }
+
+  async function applyUpgrade(upgrade: HeroUpgradePreview): Promise<void> {
+    if (!bootstrap?.target) return;
+    upgradePending = upgrade.hero_class_id;
+    error = '';
+    try {
+      bootstrap = await applyHeroUpgrade(
+        telegramInitData,
+        bootstrap.target,
+        upgrade.hero_class_id
+      );
+      activeView = bootstrap.initial_view;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to apply the selected upgrade.';
+    } finally {
+      upgradePending = '';
+    }
   }
 
   async function loadTarget(target: WebAppTarget): Promise<void> {
@@ -269,6 +305,54 @@
           <TagList items={effectEntries(sheet)} emptyLabel="No active buffs or debuffs right now." />
         </SectionCard>
 
+        {#if bootstrap.hero_upgrades.length > 0}
+          <SectionCard title="Hero Upgrades" eyebrow="Ascension">
+            <div class="upgrade-list">
+              {#each bootstrap.hero_upgrades as upgrade}
+                {@const gains = deltaEntries(upgrade.gains)}
+                {@const losses = deltaEntries(upgrade.losses)}
+                <article class="upgrade-row">
+                  <div class="upgrade-heading">
+                    <div>
+                      <h2>{upgrade.name}</h2>
+                      <p>{upgrade.description}</p>
+                    </div>
+                    <span class:ready={upgrade.eligible}>
+                      {upgrade.eligible ? 'Ready' : 'Locked'}
+                    </span>
+                  </div>
+
+                  <div class="check-list">
+                    {#each upgrade.checks as check}
+                      <span class:met={check.met}>{check.label}</span>
+                    {/each}
+                  </div>
+
+                  <div class="delta-grid">
+                    <div>
+                      <strong>Gains</strong>
+                      <TagList items={gains} emptyLabel="No explicit gains." />
+                    </div>
+                    <div>
+                      <strong>Losses</strong>
+                      <TagList items={losses} emptyLabel="No explicit losses." />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    class="upgrade-button"
+                    disabled={!upgrade.eligible || upgradePending !== ''}
+                    on:click={() => applyUpgrade(upgrade)}
+                  >
+                    {upgradePending === upgrade.hero_class_id ? 'Applying...' : 'Upgrade'}
+                  </button>
+                </article>
+              {/each}
+            </div>
+          </SectionCard>
+        {/if}
+
       </section>
     {:else}
       <section class="inventory-section">
@@ -449,6 +533,101 @@
     gap: 0.8rem;
   }
 
+  .upgrade-list {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .upgrade-row {
+    display: grid;
+    gap: 0.85rem;
+    padding: 0.9rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .upgrade-row:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .upgrade-heading {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .upgrade-heading h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    letter-spacing: 0;
+  }
+
+  .upgrade-heading p {
+    margin: 0.25rem 0 0;
+    color: rgba(225, 234, 248, 0.76);
+  }
+
+  .upgrade-heading span {
+    width: fit-content;
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(225, 234, 248, 0.72);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+
+  .upgrade-heading span.ready {
+    background: rgba(77, 202, 142, 0.16);
+    color: #bff7d8;
+  }
+
+  .check-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .check-list span {
+    padding: 0.36rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(225, 234, 248, 0.66);
+    font-size: 0.78rem;
+  }
+
+  .check-list span.met {
+    background: rgba(77, 202, 142, 0.13);
+    color: #c8f8de;
+  }
+
+  .delta-grid {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .delta-grid strong {
+    display: block;
+    margin-bottom: 0.45rem;
+  }
+
+  .upgrade-button {
+    justify-self: start;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.75rem 1rem;
+    background: #8bd7ff;
+    color: #07101d;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .upgrade-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
   @media (min-width: 760px) {
     .hero {
       grid-template-columns: 1.7fr 1fr;
@@ -465,6 +644,15 @@
 
     .stat-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .upgrade-heading {
+      grid-template-columns: 1fr auto;
+      align-items: start;
+    }
+
+    .delta-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

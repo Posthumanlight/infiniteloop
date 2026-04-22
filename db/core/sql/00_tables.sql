@@ -35,6 +35,7 @@ create table public.game_characters_data (
   level bigint not null,
   xp bigint null,
   skills jsonb null,
+  passive_skills jsonb null,
   modifiers jsonb null,
   character_flags jsonb null,
   constraint game_characters_data_pkey primary key (character_id)

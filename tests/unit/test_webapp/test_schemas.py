@@ -13,7 +13,10 @@ from game.core.game_models import (
     SkillHitInfo,
     SkillInfo,
 )
-from webapp.schemas import CharacterSheetOut, InventoryOut
+from game.character.hero_upgrades import HeroRequirementCheck, HeroUpgradePreview
+from game.character.flags import CharacterFlag
+from game.core.data_loader import HeroUpgradeDelta, HeroItemRequirement, HeroModifierStack
+from webapp.schemas import CharacterSheetOut, HeroUpgradePreviewOut, InventoryOut
 
 
 def test_character_sheet_out_serializes_nested_domain_objects():
@@ -145,3 +148,30 @@ def test_inventory_out_serializes_item_sets():
     assert payload.item_sets[0].bonuses[0].effects[0].value == 0.1
     assert payload.dissolve_currency_name == "Fortuna Motes"
     assert payload.dissolve_rarity_values == {}
+
+
+def test_hero_upgrade_preview_out_serializes_nested_deltas():
+    preview = HeroUpgradePreview(
+        hero_class_id="flamecaller",
+        name="Flamecaller",
+        description="Fire path",
+        eligible=True,
+        checks=(HeroRequirementCheck("min_level", "Reach level 7", True),),
+        gains=HeroUpgradeDelta(
+            levels=1,
+            skills=("summon_blaze",),
+            passive_skills=("blaze_of_glory",),
+            items=(HeroItemRequirement("long_sword", 1),),
+            flags=(CharacterFlag("upgraded_to_flamecaller", True, True),),
+            modifiers=(HeroModifierStack("familiar_training", 2),),
+        ),
+        losses=HeroUpgradeDelta(flags=("old_flag",)),
+    )
+
+    payload = HeroUpgradePreviewOut.from_domain(preview)
+
+    assert payload.hero_class_id == "flamecaller"
+    assert payload.checks[0].met is True
+    assert payload.gains.items[0].blueprint_id == "long_sword"
+    assert payload.gains.flags[0].flag_value is True
+    assert payload.losses.flags[0].flag_name == "old_flag"

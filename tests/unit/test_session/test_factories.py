@@ -30,7 +30,7 @@ def test_build_enemy_from_toml():
     assert enemy.entity_name == "Goblin"
     assert enemy.current_hp == enemy.major_stats.hp
     assert enemy.current_energy == enemy.major_stats.energy
-    assert "slash" in enemy.skills
+    assert "generic_enemy_attack" in enemy.skills
 
 
 def test_build_enemy_unique_ids():
@@ -88,6 +88,7 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
         level=3,
         xp=250,
         skills=("slash", "cleave", "battle_cry"),
+        passive_skills=("battle_master",),
         skill_modifiers=(
             ModifierInstance("slash_power", 2),
             ModifierInstance("battle_hardened", 1),
@@ -108,6 +109,7 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
     assert player.level == 3
     assert player.xp == 250
     assert player.skills == ("slash", "cleave", "battle_cry")
+    assert player.passive_skills == ("battle_master",)
     assert [(mod.modifier_id, mod.stack_count) for mod in player.skill_modifiers] == [
         ("slash_power", 2),
         ("battle_hardened", 1),

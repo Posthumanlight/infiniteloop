@@ -14,6 +14,9 @@ from webapp.schemas import (
     CharacterBootstrapOut,
     CharacterSheetOut,
     CurrencyBalanceOut,
+    HeroUpgradeActionIn,
+    HeroUpgradeListIn,
+    HeroUpgradePreviewOut,
     InventoryDissolveIn,
     InventoryDissolveOut,
     InventoryMoveIn,
@@ -88,6 +91,7 @@ async def _selection_response(
     initial_view: str,
 ) -> WebAppBootstrapOut:
     selection = await lobby_service.get_character_selection(target)
+    hero_upgrades = await _hero_upgrade_previews(lobby_service, target)
     response_target = (
         WebAppTargetIn(kind="saved", character_id=target.character_id)
         if target.kind == "saved"
@@ -99,8 +103,23 @@ async def _selection_response(
         target=response_target,
         sheet=CharacterSheetOut.from_domain(selection.sheet),
         inventory=InventoryOut.from_domain(selection.inventory),
+        hero_upgrades=hero_upgrades,
         legacy_text=render_character_sheet(selection.sheet),
     )
+
+
+async def _hero_upgrade_previews(
+    lobby_service: LobbyService,
+    target: CharacterTarget,
+) -> list[HeroUpgradePreviewOut]:
+    try:
+        previews = await lobby_service.list_hero_upgrades(target)
+    except ValueError:
+        return []
+    return [
+        HeroUpgradePreviewOut.from_domain(preview)
+        for preview in previews
+    ]
 
 
 @router.post("/bootstrap", response_model=WebAppBootstrapOut)
@@ -228,6 +247,64 @@ async def move_inventory_item(
         sheet=CharacterSheetOut.from_domain(selection.sheet),
         inventory=InventoryOut.from_domain(selection.inventory),
     )
+
+
+@router.post("/hero-upgrades/list", response_model=list[HeroUpgradePreviewOut])
+async def list_hero_upgrades(
+    payload: HeroUpgradeListIn,
+    request: Request,
+) -> list[HeroUpgradePreviewOut]:
+    init_data, _entry = _parse_entry(payload.init_data)
+    lobby_service = _get_lobby_service(request)
+    target = _target_from_payload(lobby_service, init_data, payload.target)
+
+    try:
+        previews = await lobby_service.list_hero_upgrades(target)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return [
+        HeroUpgradePreviewOut.from_domain(preview)
+        for preview in previews
+    ]
+
+
+@router.post("/hero-upgrades/preview", response_model=HeroUpgradePreviewOut)
+async def preview_hero_upgrade(
+    payload: HeroUpgradeActionIn,
+    request: Request,
+) -> HeroUpgradePreviewOut:
+    init_data, _entry = _parse_entry(payload.init_data)
+    lobby_service = _get_lobby_service(request)
+    target = _target_from_payload(lobby_service, init_data, payload.target)
+
+    try:
+        preview = await lobby_service.preview_hero_upgrade(
+            target,
+            payload.hero_class_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return HeroUpgradePreviewOut.from_domain(preview)
+
+
+@router.post("/hero-upgrades/apply", response_model=WebAppBootstrapOut)
+async def apply_hero_upgrade(
+    payload: HeroUpgradeActionIn,
+    request: Request,
+) -> WebAppBootstrapOut:
+    init_data, _entry = _parse_entry(payload.init_data)
+    lobby_service = _get_lobby_service(request)
+    target = _target_from_payload(lobby_service, init_data, payload.target)
+
+    try:
+        await lobby_service.apply_hero_upgrade(target, payload.hero_class_id)
+        return await _selection_response(
+            lobby_service,
+            target,
+            initial_view="character",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/inventory/dissolve", response_model=InventoryDissolveOut)

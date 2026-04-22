@@ -1,0 +1,42 @@
+[hero_classes.flamecaller]
+name = "Flamecaller"
+description = "A summoner who binds volatile fire spirits."
+
+[hero_classes.flamecaller.major_stats]
+attack = 22
+hp = 90
+speed = 24
+crit_chance = 0.12
+crit_dmg = 1.35
+resistance = 18
+energy = 160
+mastery = 18
+
+[hero_classes.flamecaller.minor_stats]
+fire_dmg_pct = 0.15
+
+[hero_classes.flamecaller.level_scaling]
+attack = 5
+hp = 18
+speed = 1
+resistance = 2
+mastery = 8
+
+[hero_classes.flamecaller.requirements]
+min_level = 7
+class_ids = ["summoner"]
+min_stats = { mastery = 45 }
+
+[hero_classes.flamecaller.losses]
+levels = 1
+skills = ["summon_familiar"]
+
+[hero_classes.flamecaller.gains]
+skills = ["summon_blaze"]
+passive_skills = ["blaze_of_glory"]
+modifiers = [
+  { modifier_id = "familiar_training", stacks = 1 },
+]
+flags = [
+  { flag_name = "upgraded_to_flamecaller", flag_value = true, flag_persistence = true },
+]

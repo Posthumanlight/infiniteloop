@@ -33,9 +33,11 @@ async def persist_victory_progress(
         await chars_db.save_character_progress(
             character_id=int(character_id),
             character_name=character_name,
+            class_id=player.player_class,
             level=player.level,
             xp=player.xp,
             skills=player.skills,
+            passive_skills=player.passive_skills,
             skill_modifiers=player.skill_modifiers,
             flags=player.flags,
         )

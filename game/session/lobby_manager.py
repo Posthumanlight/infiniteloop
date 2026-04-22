@@ -9,7 +9,7 @@ from game.character.flags import CharacterFlag
 from game.character.inventory import Inventory
 from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats
-from game.core.data_loader import load_classes, load_progression
+from game.core.data_loader import load_class_catalog, load_classes, load_progression
 from game.core.game_models import PlayerInfo
 from game.session.factories import build_player, build_player_from_saved
 
@@ -39,6 +39,7 @@ class CharacterRecord:
     skills: tuple[str, ...]
     skill_modifiers: tuple[ModifierInstance, ...]
     inventory: Inventory
+    passive_skills: tuple[str, ...] = ()
     flags: dict[str, CharacterFlag] = field(default_factory=dict)
 
 
@@ -77,6 +78,7 @@ class CharacterRepository(Protocol):
         character_name: str,
         class_id: str,
         skills: tuple[str, ...],
+        passive_skills: tuple[str, ...] = (),
         level: int = 1,
         xp: int = 0,
         skill_modifiers: tuple[ModifierInstance, ...] = (),
@@ -94,9 +96,11 @@ class CharacterRepository(Protocol):
         self,
         character_id: int,
         character_name: str,
+        class_id: str | None,
         level: int,
         xp: int,
         skills: tuple[str, ...],
+        passive_skills: tuple[str, ...],
         skill_modifiers: tuple[ModifierInstance, ...],
         inventory: Inventory | None = None,
         flags: dict[str, CharacterFlag] | None = None,
@@ -123,7 +127,14 @@ class PlayerSaveOrigin:
 
 
 def _build_base_stats_map() -> dict[str, MajorStats]:
-    classes = load_classes()
+    catalog = load_class_catalog()
+    classes = {
+        **catalog.base_classes,
+        **{
+            class_id: hero.to_class_data()
+            for class_id, hero in catalog.hero_classes.items()
+        },
+    }
     result: dict[str, MajorStats] = {}
     for class_id, cls in classes.items():
         result[class_id] = MajorStats(

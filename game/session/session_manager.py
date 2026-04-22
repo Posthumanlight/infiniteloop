@@ -3,7 +3,11 @@ from dataclasses import replace
 from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats
 from game.combat.models import ActionRequest
-from game.core.data_loader import load_classes, load_progression, load_restoration_constants
+from game.core.data_loader import (
+    load_class_catalog,
+    load_progression,
+    load_restoration_constants,
+)
 from game.core.dice import SeededRNG
 from game.core.enums import (
     LocationType,
@@ -19,7 +23,14 @@ from game.world.world_run import WorldManager
 
 def _build_base_stats_map() -> dict[str, MajorStats]:
     """Build a map of class_id -> level-1 MajorStats from TOML class data."""
-    classes = load_classes()
+    catalog = load_class_catalog()
+    classes = {
+        **catalog.base_classes,
+        **{
+            class_id: hero.to_class_data()
+            for class_id, hero in catalog.hero_classes.items()
+        },
+    }
     result: dict[str, MajorStats] = {}
     for cid, cls in classes.items():
         result[cid] = MajorStats(

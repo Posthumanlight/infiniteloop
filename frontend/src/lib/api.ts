@@ -1,4 +1,5 @@
 import type {
+  HeroUpgradePreview,
   InventoryDissolveResponse,
   InventoryMoveResponse,
   WebAppTarget,
@@ -75,4 +76,44 @@ export async function dissolveInventoryItems(
   });
 
   return parseJson<InventoryDissolveResponse>(response, 'Failed to dissolve selected items.');
+}
+
+export async function previewHeroUpgrade(
+  initData: string,
+  target: WebAppTarget,
+  heroClassId: string
+): Promise<HeroUpgradePreview> {
+  const response = await fetch('/api/webapp/hero-upgrades/preview', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      init_data: initData,
+      target,
+      hero_class_id: heroClassId
+    })
+  });
+
+  return parseJson<HeroUpgradePreview>(response, 'Failed to preview the selected upgrade.');
+}
+
+export async function applyHeroUpgrade(
+  initData: string,
+  target: WebAppTarget,
+  heroClassId: string
+): Promise<WebAppBootstrap> {
+  const response = await fetch('/api/webapp/hero-upgrades/apply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      init_data: initData,
+      target,
+      hero_class_id: heroClassId
+    })
+  });
+
+  return parseJson<WebAppBootstrap>(response, 'Failed to apply the selected upgrade.');
 }

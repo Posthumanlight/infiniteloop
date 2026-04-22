@@ -160,6 +160,7 @@ def test_get_character_restores_flags():
 
     record = asyncio.run(UserCharactersData(_FakePool(conn)).get_character(42))
 
+    assert record.passive_skills == ("battle_master",)
     assert record.flags == {
         "met_shrine": CharacterFlag(
             flag_name="met_shrine",
@@ -167,6 +168,25 @@ def test_get_character_restores_flags():
             flag_persistence=True,
         ),
     }
+
+
+def test_get_character_restores_persisted_passive_skills():
+    conn = _FakeCharacterConn({
+        "tg_id": 1001,
+        "character_id": 42,
+        "character_name": "PassiveBearer",
+        "class_id": "warrior",
+        "level": 4,
+        "xp": 300,
+        "skills": ["slash"],
+        "passive_skills": ["battle_master", "blaze_of_glory"],
+        "modifiers": [],
+        "character_flags": {},
+    })
+
+    record = asyncio.run(UserCharactersData(_FakePool(conn)).get_character(42))
+
+    assert record.passive_skills == ("battle_master", "blaze_of_glory")
 
 
 def test_generated_effects_round_trip():

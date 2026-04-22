@@ -153,6 +153,47 @@ export interface InventorySnapshot {
   dissolve_rarity_values: Record<string, number>;
 }
 
+export interface HeroRequirementCheck {
+  code: string;
+  label: string;
+  met: boolean;
+}
+
+export interface HeroItemDelta {
+  blueprint_id: string;
+  count: number;
+}
+
+export interface HeroModifierDelta {
+  modifier_id: string;
+  stacks: number;
+}
+
+export interface HeroFlagDelta {
+  flag_name: string;
+  flag_value: unknown | null;
+  flag_persistence: boolean | null;
+}
+
+export interface HeroUpgradeDelta {
+  levels: number;
+  skills: string[];
+  passive_skills: string[];
+  items: HeroItemDelta[];
+  flags: HeroFlagDelta[];
+  modifiers: HeroModifierDelta[];
+}
+
+export interface HeroUpgradePreview {
+  hero_class_id: string;
+  name: string;
+  description: string;
+  eligible: boolean;
+  checks: HeroRequirementCheck[];
+  gains: HeroUpgradeDelta;
+  losses: HeroUpgradeDelta;
+}
+
 export interface WebAppBootstrap {
   mode: WebAppMode;
   initial_view: WebAppView;
@@ -160,6 +201,7 @@ export interface WebAppBootstrap {
   characters: SavedCharacter[];
   sheet: CharacterSheet | null;
   inventory: InventorySnapshot | null;
+  hero_upgrades: HeroUpgradePreview[];
   legacy_text: string;
 }
 

@@ -8,7 +8,7 @@ from game.character.player_character import PlayerCharacter
 from game.character.progression import _apply_stat_gains
 from game.character.stats import MajorStats, MinorStats
 from game.core.data_loader import ProgressionConfig
-from game.core.data_loader import load_class, load_enemy
+from game.core.data_loader import load_character_class, load_class, load_enemy
 from game.core.enums import EntityType
 from game.world.difficulty import RoomDifficultyModifier, apply_room_difficulty
 
@@ -91,7 +91,7 @@ def build_player_from_saved(
     progression: ProgressionConfig,
     base_stats: dict[str, MajorStats],
 ) -> PlayerCharacter:
-    player = build_player(record.class_id, entity_id=str(record.character_id))
+    cls = load_character_class(record.class_id)
     scaling = progression.level_scaling.get(record.class_id)
     stat_gains = scaling.stat_gains if scaling else {}
     scaled_major = _apply_stat_gains(
@@ -101,17 +101,16 @@ def build_player_from_saved(
     )
 
     return PlayerCharacter(
-        entity_id=player.entity_id,
-        entity_name=player.entity_name,
-        entity_type=player.entity_type,
+        entity_id=str(record.character_id),
+        entity_name=cls.name,
+        entity_type=EntityType.PLAYER,
         major_stats=scaled_major,
-        minor_stats=player.minor_stats,
+        minor_stats=MinorStats(values=dict(cls.minor_stats)),
         current_hp=scaled_major.hp,
         current_energy=scaled_major.energy,
-        player_class=player.player_class,
+        player_class=record.class_id,
         skills=record.skills,
-        passive_skills=player.passive_skills,
-        active_effects=player.active_effects,
+        passive_skills=record.passive_skills,
         skill_modifiers=tuple(
             ModifierInstance(
                 modifier_id=modifier.modifier_id,

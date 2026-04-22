@@ -8,6 +8,7 @@ from db.core.crud_operations import safe_get_db_data, safe_execute, SupabaseOper
 from game.character.flags import CharacterFlag
 from game.character.inventory import EquipmentLoadout, Inventory
 from game.combat.skill_modifiers import ModifierInstance
+from game.core.data_loader import load_character_class
 from game.core.enums import ItemEffect, ItemType
 from game.items.items import GeneratedItemEffect, ItemInstance
 from game.session.lobby_manager import CharacterRecord, SavedCharacterSummary
@@ -470,6 +471,7 @@ class UserCharactersData(UserData):
                 gcd.level AS level,
                 gcd.xp AS xp,
                 gcd.skills AS skills,
+                gcd.passive_skills AS passive_skills,
                 gcd.modifiers AS modifiers,
                 gcd.character_flags AS character_flags
             FROM public.game_characters gc
@@ -505,6 +507,17 @@ class UserCharactersData(UserData):
             logger.error(f"DB error in get_character for character_id={character_id}: {exc}")
             raise
 
+        try:
+            raw_passive_skills = row["passive_skills"]
+        except (KeyError, IndexError):
+            raw_passive_skills = None
+        class_id = str(row["class_id"])
+        passive_skills = (
+            self._parse_skills(raw_passive_skills)
+            if raw_passive_skills is not None
+            else load_character_class(class_id).starting_passives
+        )
+
         return CharacterRecord(
             character_id=int(row["character_id"]),
             tg_id=int(row["tg_id"]),
@@ -513,10 +526,11 @@ class UserCharactersData(UserData):
                 if row["character_name"] is not None
                 else None
             ),
-            class_id=str(row["class_id"]),
+            class_id=class_id,
             level=int(row["level"]),
             xp=int(row["xp"] or 0),
             skills=self._parse_skills(row["skills"]),
+            passive_skills=passive_skills,
             skill_modifiers=self._parse_modifiers(row["modifiers"]),
             inventory=self._build_inventory_from_rows(inventory_rows),
             flags=self._parse_flags(row["character_flags"]),
@@ -528,6 +542,7 @@ class UserCharactersData(UserData):
         character_name: str,
         class_id: str,
         skills: tuple[str, ...],
+        passive_skills: tuple[str, ...] = (),
         level: int = 1,
         xp: int = 0,
         skill_modifiers: tuple[ModifierInstance, ...] = (),
@@ -536,6 +551,7 @@ class UserCharactersData(UserData):
     ) -> CharacterRecord:
         inventory = inventory or Inventory()
         skills_json = json.dumps(list(skills))
+        passive_skills_json = json.dumps(list(passive_skills))
         modifiers_json = self._serialize_modifiers(skill_modifiers)
         flags_json = self._serialize_flags(flags or {})
 
@@ -545,10 +561,11 @@ class UserCharactersData(UserData):
                 level,
                 xp,
                 skills,
+                passive_skills,
                 modifiers,
                 character_flags
             )
-            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
             RETURNING character_id
         """
         sql_insert_character = """
@@ -580,6 +597,7 @@ class UserCharactersData(UserData):
                         level,
                         xp,
                         skills_json,
+                        passive_skills_json,
                         modifiers_json,
                         flags_json,
                     )
@@ -621,6 +639,7 @@ class UserCharactersData(UserData):
             level=level,
             xp=xp,
             skills=tuple(skills),
+            passive_skills=tuple(passive_skills),
             skill_modifiers=tuple(skill_modifiers),
             inventory=inventory,
             flags=self._parse_flags(flags_json),
@@ -656,14 +675,17 @@ class UserCharactersData(UserData):
         self,
         character_id: int,
         character_name: str,
+        class_id: str | None,
         level: int,
         xp: int,
         skills: tuple[str, ...],
+        passive_skills: tuple[str, ...],
         skill_modifiers: tuple[ModifierInstance, ...],
         inventory: Inventory | None = None,
         flags: dict[str, CharacterFlag] | None = None,
     ) -> None:
         skills_json = json.dumps(list(skills))
+        passive_skills_json = json.dumps(list(passive_skills))
         modifiers_json = self._serialize_modifiers(skill_modifiers)
         flags_json = (
             self._serialize_flags(flags)
@@ -672,11 +694,13 @@ class UserCharactersData(UserData):
         )
         sql_update_data = """
             UPDATE public.game_characters_data
-            SET level = $2,
-                xp = $3,
-                skills = $4,
-                modifiers = $5,
-                character_flags = COALESCE($6::jsonb, character_flags)
+            SET class = COALESCE($2, class),
+                level = $3,
+                xp = $4,
+                skills = $5,
+                passive_skills = $6,
+                modifiers = $7,
+                character_flags = COALESCE($8::jsonb, character_flags)
             WHERE character_id = $1
         """
         sql_update_meta = """
@@ -708,9 +732,11 @@ class UserCharactersData(UserData):
                     await conn.execute(
                         sql_update_data,
                         int(character_id),
+                        class_id,
                         int(level),
                         int(xp),
                         skills_json,
+                        passive_skills_json,
                         modifiers_json,
                         flags_json,
                     )

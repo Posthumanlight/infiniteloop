@@ -565,6 +565,7 @@ async def msg_save_name(
             level=player.level,
             xp=player.xp,
             skill_modifiers=player.skill_modifiers,
+            passive_skills=player.passive_skills,
             inventory=player.inventory,
             flags=player.flags,
         )
@@ -584,9 +585,11 @@ async def msg_save_name(
         await chars_db.save_character_progress(
             character_id=choice.source_character_id,
             character_name=character_name,
+            class_id=player.player_class,
             level=player.level,
             xp=player.xp,
             skills=player.skills,
+            passive_skills=player.passive_skills,
             skill_modifiers=player.skill_modifiers,
             inventory=player.inventory,
             flags=player.flags,

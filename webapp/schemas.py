@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
 from game.core.game_models import CharacterSheet, InventorySnapshot
+from game.core.data_loader import HeroUpgradeDelta
+from game.character.flags import CharacterFlag
+from game.character.hero_upgrades import HeroRequirementCheck, HeroUpgradePreview
 from game.session.lobby_manager import SavedCharacterSummary
 
 
@@ -362,16 +365,6 @@ class CharacterBootstrapOut(BaseModel):
     legacy_text: str
 
 
-class WebAppBootstrapOut(BaseModel):
-    mode: str = "loaded"
-    initial_view: str
-    target: WebAppTargetIn | None = None
-    characters: list[SavedCharacterOut] = []
-    sheet: CharacterSheetOut | None = None
-    inventory: InventoryOut | None = None
-    legacy_text: str = ""
-
-
 class InventoryMoveIn(BaseModel):
     init_data: str
     target: WebAppTargetIn
@@ -384,6 +377,124 @@ class InventoryMoveIn(BaseModel):
 class InventoryMoveOut(BaseModel):
     sheet: CharacterSheetOut
     inventory: InventoryOut
+
+
+class HeroRequirementCheckOut(BaseModel):
+    code: str
+    label: str
+    met: bool
+
+    @classmethod
+    def from_domain(cls, check: HeroRequirementCheck) -> "HeroRequirementCheckOut":
+        return cls(code=check.code, label=check.label, met=check.met)
+
+
+class HeroItemDeltaOut(BaseModel):
+    blueprint_id: str
+    count: int
+
+
+class HeroModifierDeltaOut(BaseModel):
+    modifier_id: str
+    stacks: int
+
+
+class HeroFlagDeltaOut(BaseModel):
+    flag_name: str
+    flag_value: Any | None = None
+    flag_persistence: bool | None = None
+
+
+def _hero_flag_out(flag: str | CharacterFlag) -> HeroFlagDeltaOut:
+    if isinstance(flag, CharacterFlag):
+        return HeroFlagDeltaOut(
+            flag_name=flag.flag_name,
+            flag_value=flag.flag_value,
+            flag_persistence=flag.flag_persistence,
+        )
+    return HeroFlagDeltaOut(flag_name=str(flag))
+
+
+class HeroUpgradeDeltaOut(BaseModel):
+    levels: int
+    skills: list[str]
+    passive_skills: list[str]
+    items: list[HeroItemDeltaOut]
+    flags: list[HeroFlagDeltaOut]
+    modifiers: list[HeroModifierDeltaOut]
+
+    @classmethod
+    def from_domain(cls, delta: HeroUpgradeDelta) -> "HeroUpgradeDeltaOut":
+        return cls(
+            levels=delta.levels,
+            skills=list(delta.skills),
+            passive_skills=list(delta.passive_skills),
+            items=[
+                HeroItemDeltaOut(
+                    blueprint_id=item.blueprint_id,
+                    count=item.count,
+                )
+                for item in delta.items
+            ],
+            flags=[
+                _hero_flag_out(flag)
+                for flag in delta.flags
+            ],
+            modifiers=[
+                HeroModifierDeltaOut(
+                    modifier_id=modifier.modifier_id,
+                    stacks=modifier.stacks,
+                )
+                for modifier in delta.modifiers
+            ],
+        )
+
+
+class HeroUpgradePreviewOut(BaseModel):
+    hero_class_id: str
+    name: str
+    description: str
+    eligible: bool
+    checks: list[HeroRequirementCheckOut]
+    gains: HeroUpgradeDeltaOut
+    losses: HeroUpgradeDeltaOut
+
+    @classmethod
+    def from_domain(cls, preview: HeroUpgradePreview) -> "HeroUpgradePreviewOut":
+        return cls(
+            hero_class_id=preview.hero_class_id,
+            name=preview.name,
+            description=preview.description,
+            eligible=preview.eligible,
+            checks=[
+                HeroRequirementCheckOut.from_domain(check)
+                for check in preview.checks
+            ],
+            gains=HeroUpgradeDeltaOut.from_domain(preview.gains),
+            losses=HeroUpgradeDeltaOut.from_domain(preview.losses),
+        )
+
+
+class HeroUpgradeActionIn(BaseModel):
+    init_data: str
+    target: WebAppTargetIn
+    hero_class_id: str
+
+
+class HeroUpgradeListIn(BaseModel):
+    init_data: str
+    target: WebAppTargetIn
+
+
+class WebAppBootstrapOut(BaseModel):
+    mode: str = "loaded"
+    initial_view: str
+    target: WebAppTargetIn | None = None
+    characters: list[SavedCharacterOut] = []
+    sheet: CharacterSheetOut | None = None
+    inventory: InventoryOut | None = None
+    hero_upgrades: list[HeroUpgradePreviewOut] = []
+    legacy_text: str = ""
 
 
 class InventoryDissolveIn(BaseModel):
