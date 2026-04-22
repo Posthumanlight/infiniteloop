@@ -87,6 +87,7 @@ def submit_action(
     rng = SeededRNG(0)
     rng.set_state(state.rng_state)
     constants = load_constants()
+    action_round = state.round_number
 
     state, skipped, _ = start_turn(state, rng)
 
@@ -99,6 +100,7 @@ def submit_action(
     else:
         state, result = resolve_action(state, action, rng, constants)
 
+    result = replace(result, round_number=action_round)
     state = replace(
         state,
         action_log=state.action_log + (result,),
@@ -133,8 +135,10 @@ def skip_turn(
     rng = SeededRNG(0)
     rng.set_state(state.rng_state)
     constants = load_constants()
+    action_round = state.round_number
 
     state, _, _ = start_turn(state, rng)
+    result = replace(result, round_number=action_round)
     state = replace(state, action_log=state.action_log + (result,))
     state = end_turn(state, rng)
     state = check_combat_end(state)

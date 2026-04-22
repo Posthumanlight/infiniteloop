@@ -52,6 +52,7 @@ from game.items.equipment_effects import get_effective_player_major_stat
 from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.factories import build_enemies
 from game.session.models import (
+    CompletedCombat,
     PendingReward,
     PendingRewardQueue,
     RewardNotice,
@@ -204,6 +205,7 @@ class NodeManager:
             state,
             phase=SessionPhase.IN_COMBAT,
             combat=combat_state,
+            last_combat=None,
         )
 
     def submit_combat_action(
@@ -242,6 +244,12 @@ class NodeManager:
         """Apply combat results to players, clear combat sub-state."""
         combat_state = state.combat
         assert combat_state is not None
+        completed = CompletedCombat(
+            combat_id=combat_state.combat_id,
+            final_round_number=combat_state.round_number,
+            action_log=combat_state.action_log,
+            entities=dict(combat_state.entities),
+        )
 
         state = self._apply_combat_results(state)
         loot_snapshot: LootResolutionSnapshot | None = None
@@ -276,6 +284,7 @@ class NodeManager:
         return replace(
             state,
             combat=None,
+            last_combat=completed,
             run_stats=replace(
                 state.run_stats,
                 combats_completed=state.run_stats.combats_completed + 1,

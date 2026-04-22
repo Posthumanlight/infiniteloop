@@ -158,6 +158,13 @@ def render_turn_batch(
     return "\n".join(lines)
 
 
+def _batch_round_number(batch: TurnBatch) -> int | None:
+    for result in reversed(batch.results):
+        if result.round_number is not None:
+            return result.round_number
+    return None
+
+
 def render_turn_prompt(
     entity_id: str,
     snapshot: EntitySnapshot,
@@ -176,6 +183,15 @@ def render_combat_end(
     batch: TurnBatch,
     players: dict[str, PlayerInfo],
 ) -> str:
+    lines: list[str] = []
+    recap = render_turn_batch(batch, players)
+    if recap:
+        title = "\u2694\ufe0f Final round recap"
+        round_number = _batch_round_number(batch)
+        if round_number is not None:
+            title += f" - Round {round_number}"
+        lines.extend([title, recap, ""])
+
     if batch.victory:
         player_snaps = [
             s for s in batch.entities.values()
@@ -185,9 +201,12 @@ def render_combat_end(
             f"  {s.name}: {s.current_hp}/{s.max_hp} HP"
             for s in player_snaps if s.is_alive
         ]
-        return "\U0001f3c6 Victory!\n\nSurvivors:\n" + "\n".join(survivor_lines)
+        lines.extend(["\U0001f3c6 Victory!", "", "Survivors:"])
+        lines.extend(survivor_lines)
+        return "\n".join(lines)
 
-    return "\U0001f480 Defeat! Your party has fallen."
+    lines.append("\U0001f480 Defeat! Your party has fallen.")
+    return "\n".join(lines)
 
 
 def _chunk_text_blocks(blocks: list[str], max_length: int = 3500) -> list[str]:

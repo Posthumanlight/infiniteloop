@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from game.character.player_character import PlayerCharacter
-from game.combat.models import CombatState
+from game.combat.models import ActionResult, CombatState
 from game.core.game_models import LootResolutionSnapshot
 from game.core.enums import LevelRewardType, SessionEndReason, SessionPhase
 from game.events.models import EventState
@@ -63,6 +63,15 @@ class RunStats:
     total_xp_gained: int = 0
     rooms_explored: int = 0
 
+
+@dataclass(frozen=True)
+class CompletedCombat:
+    combat_id: str
+    final_round_number: int
+    action_log: tuple[ActionResult, ...]
+    entities: dict[str, object]
+
+
 @dataclass(frozen=True)
 class SessionState:
     session_id: str
@@ -70,6 +79,7 @@ class SessionState:
     phase: SessionPhase
     exploration: ExplorationState | None = None
     combat: CombatState | None = None
+    last_combat: CompletedCombat | None = None
     event: EventState | None = None
     pending_rewards: dict[str, PendingRewardQueue] = field(default_factory=dict)
     reward_notices: tuple[RewardNotice, ...] = ()

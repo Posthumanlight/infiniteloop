@@ -68,6 +68,8 @@ def test_submit_action_slash():
     assert result.actor_id == current_id
     assert not result.skipped
     assert len(result.hits) > 0
+    assert result.round_number == state.round_number
+    assert new_state.action_log[-1].round_number == state.round_number
     assert new_state.current_turn_index != state.current_turn_index or new_state.round_number > state.round_number
 
 
@@ -115,6 +117,8 @@ def test_skip_turn():
 
     assert result.skipped is True
     assert result.actor_id == current_id
+    assert result.round_number == state.round_number
+    assert new_state.action_log[-1].round_number == state.round_number
 
 
 def test_get_available_actions():

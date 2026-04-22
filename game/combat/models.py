@@ -124,6 +124,7 @@ class ActionResult:
     summons_created: tuple[SummonSpawnResult, ...] = ()
     triggered_actions: tuple[TriggeredActionResult, ...] = ()
     skipped: bool = False
+    round_number: int | None = None
 
 
 @dataclass(frozen=True)

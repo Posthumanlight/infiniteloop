@@ -52,7 +52,7 @@ from game.items.equipment_effects import (
 from game.items.item_generator import generate_item_from_blueprint_id
 from game.items.items import ItemInstance
 from game.session.factories import build_player
-from game.session.models import ActiveSession
+from game.session.models import ActiveSession, CompletedCombat
 from lobby_service import ActiveSessionProvider
 from game.core.game_models import (
     CharacterSheet,
@@ -1543,12 +1543,40 @@ class GameService:
         results: tuple[ActionResult, ...],
     ) -> TurnBatch:
         combat_ended = session.state.combat is None
+        if combat_ended:
+            completed = session.state.last_combat
+            return TurnBatch(
+                results=self._last_round_results(completed),
+                entities=self._build_entity_map(
+                    session,
+                    completed_combat=completed,
+                ),
+                whose_turn=None,
+                combat_ended=True,
+                victory=self._check_victory(session),
+            )
+
         return TurnBatch(
             results=results,
             entities=self._build_entity_map(session),
-            whose_turn=self._current_turn_id(session) if not combat_ended else None,
-            combat_ended=combat_ended,
-            victory=self._check_victory(session) if combat_ended else False,
+            whose_turn=self._current_turn_id(session),
+            combat_ended=False,
+            victory=False,
+        )
+
+    @staticmethod
+    def _last_round_results(
+        completed: CompletedCombat | None,
+    ) -> tuple[ActionResult, ...]:
+        if completed is None or not completed.action_log:
+            return ()
+        final_round = completed.action_log[-1].round_number
+        if final_round is None:
+            return (completed.action_log[-1],)
+        return tuple(
+            result
+            for result in completed.action_log
+            if result.round_number == final_round
         )
 
     def _check_victory(self, session: ActiveSession) -> bool:
@@ -1567,7 +1595,14 @@ class GameService:
     def _build_entity_map(
         self,
         session: ActiveSession,
+        *,
+        completed_combat: CompletedCombat | None = None,
     ) -> dict[str, EntitySnapshot]:
+        if completed_combat is not None:
+            return {
+                eid: self._entity_to_snapshot(e, completed_combat)
+                for eid, e in completed_combat.entities.items()
+            }
         if session.state.combat is not None:
             return {
                 eid: self._entity_to_snapshot(e, session.state.combat)

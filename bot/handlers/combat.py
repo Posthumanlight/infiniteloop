@@ -561,11 +561,6 @@ async def _render_batch_and_prompt(
     await _clear_pending_combat_selection(state)
     await callback.answer()
 
-    # Render action results
-    results_text = render_turn_batch(batch, players)
-    if results_text:
-        await callback.message.answer(results_text)
-
     if batch.combat_ended:
         # Show combat end summary
         end_text = render_combat_end(batch, players)
@@ -614,6 +609,11 @@ async def _render_batch_and_prompt(
         else:
             lobby_service.close_session(session_id)
     else:
+        # Render action results
+        results_text = render_turn_batch(batch, players)
+        if results_text:
+            await callback.message.answer(results_text)
+
         # Prompt next player
         whose_turn = batch.whose_turn
         if whose_turn is not None and whose_turn in batch.entities:

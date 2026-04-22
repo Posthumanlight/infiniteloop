@@ -44,3 +44,4 @@ effects = [
 { type = "modify_stat", stat = "crit_chance", expr = "0.02 + quality*0.003" },
 {type = "modify_stat", stat = "crit_chance", expr = "0.04 + quality*0.005"}
 ]
+
