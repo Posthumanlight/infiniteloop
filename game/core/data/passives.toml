@@ -41,3 +41,11 @@ usage_limit = "unlimited"
 class_tags = ["summoner"]
 
 
+#enemies
+[passives.warlock_demonic_augmentation]
+name = "Demonic Augmentation"
+trigger = "on_round_start"
+action = "apply_effect"
+effect_id = "warlock_demonic_augmentation"
+expr = "1"
+usage_limit = "unlimited"

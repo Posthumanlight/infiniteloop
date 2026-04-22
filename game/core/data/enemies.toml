@@ -195,7 +195,7 @@ fire_dmg_pct = 0.15
 [enemies.warlock]
 name = "Warlock"
 skills = ["generic_enemy_attack"]
-passives = []
+passives = ["warlock_demonic_augmentation"]
 xp_reward = 33
 combat_type = "normal"
 tags = ["fire", "cave"]
