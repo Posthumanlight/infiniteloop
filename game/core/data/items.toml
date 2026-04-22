@@ -27,7 +27,7 @@ effects = [
 [items.wolf_pelt]
 name = "Wolf Pelt"
 item_type = "relic"
-rarity = common"
+rarity = "common"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [
