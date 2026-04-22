@@ -213,3 +213,20 @@ fire_dmg_pct = 0.15
 arcane_def_pct = 0.15
 fire_def_pct = 0.15
 
+[enemies.boss_begamak]
+name = "Begamak, Sin of Gluttony"
+skills = ["boss_begamak_hellfire_breath", "boss_begamak_devour", "generic_enemy_attack"]
+passives = []
+xp_reward = 125
+combat_type = "boss"
+tags = ["forest", "cave"]
+[enemies.boss_begamak.major_stats]
+attack = 10
+hp = 220
+speed = 14
+crit_chance = 0.00
+crit_dmg = 1.3
+resistance = 100
+energy = 50
+mastery = 20
+[enemies.boss_begamak.minor_stats]

@@ -47,3 +47,29 @@ description = "It`s goddamn goblins!"
 outcomes = [
     { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
 ]
+
+[events.spilled_wine]
+name = "Spilled Wine"
+event_type = "multiplayer"
+initial_stage_id = "start"
+min_depth = 2
+max_depth = 100
+weight = 5
+
+[events.spilled_wine.stages.start]
+title = "Spilled wine"
+description = "You find on the road before you a pile of broken and empty bottles of wine with the red puddle under them"
+
+[[events.spilled_wine.stages.start.choices]]
+label = "Scavenge it for some booze."
+description = "Something should be still be full!"
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["crocodile", "crocodile"]},
+]
+
+[[events.spilled_wine.stages.start.choices]]
+label = "Investigate the road."
+description = "Wine does not just drop out of the sky."
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+]

@@ -53,6 +53,28 @@ hits = [
    { target_type = "all_allies", damage_type = "arcane", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{ effect = "goblin_shaman_healing_rain_effect", chance = 1.0 }] },
 ]
 
+#boss_begamak
+[skills.boss_begamak_devour]
+name = "Devour"
+energy_cost = 0
+action_type = "action"
+cooldown = 1
+summary = "begamak deal damage und heals"
+hits = [
+{target_type = "single_enemy", damage_type = "piercing", formula = "attacker.attack*1+attacker.current_hp*0.05", base_power = 10, variance = 0.25},
+{ target_type = "self", damage_type = "arcane", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{ effect = "boss_begamak_devour_effect", chance = 1.0 }] }
+]
+
+[skills.boss_begamak_hellfire_breath]
+name = "Hellfire Breath"
+energy_cost = 0
+action_type = "action"
+cooldown = 2
+summary = "begamak deal damage to all characters"
+hits = [
+  {target_type = "all_enemies", damage_type="fire", formula = "attacker.attack*1+attacker.current_hp*0.07", base_power = 10, variance = 0.25}
+]
+
 
 #PLAYERS
 #warrior

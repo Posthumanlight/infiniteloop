@@ -92,6 +92,16 @@ actions = [
   { type = "heal", expr = "10 + target.hp * 0.1", scales_with_stacks = false },
 ]
 
+#boss_begamak
+[effects.boss_begamak_devour_effect]
+name = "Devour (healing)"
+trigger = "on_apply"
+duration = 1
+stackable = false
+actions = [
+  { type = "heal", expr = "target.hp * 0.05 + target.current_hp * 0.05", scales_with_stacks = false },
+]
+
 #warlock
 [effects.warlock_demonic_augmentation]
 name = "Demonic Augmentation"

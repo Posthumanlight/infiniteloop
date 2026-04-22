@@ -31,10 +31,10 @@ crit_chance = "owner.crit_chance"
 crit_dmg = "owner.crit_dmg"
 resistance = "0"
 energy = "40"
-mastery = "owner.mastery"
+mastery = "owner.mastery * 0.75"
 
 [summons.blaze.minor_stat_formulas]
-fire_dmg_pct = "owner.mastery * 0.1"
+fire_dmg_pct = "owner.mastery * 0.01"
 
 [summons.ice_golem]
 name = "Ice Golem"
@@ -53,4 +53,4 @@ energy = "40"
 mastery = "owner.mastery *1.5"
 
 [summons.ice_golem.minor_stat_formulas]
-ice_dmg_pct = "owner.mastery * 0.1"
+ice_dmg_pct = "owner.mastery * 0.005"
