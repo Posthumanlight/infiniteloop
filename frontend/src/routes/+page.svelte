@@ -7,13 +7,21 @@
   import TagList from '$components/TagList.svelte';
   import { bootstrapWebApp } from '$lib/api';
   import { applyTelegramTheme, getTelegramWebApp } from '$lib/telegram';
-  import type { InventoryMoveResponse, WebAppBootstrap, WebAppView, CharacterSheet } from '$lib/types';
+  import type {
+    CharacterSheet,
+    InventoryMoveResponse,
+    SavedCharacter,
+    WebAppBootstrap,
+    WebAppTarget,
+    WebAppView
+  } from '$lib/types';
 
   let bootstrap: WebAppBootstrap | null = null;
   let activeView: WebAppView = 'character';
   let telegramInitData = '';
   let error = '';
   let loading = true;
+  let chooserPending = false;
 
   function minorStatEntries(sheet: CharacterSheet): string[] {
     return Object.entries(sheet.minor_stats)
@@ -74,6 +82,48 @@
     };
   }
 
+  function savedCharacterName(character: SavedCharacter): string {
+    return character.character_name || `#${character.character_id}`;
+  }
+
+  async function loadTarget(target: WebAppTarget): Promise<void> {
+    chooserPending = true;
+    error = '';
+    try {
+      const response = await fetch('/api/webapp/bootstrap', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          init_data: telegramInitData,
+          target
+        })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const detail =
+          payload && typeof payload.detail === 'string'
+            ? payload.detail
+            : 'Failed to load the selected character.';
+        throw new Error(detail);
+      }
+      bootstrap = payload as WebAppBootstrap;
+      activeView = bootstrap.initial_view;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load the selected character.';
+    } finally {
+      chooserPending = false;
+    }
+  }
+
+  function chooseSavedCharacter(character: SavedCharacter): void {
+    void loadTarget({
+      kind: 'saved',
+      character_id: character.character_id
+    });
+  }
+
   onMount(async () => {
     const tg = getTelegramWebApp();
     if (!tg) {
@@ -122,7 +172,38 @@
       <p>{error}</p>
     </section>
   </main>
-{:else if bootstrap}
+{:else if bootstrap?.mode === 'chooser'}
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Character Browser</p>
+        <h1>Choose Character</h1>
+        <p class="subtitle">Pick one saved character to inspect.</p>
+      </div>
+    </section>
+
+    <section class="chooser-grid">
+      {#if bootstrap.characters.length === 0}
+        <SectionCard title="No Saved Characters" eyebrow="Archive">
+          <p class="empty-copy">No saved characters are available for this Telegram account.</p>
+        </SectionCard>
+      {:else}
+        {#each bootstrap.characters as character}
+          <button
+            type="button"
+            class="chooser-card"
+            disabled={chooserPending}
+            on:click={() => chooseSavedCharacter(character)}
+          >
+            <span>{character.class_id}</span>
+            <strong>{savedCharacterName(character)}</strong>
+            <small>Level {character.level}{character.xp > 0 ? ` | ${character.xp} XP` : ''}</small>
+          </button>
+        {/each}
+      {/if}
+    </section>
+  </main>
+{:else if bootstrap?.sheet && bootstrap.inventory && bootstrap.target}
   {@const sheet = bootstrap.sheet}
   <main class="shell">
     <nav class="view-tabs">
@@ -194,6 +275,7 @@
         <InventoryView
           inventory={bootstrap.inventory}
           initData={telegramInitData}
+          target={bootstrap.target}
           onStateUpdate={handleInventoryStateUpdate}
         />
       </section>
@@ -318,10 +400,47 @@
   }
 
   .grid,
-  .inventory-section {
+  .inventory-section,
+  .chooser-grid {
     display: grid;
     gap: 1rem;
     margin-top: 1rem;
+  }
+
+  .chooser-card {
+    display: grid;
+    gap: 0.35rem;
+    width: 100%;
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .chooser-card:disabled {
+    cursor: wait;
+    opacity: 0.62;
+  }
+
+  .chooser-card span,
+  .chooser-card small {
+    color: rgba(212, 230, 255, 0.72);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .chooser-card strong {
+    font-size: 1.1rem;
+  }
+
+  .empty-copy {
+    margin: 0;
+    color: rgba(225, 234, 248, 0.78);
   }
 
   .stat-grid {
@@ -338,6 +457,10 @@
 
     .grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .chooser-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .stat-grid {

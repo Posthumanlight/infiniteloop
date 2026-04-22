@@ -19,24 +19,15 @@ from bot.tools.save_flow import (
     start_save_flow,
 )
 from db.queries.users_namespace import UserCharactersData
-from game.session.lobby_manager import LobbyManager, LobbyPlayer, LobbySelectionMode, LobbySession
 from game_service import GameService
+from game.session.lobby_manager import LobbyPlayer, LobbySelectionMode, LobbySession
+from lobby_service import LobbyService
 
 router = Router(name="game_router")
-_LOBBY_MANAGERS: dict[int, LobbyManager] = {}
 
 
 def _session_id(chat_id: int) -> str:
     return str(chat_id)
-
-
-def _get_lobby_manager(db_pool: asyncpg.Pool) -> LobbyManager:
-    key = id(db_pool)
-    manager = _LOBBY_MANAGERS.get(key)
-    if manager is None:
-        manager = LobbyManager(UserCharactersData(pool=db_pool))
-        _LOBBY_MANAGERS[key] = manager
-    return manager
 
 
 def _class_name_map(game_service: GameService) -> dict[str, str]:
@@ -154,13 +145,13 @@ async def _send_character_prompt(
 
 async def start_victory_save_flow(
     message: Message,
-    game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
 ) -> None:
     if get_save_flow(session_id) is not None:
         return
 
-    flow = start_save_flow(game_service, session_id)
+    flow = start_save_flow(lobby_service, session_id)
     for choice in flow.choices.values():
         if choice.is_transient:
             prompt = (
@@ -182,6 +173,7 @@ async def start_victory_save_flow(
 async def _finalize_save_flow_if_ready(
     message: Message,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
 ) -> None:
     flow = get_save_flow(session_id)
@@ -189,7 +181,7 @@ async def _finalize_save_flow_if_ready(
         return
 
     clear_save_flow(session_id)
-    game_service.remove_session(session_id)
+    lobby_service.close_session(session_id)
     await message.answer("All save choices resolved. Session closed.")
 
 
@@ -197,20 +189,19 @@ async def _finalize_save_flow_if_ready(
 async def cmd_newgame(
     message: Message,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
 
-    if game_service.has_session(sid):
+    if lobby_service.has_active_session(sid):
         await message.answer("A game session already exists in this chat.")
         return
-    if lobby_manager.has_lobby(sid):
+    if lobby_service.has_lobby(sid):
         await message.answer("A game lobby already exists in this chat.")
         return
 
-    lobby = await lobby_manager.create_lobby(
+    lobby = await lobby_service.create_lobby(
         sid,
         message.from_user.id,
         message.from_user.first_name or "Player",
@@ -224,21 +215,20 @@ async def cmd_newgame(
 async def cmd_join(
     message: Message,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
 
-    if game_service.has_session(sid):
+    if lobby_service.has_active_session(sid):
         await message.answer("The run has already started in this chat.")
         return
-    if not lobby_manager.has_lobby(sid):
+    if not lobby_service.has_lobby(sid):
         await message.answer("No active game lobby. Use /run to start one.")
         return
 
     try:
-        lobby = await lobby_manager.join_lobby(
+        lobby = await lobby_service.join_lobby(
             sid,
             message.from_user.id,
             message.from_user.first_name or "Player",
@@ -257,21 +247,20 @@ async def cmd_join(
 async def cb_join(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
 
-    if game_service.has_session(sid):
+    if lobby_service.has_active_session(sid):
         await callback.answer("The run has already started.", show_alert=True)
         return
-    if not lobby_manager.has_lobby(sid):
+    if not lobby_service.has_lobby(sid):
         await callback.answer("No active game lobby.", show_alert=True)
         return
 
     try:
-        lobby = await lobby_manager.join_lobby(
+        lobby = await lobby_service.join_lobby(
             sid,
             callback.from_user.id,
             callback.from_user.first_name or "Player",
@@ -297,23 +286,22 @@ async def cb_join(
 async def cb_character_select(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
-    if not lobby_manager.has_lobby(sid):
+    if not lobby_service.has_lobby(sid):
         await callback.answer("No active game lobby.", show_alert=True)
         return
 
     character_id = int(callback.data[7:])
     try:
-        lobby_manager.choose_saved_character(sid, callback.from_user.id, character_id)
+        lobby_service.choose_saved_character(sid, callback.from_user.id, character_id)
     except ValueError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    lobby = lobby_manager.get_lobby(sid)
+    lobby = lobby_service.get_lobby(sid)
     player = lobby.players[callback.from_user.id]
     class_names = _class_name_map(game_service)
     await callback.message.edit_text(
@@ -322,7 +310,7 @@ async def cb_character_select(
     )
     await callback.answer("Saved character selected!")
     await callback.message.answer(_render_lobby(lobby, class_names), reply_markup=lobby_keyboard())
-    if lobby_manager.all_players_ready(sid):
+    if lobby_service.all_players_ready(sid):
         await callback.message.answer(
             "All players ready! Press Start Run to begin.",
             reply_markup=lobby_keyboard(),
@@ -334,17 +322,16 @@ async def cb_character_select(
 async def cb_new_character(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
-    if not lobby_manager.has_lobby(sid):
+    if not lobby_service.has_lobby(sid):
         await callback.answer("No active game lobby.", show_alert=True)
         return
 
     try:
-        lobby_manager.choose_create_new(sid, callback.from_user.id)
+        lobby_service.choose_create_new(sid, callback.from_user.id)
     except ValueError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -361,29 +348,28 @@ async def cb_new_character(
 async def cb_class_select(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
-    if not lobby_manager.has_lobby(sid):
+    if not lobby_service.has_lobby(sid):
         await callback.answer("No active game lobby.", show_alert=True)
         return
 
     class_id = callback.data[8:]
     try:
-        lobby_manager.choose_new_class(sid, callback.from_user.id, class_id)
+        lobby_service.choose_new_class(sid, callback.from_user.id, class_id)
     except ValueError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    lobby = lobby_manager.get_lobby(sid)
+    lobby = lobby_service.get_lobby(sid)
     player = lobby.players[callback.from_user.id]
     class_names = _class_name_map(game_service)
     await callback.message.edit_text(_render_character_prompt(player, class_names))
     await callback.answer(f"You chose {class_names.get(class_id, class_id)}!")
     await callback.message.answer(_render_lobby(lobby, class_names), reply_markup=lobby_keyboard())
-    if lobby_manager.all_players_ready(sid):
+    if lobby_service.all_players_ready(sid):
         await callback.message.answer(
             "All players ready! Press Start Run to begin.",
             reply_markup=lobby_keyboard(),
@@ -394,29 +380,24 @@ async def cb_class_select(
 async def _start_run(
     message: Message,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
-    if not lobby_manager.has_lobby(sid):
+    if not lobby_service.has_lobby(sid):
         await message.answer("No active game lobby. Use /run to start one.")
         return
-    if not lobby_manager.all_players_ready(sid):
+    if not lobby_service.all_players_ready(sid):
         await message.answer("Not all players have chosen a character yet!")
         return
 
     try:
-        await lobby_manager.launch_game(sid, game_service)
-    except NotImplementedError as exc:
-        await message.answer(str(exc))
-        return
+        await lobby_service.launch_run(sid)
     except Exception as exc:
         await message.answer(f"Failed to start run: {exc}")
         return
 
-    lobby_manager.remove_lobby(sid)
-    players = game_service.get_session_players(sid)
+    players = lobby_service.get_session_players(sid)
     player_map = {p.entity_id: p for p in players}
     options = game_service.get_exploration_choices(sid)
 
@@ -431,22 +412,23 @@ async def _start_run(
 async def cb_start(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
-    db_pool: asyncpg.Pool,
 ) -> None:
     await callback.answer()
-    await _start_run(callback.message, game_service, state, db_pool)
+    await _start_run(callback.message, game_service, lobby_service, state)
 
 
 @router.callback_query(F.data.startswith("g:save:"))
 async def cb_save_decision(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    if not game_service.has_session(sid):
+    if not lobby_service.has_active_session(sid):
         await callback.answer("No active run to save.", show_alert=True)
         clear_save_flow(sid)
         return
@@ -481,7 +463,12 @@ async def cb_save_decision(
         await callback.answer("Character not saved.")
         await callback.message.answer(f"{choice.display_name} chose not to save.")
         await state.set_state(GameStates.run_ended)
-        await _finalize_save_flow_if_ready(callback.message, game_service, sid)
+        await _finalize_save_flow_if_ready(
+            callback.message,
+            game_service,
+            lobby_service,
+            sid,
+        )
         return
 
     if decision != "yes":
@@ -501,11 +488,12 @@ async def cb_save_decision(
 async def msg_save_name(
     message: Message,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(message.chat.id)
-    if not game_service.has_session(sid):
+    if not lobby_service.has_active_session(sid):
         clear_save_flow(sid)
         await message.answer("No active run to save.")
         await state.set_state(GameStates.run_ended)
@@ -543,7 +531,12 @@ async def msg_save_name(
         choice.awaiting_name = False
         choice.resolved = True
         await state.set_state(GameStates.run_ended)
-        await _finalize_save_flow_if_ready(message, game_service, sid)
+        await _finalize_save_flow_if_ready(
+            message,
+            game_service,
+            lobby_service,
+            sid,
+        )
         return
 
     player = next(
@@ -555,7 +548,12 @@ async def msg_save_name(
         choice.awaiting_name = False
         choice.resolved = True
         await state.set_state(GameStates.run_ended)
-        await _finalize_save_flow_if_ready(message, game_service, sid)
+        await _finalize_save_flow_if_ready(
+            message,
+            game_service,
+            lobby_service,
+            sid,
+        )
         return
 
     if choice.is_transient:
@@ -575,7 +573,12 @@ async def msg_save_name(
             choice.awaiting_name = False
             choice.resolved = True
             await state.set_state(GameStates.run_ended)
-            await _finalize_save_flow_if_ready(message, game_service, sid)
+            await _finalize_save_flow_if_ready(
+                message,
+                game_service,
+                lobby_service,
+                sid,
+            )
             return
         await chars_db.save_character_progress(
             character_id=choice.source_character_id,
@@ -592,13 +595,19 @@ async def msg_save_name(
     choice.resolved = True
     await message.answer(f"{choice.display_name} saved as '{character_name}'.")
     await state.set_state(GameStates.run_ended)
-    await _finalize_save_flow_if_ready(message, game_service, sid)
+    await _finalize_save_flow_if_ready(
+        message,
+        game_service,
+        lobby_service,
+        sid,
+    )
 
 
 @router.message(Command("combat"))
 async def cmd_status(
     message: Message,
     game_service: GameService,
+    lobby_service: LobbyService,
 ) -> None:
     sid = _session_id(message.chat.id)
     if not game_service.is_in_combat(sid):
@@ -606,7 +615,7 @@ async def cmd_status(
         return
 
     snapshot = game_service.get_combat_snapshot(sid)
-    players = {p.entity_id: p for p in game_service.get_session_players(sid)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(sid)}
     await message.answer(render_status(snapshot, players))
 
 
@@ -614,28 +623,27 @@ async def cmd_status(
 async def cmd_flee(
     message: Message,
     game_service: GameService,
-    db_pool: asyncpg.Pool,
+    lobby_service: LobbyService,
 ) -> None:
     sid = _session_id(message.chat.id)
-    lobby_manager = _get_lobby_manager(db_pool)
 
-    if lobby_manager.has_lobby(sid):
-        lobby_manager.remove_lobby(sid)
+    if lobby_service.has_lobby(sid):
+        lobby_service.close_session(sid)
         await message.answer("The lobby is closed.")
         return
 
-    if not game_service.has_session(sid):
+    if not lobby_service.has_active_session(sid):
         await message.answer("No active game.")
         return
 
     if get_save_flow(sid) is not None:
         clear_save_flow(sid)
-        game_service.remove_session(sid)
+        lobby_service.close_session(sid)
         await message.answer("Pending save prompts were closed. Unsaved choices were discarded.")
         return
 
     stats = game_service.get_run_stats(sid) if game_service.get_session_phase(sid) is not None else None
-    game_service.remove_session(sid)
+    lobby_service.close_session(sid)
 
     if stats is not None:
         summary = render_run_summary(stats, victory=False)

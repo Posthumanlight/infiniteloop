@@ -192,3 +192,23 @@ mastery = 6
 [enemies.fire_imp.minor_stats]
 fire_dmg_pct = 0.15
 
+[enemies.warlock]
+name = "Warlock"
+skills = ["generic_enemy_attack"]
+passives = []
+xp_reward = 33
+combat_type = "normal"
+tags = ["fire", "cave"]
+[enemies.warlock.major_stats]
+attack = 5
+hp = 33
+speed = 8
+crit_chance = 0.0
+crit_dmg = 1.5
+resistance = 10
+energy = 70
+mastery = 10
+[enemies.warlock.minor_stats]
+fire_dmg_pct = 0.15
+arcane_def_pct = 0.15
+fire_def_pct = 0.15

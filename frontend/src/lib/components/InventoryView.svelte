@@ -3,7 +3,7 @@
   import InventoryGrid from '$components/InventoryGrid.svelte';
   import SectionCard from '$components/SectionCard.svelte';
   import { dissolveInventoryItems, moveInventoryItem } from '$lib/api';
-  import type { InventoryMoveResponse, InventorySnapshot, Item, ItemEffect } from '$lib/types';
+  import type { InventoryMoveResponse, InventorySnapshot, Item, ItemEffect, WebAppTarget } from '$lib/types';
 
   type Selection =
     | { source: 'inventory'; item: Item }
@@ -17,10 +17,12 @@
   let {
     inventory,
     initData,
+    target,
     onStateUpdate
   }: {
     inventory: InventorySnapshot;
     initData: string;
+    target: WebAppTarget;
     onStateUpdate: (payload: InventoryMoveResponse) => void;
   } = $props();
 
@@ -200,6 +202,7 @@
     try {
       const nextState = await dissolveInventoryItems(
         initData,
+        target,
         Array.from(dissolveSelection),
       );
       onStateUpdate(nextState);
@@ -240,7 +243,7 @@
     movePending = true;
     moveError = '';
     try {
-      const nextState = await moveInventoryItem(initData, payload);
+      const nextState = await moveInventoryItem(initData, target, payload);
       onStateUpdate(nextState);
       clearSelection();
     } catch (error) {

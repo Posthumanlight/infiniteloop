@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from game.combat.skill_modifiers import ModifierInstance
 from game.character.inventory import Inventory
@@ -11,10 +11,6 @@ from game.character.stats import MajorStats
 from game.core.data_loader import load_classes, load_progression
 from game.core.game_models import PlayerInfo
 from game.session.factories import build_player, build_player_from_saved
-
-if TYPE_CHECKING:
-    from game_service import GameService
-
 
 class LobbySelectionMode(Enum):
     UNSET = "unset"
@@ -328,27 +324,6 @@ class LobbyManager:
             player_infos=tuple(player_infos),
             players=tuple(players),
             save_origins=tuple(save_origins),
-        )
-
-    async def launch_game(
-        self,
-        session_id: str,
-        game_service: GameService,
-    ) -> None:
-        payload = await self.build_launch_payload(session_id)
-
-        launch_session = getattr(game_service, "launch_session", None)
-        if launch_session is None:
-            raise NotImplementedError(
-                "GameService.launch_session() must be implemented before "
-                "LobbyManager.launch_game() can be used.",
-            )
-
-        launch_session(
-            session_id=session_id,
-            player_infos=list(payload.player_infos),
-            players=list(payload.players),
-            save_origins=list(payload.save_origins),
         )
 
     @staticmethod

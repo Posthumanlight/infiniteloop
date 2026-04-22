@@ -29,6 +29,7 @@ from bot.tools.combat_image import send_combat_image
 from bot.tools.session_lookup import entity_id_for_tg_user
 from game.core.enums import SessionEndReason, SessionPhase
 from game_service import GameService
+from lobby_service import LobbyService
 
 router = Router(name="exploration_router")
 
@@ -45,11 +46,12 @@ def _session_id(chat_id: int) -> str:
 async def cb_location_vote(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    player_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    player_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if player_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -65,7 +67,7 @@ async def cb_location_vote(
 
     if not game_service.all_players_voted(sid):
         # Update message to show current vote status
-        players = {p.entity_id: p for p in game_service.get_session_players(sid)}
+        players = {p.entity_id: p for p in lobby_service.get_session_players(sid)}
         options = game_service.get_exploration_choices(sid)
         exploration = game_service._get_session(sid).state.exploration
         await callback.message.edit_text(
@@ -76,7 +78,15 @@ async def cb_location_vote(
 
     # All votes in — resolve
     phase = game_service.resolve_location_choice(sid)
-    await _handle_phase_transition(callback, game_service, sid, phase, state, db_pool)
+    await _handle_phase_transition(
+        callback,
+        game_service,
+        lobby_service,
+        sid,
+        phase,
+        state,
+        db_pool,
+    )
 
 
 # ------------------------------------------------------------------
@@ -87,11 +97,12 @@ async def cb_location_vote(
 async def cb_event_vote(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    player_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    player_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if player_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -107,7 +118,7 @@ async def cb_event_vote(
 
     if not game_service.all_event_votes_in(sid):
         # Update message with current vote status
-        players = {p.entity_id: p for p in game_service.get_session_players(sid)}
+        players = {p.entity_id: p for p in lobby_service.get_session_players(sid)}
         event_state = game_service.get_event_state(sid)
         await callback.message.edit_text(
             render_event(event_state, players),
@@ -117,16 +128,25 @@ async def cb_event_vote(
 
     # All votes in — resolve event
     phase = game_service.resolve_event(sid)
-    await _handle_phase_transition(callback, game_service, sid, phase, state, db_pool)
+    await _handle_phase_transition(
+        callback,
+        game_service,
+        lobby_service,
+        sid,
+        phase,
+        state,
+        db_pool,
+    )
 
 
 @router.callback_query(F.data.startswith("g:rwd:"))
 async def cb_reward_choice(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    player_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    player_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if player_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -140,7 +160,7 @@ async def cb_reward_choice(
 
     await callback.answer("Reward selected!")
 
-    players = {p.entity_id: p for p in game_service.get_session_players(sid)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(sid)}
     for notice in game_service.consume_reward_notices(sid):
         player_name = (
             players[notice.player_id].display_name
@@ -174,9 +194,10 @@ async def cb_reward_choice(
 async def _send_reward_prompts(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
 ) -> None:
-    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(session_id)}
 
     for notice in game_service.consume_reward_notices(session_id):
         player_name = (
@@ -209,13 +230,14 @@ async def _send_reward_prompts(
 async def _handle_phase_transition(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
     phase: SessionPhase,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     """Route to the correct UI based on the new session phase."""
-    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(session_id)}
 
     match phase:
         case SessionPhase.IN_COMBAT:
@@ -231,6 +253,7 @@ async def _handle_phase_transition(
                 await _show_skill_prompt(
                     callback,
                     game_service,
+                    lobby_service,
                     session_id,
                     state,
                     page=0,
@@ -254,7 +277,12 @@ async def _handle_phase_transition(
                 render_exploration_choices(options, (), players),
                 reply_markup=location_keyboard(options),
             )
-            await _send_reward_prompts(callback, game_service, session_id)
+            await _send_reward_prompts(
+                callback,
+                game_service,
+                lobby_service,
+                session_id,
+            )
             await state.set_state(GameStates.exploring)
 
         case SessionPhase.ENDED:
@@ -265,10 +293,10 @@ async def _handle_phase_transition(
             if victory:
                 await start_victory_save_flow(
                     callback.message,
-                    game_service,
+                    lobby_service,
                     session_id,
                 )
                 await state.set_state(GameStates.save_decision)
             else:
-                game_service.remove_session(session_id)
+                lobby_service.close_session(session_id)
                 await state.set_state(GameStates.run_ended)

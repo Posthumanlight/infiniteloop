@@ -3,7 +3,6 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from bot.tools.character_renderer import render_character_sheet
-from bot.tools.session_lookup import entity_id_for_tg_user
 from config import settings
 from db.queries.users_namespace import UserCurrenciesDB
 from game.core.data_loader import load_item_dissolve_constants
@@ -20,9 +19,12 @@ from webapp.schemas import (
     InventoryMoveIn,
     InventoryMoveOut,
     InventoryOut,
+    SavedCharacterOut,
+    WebAppTargetIn,
     WebAppBootstrapIn,
     WebAppBootstrapOut,
 )
+from lobby_service import CharacterTarget, LobbyService
 
 router = APIRouter(prefix="/api/webapp", tags=["webapp"])
 
@@ -47,19 +49,58 @@ def _parse_entry(payload_init_data: str) -> tuple[object, WebAppEntry]:
     return init_data, entry
 
 
-def _resolve_entity_id(
-    request: Request,
-    init_data: object,
-    session_id: str,
-) -> tuple[object, str]:
-    game_service = request.app.state.game_service
-    if not game_service.has_session(session_id):
-        raise HTTPException(status_code=404, detail="No active game for this chat")
+def _get_lobby_service(request: Request) -> LobbyService:
+    return request.app.state.lobby_service
 
-    entity_id = entity_id_for_tg_user(game_service, session_id, init_data.user.id)
-    if entity_id is None:
-        raise HTTPException(status_code=403, detail="You are not in the current game")
-    return game_service, entity_id
+
+def _target_from_payload(
+    lobby_service: LobbyService,
+    init_data: object,
+    target: WebAppTargetIn,
+) -> CharacterTarget:
+    if target.kind == "session":
+        if target.session_id is None:
+            raise HTTPException(status_code=400, detail="Mini App session payload is missing")
+        resolved = lobby_service.target_for_session_user(
+            target.session_id,
+            init_data.user.id,
+        )
+        if resolved is None:
+            raise HTTPException(status_code=403, detail="You are not in the current game")
+        return resolved
+
+    if target.kind == "saved":
+        if target.character_id is None:
+            raise HTTPException(status_code=400, detail="Character id is missing")
+        return CharacterTarget(
+            kind="saved",
+            tg_user_id=init_data.user.id,
+            character_id=target.character_id,
+        )
+
+    raise HTTPException(status_code=400, detail="Unsupported character target")
+
+
+async def _selection_response(
+    lobby_service: LobbyService,
+    target: CharacterTarget,
+    *,
+    initial_view: str,
+) -> WebAppBootstrapOut:
+    selection = await lobby_service.get_character_selection(target)
+    response_target = (
+        WebAppTargetIn(kind="saved", character_id=target.character_id)
+        if target.kind == "saved"
+        else WebAppTargetIn(kind="session", session_id=target.session_id)
+    )
+    return WebAppBootstrapOut(
+        mode="loaded",
+        initial_view=initial_view,
+        target=response_target,
+        sheet=CharacterSheetOut.from_domain(selection.sheet),
+        inventory=InventoryOut.from_domain(selection.inventory),
+        legacy_text=render_character_sheet(selection.sheet),
+    )
 
 
 @router.post("/bootstrap", response_model=WebAppBootstrapOut)
@@ -68,20 +109,45 @@ async def bootstrap_webapp(
     request: Request,
 ) -> WebAppBootstrapOut:
     init_data, entry = _parse_entry(payload.init_data)
-    game_service, entity_id = _resolve_entity_id(request, init_data, entry.session_id)
+    lobby_service = _get_lobby_service(request)
+
+    if payload.target is not None:
+        target = _target_from_payload(lobby_service, init_data, payload.target)
+        try:
+            return await _selection_response(
+                lobby_service,
+                target,
+                initial_view=entry.initial_view,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if entry.mode == "browser":
+        characters = await lobby_service.list_user_characters(init_data.user.id)
+        return WebAppBootstrapOut(
+            mode="chooser",
+            initial_view=entry.initial_view,
+            characters=[
+                SavedCharacterOut.from_domain(character)
+                for character in characters
+            ],
+        )
+
+    if entry.session_id is None:
+        raise HTTPException(status_code=400, detail="Mini App session payload is missing")
+
+    target = lobby_service.target_for_session_user(entry.session_id, init_data.user.id)
+    if target is None:
+        raise HTTPException(status_code=403, detail="You are not in the current game")
 
     try:
-        sheet = game_service.get_character_sheet(entry.session_id, entity_id)
-        inventory = game_service.get_inventory(entry.session_id, entity_id)
+        return await _selection_response(
+            lobby_service,
+            target,
+            initial_view=entry.initial_view,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return WebAppBootstrapOut(
-        initial_view=entry.initial_view,
-        sheet=CharacterSheetOut.from_domain(sheet),
-        inventory=InventoryOut.from_domain(inventory),
-        legacy_text=render_character_sheet(sheet),
-    )
 
 
 @router.post("/char/bootstrap", response_model=CharacterBootstrapOut)
@@ -96,10 +162,13 @@ async def bootstrap_character(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    game_service, entity_id = _resolve_entity_id(request, init_data, session_id)
+    lobby_service = _get_lobby_service(request)
+    target = lobby_service.target_for_session_user(session_id, init_data.user.id)
+    if target is None:
+        raise HTTPException(status_code=403, detail="You are not in the current game")
 
     try:
-        sheet = game_service.get_character_sheet(session_id, entity_id)
+        sheet = await lobby_service.get_character_sheet(target)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -115,10 +184,11 @@ async def move_inventory_item(
     request: Request,
 ) -> InventoryMoveOut:
     init_data, entry = _parse_entry(payload.init_data)
-    game_service, entity_id = _resolve_entity_id(request, init_data, entry.session_id)
+    lobby_service = _get_lobby_service(request)
+    target = _target_from_payload(lobby_service, init_data, payload.target)
 
     try:
-        current_inventory = game_service.get_inventory(entry.session_id, entity_id)
+        current_inventory = await lobby_service.get_inventory(target)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -132,7 +202,7 @@ async def move_inventory_item(
     try:
         if payload.destination_kind == "inventory":
             if current_item.equipped_slot is not None:
-                game_service.unequip_item(entry.session_id, entity_id, payload.instance_id)
+                await lobby_service.unequip_item(target, payload.instance_id)
         elif payload.destination_kind == "equipment":
             if payload.slot_type not in {"weapon", "armor", "relic"}:
                 raise HTTPException(status_code=400, detail="Unsupported equipment slot")
@@ -143,9 +213,8 @@ async def move_inventory_item(
                 pass
             else:
                 relic_slot = payload.slot_index if payload.slot_type == "relic" else None
-                game_service.equip_item(
-                    entry.session_id,
-                    entity_id,
+                await lobby_service.equip_item(
+                    target,
                     payload.instance_id,
                     relic_slot=relic_slot,
                 )
@@ -154,11 +223,10 @@ async def move_inventory_item(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    sheet = game_service.get_character_sheet(entry.session_id, entity_id)
-    inventory = game_service.get_inventory(entry.session_id, entity_id)
+    selection = await lobby_service.get_character_selection(target)
     return InventoryMoveOut(
-        sheet=CharacterSheetOut.from_domain(sheet),
-        inventory=InventoryOut.from_domain(inventory),
+        sheet=CharacterSheetOut.from_domain(selection.sheet),
+        inventory=InventoryOut.from_domain(selection.inventory),
     )
 
 
@@ -168,16 +236,16 @@ async def dissolve_inventory_items(
     request: Request,
 ) -> InventoryDissolveOut:
     init_data, entry = _parse_entry(payload.init_data)
-    game_service, entity_id = _resolve_entity_id(request, init_data, entry.session_id)
+    lobby_service = _get_lobby_service(request)
+    target = _target_from_payload(lobby_service, init_data, payload.target)
 
     instance_ids = tuple(payload.instance_ids)
     if not instance_ids:
         raise HTTPException(status_code=400, detail="No items selected")
 
     try:
-        dissolved_preview, payout = game_service.preview_dissolve_inventory_items(
-            entry.session_id,
-            entity_id,
+        dissolved_preview, payout = await lobby_service.preview_dissolve_inventory_items(
+            target,
             instance_ids,
         )
     except KeyError as exc:
@@ -201,9 +269,8 @@ async def dissolve_inventory_items(
         ) from exc
 
     try:
-        _player, dissolved_items, confirmed_payout = game_service.dissolve_inventory_items(
-            entry.session_id,
-            entity_id,
+        _player, dissolved_items, confirmed_payout = await lobby_service.dissolve_inventory_items(
+            target,
             instance_ids,
         )
     except KeyError as exc:
@@ -211,8 +278,7 @@ async def dissolve_inventory_items(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    sheet = game_service.get_character_sheet(entry.session_id, entity_id)
-    inventory = game_service.get_inventory(entry.session_id, entity_id)
+    selection = await lobby_service.get_character_selection(target)
     dissolved_ids = [
         item.instance_id
         for item in dissolved_items
@@ -221,8 +287,8 @@ async def dissolve_inventory_items(
         dissolved_ids = [item.instance_id for item in dissolved_preview]
 
     return InventoryDissolveOut(
-        sheet=CharacterSheetOut.from_domain(sheet),
-        inventory=InventoryOut.from_domain(inventory),
+        sheet=CharacterSheetOut.from_domain(selection.sheet),
+        inventory=InventoryOut.from_domain(selection.inventory),
         dissolved_item_ids=dissolved_ids,
         currency_delta=confirmed_payout,
         currency=CurrencyBalanceOut(

@@ -52,8 +52,8 @@ from game.items.equipment_effects import (
 from game.items.item_generator import generate_item_from_blueprint_id
 from game.items.items import ItemInstance
 from game.session.factories import build_player
-from game.session.session_manager import SessionManager
-from game.session.models import SessionState
+from game.session.models import ActiveSession
+from lobby_service import ActiveSessionProvider
 from game.core.game_models import (
     CharacterSheet,
     CombatSnapshot,
@@ -82,15 +82,6 @@ from game.core.game_models import (
 )
 
 
-@dataclass
-class _ActiveSession:
-    session_id: str
-    players: dict[str, PlayerInfo]  # entity_id -> PlayerInfo
-    manager: SessionManager
-    state: SessionState | None
-    save_origins: dict[str, object] | None = None
-
-
 @dataclass(frozen=True)
 class _DamagePreview:
     amount_non_crit: int
@@ -115,72 +106,24 @@ class GameService:
     Knows nothing about Telegram — takes generic IDs, returns dataclasses.
     """
 
-    def __init__(self) -> None:
-        self._sessions: dict[str, _ActiveSession] = {}
+    def __init__(self, sessions: ActiveSessionProvider) -> None:
+        self._sessions = sessions
 
     # ------------------------------------------------------------------
     # Session lifecycle
     # ------------------------------------------------------------------
 
-    def create_session(self, session_id: str, creator: PlayerInfo) -> None:
-        if session_id in self._sessions:
-            raise ValueError("Session already exists for this chat")
-
-        manager = SessionManager(seed=hash(session_id) & 0x7FFFFFFF)
-        self._sessions[session_id] = _ActiveSession(
-            session_id=session_id,
-            players={creator.entity_id: creator},
-            manager=manager,
-            state=None,
-            save_origins={},
-        )
-
-    def launch_session(
-        self,
-        session_id: str,
-        player_infos: list[PlayerInfo],
-        players: list[PlayerCharacter],
-        save_origins: list[object] | None = None,
-    ) -> None:
-        if session_id in self._sessions:
-            raise ValueError("Session already exists for this chat")
-        if not player_infos or not players:
-            raise ValueError("Cannot launch session without players")
-
-        origins_map: dict[str, object] = {}
-        if save_origins is not None:
-            for origin in save_origins:
-                entity_id = getattr(origin, "entity_id", None)
-                if isinstance(entity_id, str):
-                    origins_map[entity_id] = origin
-
-        manager = SessionManager(seed=hash(session_id) & 0x7FFFFFFF)
-        self._sessions[session_id] = _ActiveSession(
-            session_id=session_id,
-            players={info.entity_id: info for info in player_infos},
-            manager=manager,
-            state=None,
-            save_origins=origins_map,
-        )
-        session = self._sessions[session_id]
-        session.state = session.manager.start_run(session_id, players)
-        session.state = session.manager.generate_choices(session.state)
-
-    def join_session(self, session_id: str, player: PlayerInfo) -> None:
-        session = self._get_session(session_id)
-        if player.entity_id in session.players:
-            raise ValueError("Player already in session")
-        session.players[player.entity_id] = player
-
     def get_session_players(self, session_id: str) -> list[PlayerInfo]:
-        session = self._get_session(session_id)
-        return list(session.players.values())
+        return self._sessions.get_session_players(session_id)
 
     def has_session(self, session_id: str) -> bool:
-        return session_id in self._sessions
+        return self._sessions.has_active_session(session_id)
 
     def is_in_combat(self, session_id: str) -> bool:
-        session = self._sessions.get(session_id)
+        try:
+            session = self._get_session(session_id)
+        except ValueError:
+            return False
         return (
             session is not None
             and session.state is not None
@@ -188,7 +131,9 @@ class GameService:
         )
 
     def remove_session(self, session_id: str) -> None:
-        self._sessions.pop(session_id, None)
+        close_session = getattr(self._sessions, "close_session", None)
+        if close_session is not None:
+            close_session(session_id)
 
     # ------------------------------------------------------------------
     # Inventory
@@ -197,7 +142,7 @@ class GameService:
     def get_inventory(self, session_id: str, entity_id: str) -> InventorySnapshot:
         session = self._get_session(session_id)
         player = self._get_runtime_player(session, entity_id)
-        return self._build_inventory_snapshot(
+        return self.inventory_for_player(
             player,
             in_combat=session.state is not None and session.state.combat is not None,
         )
@@ -283,49 +228,16 @@ class GameService:
         return updated, dissolved, total
 
     # ------------------------------------------------------------------
-    # Class selection
+    # Class data
     # ------------------------------------------------------------------
 
     @staticmethod
     def get_available_classes() -> dict[str, ClassData]:
         return load_classes()
 
-    def select_class(
-        self, session_id: str, entity_id: str, class_id: str,
-    ) -> None:
-        session = self._get_session(session_id)
-        if entity_id not in session.players:
-            raise ValueError("Player not in session")
-
-        classes = load_classes()
-        if class_id not in classes:
-            raise ValueError(f"Unknown class: {class_id}")
-
-        old_info = session.players[entity_id]
-        session.players[entity_id] = replace(old_info, class_id=class_id)
-
-    def all_players_ready(self, session_id: str) -> bool:
-        session = self._get_session(session_id)
-        return all(p.class_id is not None for p in session.players.values())
-
     # ------------------------------------------------------------------
     # Exploration run
     # ------------------------------------------------------------------
-
-    def start_exploration_run(self, session_id: str) -> None:
-        session = self._get_session(session_id)
-        if not session.players:
-            raise ValueError("No players in session")
-        if not self.all_players_ready(session_id):
-            raise ValueError("Not all players have chosen a class")
-
-        players = [
-            build_player(info.class_id, entity_id=info.entity_id)
-            for info in session.players.values()
-        ]
-
-        session.state = session.manager.start_run(session_id, players)
-        session.state = session.manager.generate_choices(session.state)
 
     def get_exploration_choices(self, session_id: str) -> tuple:
         session = self._get_session(session_id)
@@ -436,7 +348,10 @@ class GameService:
         return pending
 
     def get_session_phase(self, session_id: str) -> SessionPhase | None:
-        session = self._sessions.get(session_id)
+        try:
+            session = self._get_session(session_id)
+        except ValueError:
+            return None
         if session is None or session.state is None:
             return None
         return session.state.phase
@@ -557,7 +472,10 @@ class GameService:
         ]
 
     def get_whose_turn(self, session_id: str) -> str | None:
-        session = self._sessions.get(session_id)
+        try:
+            session = self._get_session(session_id)
+        except ValueError:
+            return None
         if session is None or session.state is None or session.state.combat is None:
             return None
         return self._current_turn_id(session)
@@ -577,18 +495,10 @@ class GameService:
         if player_info.class_id is None:
             raise ValueError("Choose a class first")
 
-        class_data = load_class(player_info.class_id)
-        in_combat = (
-            session.state is not None
-            and session.state.combat is not None
-        )
-
         # Resolve the entity with current HP/effects
         if session.state is None:
             # Lobby phase — use class template
-            return self._sheet_from_class_template(
-                player_info, class_data,
-            )
+            return self.sheet_from_class_template(player_info, player_info.class_id)
 
         player = next(
             (p for p in session.state.players if p.entity_id == entity_id),
@@ -597,12 +507,28 @@ class GameService:
         if player is None:
             raise ValueError("You are not in this game")
 
-        if in_combat:
-            entity = session.state.combat.entities.get(entity_id, player)
-            combat_state = session.state.combat
-        else:
-            entity = player
-            combat_state = None
+        return self.sheet_for_player(
+            player_info,
+            player,
+            combat_state=session.state.combat,
+        )
+
+    def sheet_for_player(
+        self,
+        player_info: PlayerInfo,
+        player: PlayerCharacter,
+        *,
+        combat_state=None,
+    ) -> CharacterSheet:
+        if player_info.class_id is None:
+            raise ValueError("Choose a class first")
+
+        class_data = load_class(player_info.class_id)
+        in_combat = combat_state is not None
+        entity = (
+            combat_state.entities.get(player.entity_id, player)
+            if combat_state is not None else player
+        )
 
         # Major stats — effective if in combat, raw otherwise
         major_stats: dict[str, float] = {}
@@ -612,7 +538,7 @@ class GameService:
         ):
             if combat_state is not None:
                 major_stats[stat_name] = get_effective_major_stat(
-                    combat_state, entity_id, stat_name,
+                    combat_state, player.entity_id, stat_name,
                 )
             else:
                 major_stats[stat_name] = get_effective_player_major_stat(
@@ -625,7 +551,7 @@ class GameService:
         for key in entity.minor_stats.values:
             if combat_state is not None:
                 minor_stats[key] = get_effective_minor_stat(
-                    combat_state, entity_id, key,
+                    combat_state, player.entity_id, key,
                 )
             else:
                 minor_stats[key] = get_effective_player_minor_stat(entity, key)
@@ -663,7 +589,7 @@ class GameService:
         )
 
         return CharacterSheet(
-            entity_id=entity_id,
+            entity_id=player.entity_id,
             display_name=player_info.display_name,
             class_id=player_info.class_id,
             class_name=class_data.name,
@@ -681,6 +607,24 @@ class GameService:
             active_effects=active_effects,
             in_combat=in_combat,
         )
+
+    def sheet_from_class_template(
+        self,
+        player_info: PlayerInfo,
+        class_id: str,
+    ) -> CharacterSheet:
+        return self._sheet_from_class_template(
+            replace(player_info, class_id=class_id),
+            load_class(class_id),
+        )
+
+    def inventory_for_player(
+        self,
+        player: PlayerCharacter,
+        *,
+        in_combat: bool,
+    ) -> InventorySnapshot:
+        return self._build_inventory_snapshot(player, in_combat=in_combat)
 
     def _sheet_from_class_template(
         self,
@@ -1445,19 +1389,16 @@ class GameService:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _get_session(self, session_id: str) -> _ActiveSession:
-        session = self._sessions.get(session_id)
-        if session is None:
-            raise ValueError("No active session")
-        return session
+    def _get_session(self, session_id: str) -> ActiveSession:
+        return self._sessions.get_active_session(session_id)
 
     @staticmethod
-    def _assert_in_combat(session: _ActiveSession) -> None:
+    def _assert_in_combat(session: ActiveSession) -> None:
         if session.state is None or session.state.combat is None:
             raise ValueError("Not in combat")
 
     @staticmethod
-    def _assert_not_in_combat(session: _ActiveSession) -> None:
+    def _assert_not_in_combat(session: ActiveSession) -> None:
         if session.state is None:
             raise ValueError("No active run")
         if session.state.combat is not None:
@@ -1465,7 +1406,7 @@ class GameService:
 
     @staticmethod
     def _get_runtime_player(
-        session: _ActiveSession,
+        session: ActiveSession,
         entity_id: str,
     ) -> PlayerCharacter:
         if session.state is None:
@@ -1480,7 +1421,7 @@ class GameService:
 
     @staticmethod
     def _replace_runtime_player(
-        session: _ActiveSession,
+        session: ActiveSession,
         player: PlayerCharacter,
     ) -> None:
         if session.state is None:
@@ -1505,7 +1446,7 @@ class GameService:
 
     def _submit_and_capture(
         self,
-        session: _ActiveSession,
+        session: ActiveSession,
         action: ActionRequest,
         results: list[ActionResult],
         *,
@@ -1528,7 +1469,7 @@ class GameService:
 
     def _auto_play_ai_entities(
         self,
-        session: _ActiveSession,
+        session: ActiveSession,
         results: list[ActionResult] | None = None,
     ) -> None:
         """Process all consecutive AI-controlled turns, capturing results."""
@@ -1558,7 +1499,7 @@ class GameService:
                 )
 
     @staticmethod
-    def _build_ai_action(session: _ActiveSession) -> ActionRequest | None:
+    def _build_ai_action(session: ActiveSession) -> ActionRequest | None:
         combat = session.state.combat
         current_id = combat.turn_order[combat.current_turn_index]
         rng = SeededRNG(0)
@@ -1571,14 +1512,14 @@ class GameService:
         return action
 
     @staticmethod
-    def _current_turn_id(session: _ActiveSession) -> str | None:
+    def _current_turn_id(session: ActiveSession) -> str | None:
         combat = session.state.combat
         if combat is None:
             return None
         return combat.turn_order[combat.current_turn_index]
 
     @staticmethod
-    def _current_entity_type(session: _ActiveSession) -> EntityType | None:
+    def _current_entity_type(session: ActiveSession) -> EntityType | None:
         combat = session.state.combat
         if combat is None:
             return None
@@ -1586,7 +1527,7 @@ class GameService:
         return combat.entities[current_id].entity_type
 
     @staticmethod
-    def _current_actor_is_ai_controlled(session: _ActiveSession) -> bool:
+    def _current_actor_is_ai_controlled(session: ActiveSession) -> bool:
         combat = session.state.combat
         if combat is None or combat.current_turn_index >= len(combat.turn_order):
             return False
@@ -1598,7 +1539,7 @@ class GameService:
 
     def _build_turn_batch(
         self,
-        session: _ActiveSession,
+        session: ActiveSession,
         results: tuple[ActionResult, ...],
     ) -> TurnBatch:
         combat_ended = session.state.combat is None
@@ -1610,11 +1551,11 @@ class GameService:
             victory=self._check_victory(session) if combat_ended else False,
         )
 
-    def _check_victory(self, session: _ActiveSession) -> bool:
+    def _check_victory(self, session: ActiveSession) -> bool:
         """Victory = at least one player alive after combat ends."""
         return any(p.current_hp > 0 for p in session.state.players)
 
-    def _build_combat_snapshot(self, session: _ActiveSession) -> CombatSnapshot:
+    def _build_combat_snapshot(self, session: ActiveSession) -> CombatSnapshot:
         combat = session.state.combat
         return CombatSnapshot(
             entities=self._build_entity_map(session),
@@ -1625,7 +1566,7 @@ class GameService:
 
     def _build_entity_map(
         self,
-        session: _ActiveSession,
+        session: ActiveSession,
     ) -> dict[str, EntitySnapshot]:
         if session.state.combat is not None:
             return {

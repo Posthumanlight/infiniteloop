@@ -1,6 +1,7 @@
 import type {
   InventoryDissolveResponse,
   InventoryMoveResponse,
+  WebAppTarget,
   WebAppBootstrap
 } from '$lib/types';
 
@@ -33,6 +34,7 @@ export async function bootstrapWebApp(initData: string): Promise<WebAppBootstrap
 
 export async function moveInventoryItem(
   initData: string,
+  target: WebAppTarget,
   payload: {
     instance_id: string;
     destination_kind: 'inventory' | 'equipment';
@@ -47,6 +49,7 @@ export async function moveInventoryItem(
     },
     body: JSON.stringify({
       init_data: initData,
+      target,
       ...payload
     })
   });
@@ -56,6 +59,7 @@ export async function moveInventoryItem(
 
 export async function dissolveInventoryItems(
   initData: string,
+  target: WebAppTarget,
   instanceIds: string[],
 ): Promise<InventoryDissolveResponse> {
   const response = await fetch('/api/webapp/inventory/dissolve', {
@@ -65,6 +69,7 @@ export async function dissolveInventoryItems(
     },
     body: JSON.stringify({
       init_data: initData,
+      target,
       instance_ids: instanceIds
     })
   });

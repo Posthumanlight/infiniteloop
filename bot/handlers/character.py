@@ -5,11 +5,12 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from bot.tools.session_lookup import entity_id_for_tg_user
-from game_service import GameService
+from lobby_service import LobbyService
 from webapp.links import (
+    build_char_browser_start_param,
     build_char_start_param,
     build_direct_mini_app_link,
+    build_inventory_browser_start_param,
     build_inventory_start_param,
 )
 
@@ -23,32 +24,32 @@ def _session_id(chat_id: int) -> str:
 async def _open_webapp(
     message: Message,
     bot: Bot,
-    game_service: GameService,
+    lobby_service: LobbyService,
     *,
-    start_param: str,
+    session_start_param: str,
+    browser_start_param: str,
     button_text: str,
     prompt_text: str,
+    browser_prompt_text: str,
     preload: str,
 ) -> None:
     sid = _session_id(message.chat.id)
+    target = lobby_service.target_for_session_user(sid, message.from_user.id)
 
-    if not game_service.has_session(sid):
-        await message.answer("No active game. Use /newgame to start one.")
-        return
+    start_param = browser_start_param
+    resolved_prompt = browser_prompt_text
 
-    entity_id = entity_id_for_tg_user(game_service, sid, message.from_user.id)
-    if entity_id is None:
-        await message.answer("You are not in the current game.")
-        return
-
-    try:
-        if preload == "character":
-            game_service.get_character_sheet(sid, entity_id)
-        else:
-            game_service.get_inventory(sid, entity_id)
-    except ValueError as exc:
-        await message.answer(str(exc))
-        return
+    if target is not None:
+        try:
+            if preload == "character":
+                await lobby_service.get_character_sheet(target)
+            else:
+                await lobby_service.get_inventory(target)
+        except ValueError as exc:
+            await message.answer(str(exc))
+            return
+        start_param = session_start_param
+        resolved_prompt = prompt_text
 
     me = await bot.me()
     if me.username is None:
@@ -69,22 +70,24 @@ async def _open_webapp(
             ],
         ],
     )
-    await message.answer(prompt_text, reply_markup=keyboard)
+    await message.answer(resolved_prompt, reply_markup=keyboard)
 
 
 @router.message(Command("char"))
 async def cmd_char(
     message: Message,
     bot: Bot,
-    game_service: GameService,
+    lobby_service: LobbyService,
 ) -> None:
     await _open_webapp(
         message,
         bot,
-        game_service,
-        start_param=build_char_start_param(_session_id(message.chat.id)),
+        lobby_service,
+        session_start_param=build_char_start_param(_session_id(message.chat.id)),
+        browser_start_param=build_char_browser_start_param(),
         button_text="Open Character Sheet",
         prompt_text="Open your character sheet in the Mini App.",
+        browser_prompt_text="Choose a character to inspect in the Mini App.",
         preload="character",
     )
 
@@ -93,14 +96,16 @@ async def cmd_char(
 async def cmd_inventory(
     message: Message,
     bot: Bot,
-    game_service: GameService,
+    lobby_service: LobbyService,
 ) -> None:
     await _open_webapp(
         message,
         bot,
-        game_service,
-        start_param=build_inventory_start_param(_session_id(message.chat.id)),
+        lobby_service,
+        session_start_param=build_inventory_start_param(_session_id(message.chat.id)),
+        browser_start_param=build_inventory_browser_start_param(),
         button_text="Open Inventory",
         prompt_text="Open your inventory in the Mini App.",
+        browser_prompt_text="Choose a character inventory to inspect in the Mini App.",
         preload="inventory",
     )

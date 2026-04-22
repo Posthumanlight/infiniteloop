@@ -27,6 +27,21 @@ export interface SkillHitDetail {
 }
 
 export type WebAppView = 'character' | 'inventory';
+export type WebAppMode = 'chooser' | 'loaded';
+
+export interface WebAppTarget {
+  kind: 'session' | 'saved';
+  session_id?: string | null;
+  character_id?: number | null;
+}
+
+export interface SavedCharacter {
+  character_id: number;
+  character_name: string | null;
+  class_id: string;
+  level: number;
+  xp: number;
+}
 
 export interface Skill {
   skill_id: string;
@@ -139,9 +154,12 @@ export interface InventorySnapshot {
 }
 
 export interface WebAppBootstrap {
+  mode: WebAppMode;
   initial_view: WebAppView;
-  sheet: CharacterSheet;
-  inventory: InventorySnapshot;
+  target: WebAppTarget | null;
+  characters: SavedCharacter[];
+  sheet: CharacterSheet | null;
+  inventory: InventorySnapshot | null;
   legacy_text: string;
 }
 

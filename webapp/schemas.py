@@ -1,8 +1,13 @@
 """Pydantic schemas for the Mini App API."""
 
+from __future__ import annotations
+
+from typing import Literal
+
 from pydantic import BaseModel
 
 from game.core.game_models import CharacterSheet, InventorySnapshot
+from game.session.lobby_manager import SavedCharacterSummary
 
 
 class CharacterBootstrapIn(BaseModel):
@@ -11,6 +16,31 @@ class CharacterBootstrapIn(BaseModel):
 
 class WebAppBootstrapIn(BaseModel):
     init_data: str
+    target: WebAppTargetIn | None = None
+
+
+class WebAppTargetIn(BaseModel):
+    kind: Literal["session", "saved"]
+    session_id: str | None = None
+    character_id: int | None = None
+
+
+class SavedCharacterOut(BaseModel):
+    character_id: int
+    character_name: str | None
+    class_id: str
+    level: int
+    xp: int
+
+    @classmethod
+    def from_domain(cls, summary: SavedCharacterSummary) -> "SavedCharacterOut":
+        return cls(
+            character_id=summary.character_id,
+            character_name=summary.character_name,
+            class_id=summary.class_id,
+            level=summary.level,
+            xp=summary.xp,
+        )
 
 
 class SkillHitOut(BaseModel):
@@ -333,14 +363,18 @@ class CharacterBootstrapOut(BaseModel):
 
 
 class WebAppBootstrapOut(BaseModel):
+    mode: str = "loaded"
     initial_view: str
-    sheet: CharacterSheetOut
-    inventory: InventoryOut
-    legacy_text: str
+    target: WebAppTargetIn | None = None
+    characters: list[SavedCharacterOut] = []
+    sheet: CharacterSheetOut | None = None
+    inventory: InventoryOut | None = None
+    legacy_text: str = ""
 
 
 class InventoryMoveIn(BaseModel):
     init_data: str
+    target: WebAppTargetIn
     instance_id: str
     destination_kind: str
     slot_type: str | None = None
@@ -354,6 +388,7 @@ class InventoryMoveOut(BaseModel):
 
 class InventoryDissolveIn(BaseModel):
     init_data: str
+    target: WebAppTargetIn
     instance_ids: list[str]
 
 

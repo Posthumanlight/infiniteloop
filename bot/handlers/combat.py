@@ -41,6 +41,7 @@ from game.combat.models import ActionRequest
 from game.combat.summons import commandable_summons_for_skill
 from game.core.enums import ActionType, SessionEndReason, SessionPhase, TargetType
 from game_service import GameService
+from lobby_service import LobbyService
 
 router = Router(name="combat_router")
 
@@ -52,6 +53,7 @@ def _session_id(chat_id: int) -> str:
 async def _show_skill_prompt(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
     state: FSMContext,
     *,
@@ -67,7 +69,7 @@ async def _show_skill_prompt(
     if turn_snap is None:
         return
 
-    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(session_id)}
     skills = game_service.get_available_skills(session_id, whose_turn)
     resolved_page = normalize_skill_page(skills, page)
     prompt = render_turn_prompt(whose_turn, turn_snap, players)
@@ -135,10 +137,11 @@ def _target_candidates_for_requirement(
 async def cb_skill_page(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    actor_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if actor_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -157,6 +160,7 @@ async def cb_skill_page(
     await _show_skill_prompt(
         callback,
         game_service,
+        lobby_service,
         sid,
         state,
         page=page,
@@ -169,11 +173,12 @@ async def cb_skill_page(
 async def cb_skill(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    actor_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if actor_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -230,7 +235,15 @@ async def cb_skill(
             skill_id=skill_id,
             target_refs=(),
         )
-        await _submit_action(callback, game_service, sid, action, state, db_pool)
+        await _submit_action(
+            callback,
+            game_service,
+            lobby_service,
+            sid,
+            action,
+            state,
+            db_pool,
+        )
         return
 
     await state.update_data(
@@ -271,10 +284,11 @@ def _target_prompt(skill_name: str, target_index: int, total_targets: int) -> st
 async def cb_back_to_skills(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    actor_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if actor_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -293,6 +307,7 @@ async def cb_back_to_skills(
     await _show_skill_prompt(
         callback,
         game_service,
+        lobby_service,
         sid,
         state,
         page=page,
@@ -305,11 +320,12 @@ async def cb_back_to_skills(
 async def cb_target(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    actor_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if actor_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -338,18 +354,18 @@ async def cb_target(
     skills = game_service.get_available_skills(sid, actor_id)
     skill_match = next(((s, cd) for s, cd in skills if s.skill_id == skill_id), None)
     if skill_match is None:
-        await _restore_skill_prompt(callback, game_service, sid, state)
+        await _restore_skill_prompt(callback, game_service, lobby_service, sid, state)
         await callback.answer("Skill no longer available.", show_alert=True)
         return
     skill, cd = skill_match
     if cd > 0:
-        await _restore_skill_prompt(callback, game_service, sid, state)
+        await _restore_skill_prompt(callback, game_service, lobby_service, sid, state)
         await callback.answer(f"Skill on cooldown ({cd} turns)!", show_alert=True)
         return
 
     current_energy = _get_actor_energy(game_service, sid, actor_id)
     if current_energy is not None and current_energy < skill.energy_cost:
-        await _restore_skill_prompt(callback, game_service, sid, state)
+        await _restore_skill_prompt(callback, game_service, lobby_service, sid, state)
         await callback.answer(
             _not_enough_energy_message(current_energy, skill.energy_cost),
             show_alert=True,
@@ -410,7 +426,15 @@ async def cb_target(
         pending_target_requirements=[],
         collected_target_refs=[],
     )
-    await _submit_action(callback, game_service, sid, action, state, db_pool)
+    await _submit_action(
+        callback,
+        game_service,
+        lobby_service,
+        sid,
+        action,
+        state,
+        db_pool,
+    )
 
 
 # ------------------------------------------------------------------
@@ -421,11 +445,12 @@ async def cb_target(
 async def cb_skip(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     state: FSMContext,
     db_pool: asyncpg.Pool,
 ) -> None:
     sid = _session_id(callback.message.chat.id)
-    actor_id = entity_id_for_tg_user(game_service, sid, callback.from_user.id)
+    actor_id = entity_id_for_tg_user(lobby_service, sid, callback.from_user.id)
     if actor_id is None:
         await callback.answer("You are not in this game.", show_alert=True)
         return
@@ -436,11 +461,12 @@ async def cb_skip(
         return
 
     batch = game_service.skip_player_turn(sid, actor_id)
-    players = {p.entity_id: p for p in game_service.get_session_players(sid)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(sid)}
 
     await _render_batch_and_prompt(
         callback,
         game_service,
+        lobby_service,
         sid,
         batch,
         players,
@@ -456,9 +482,10 @@ async def cb_skip(
 async def _send_reward_prompts(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
 ) -> None:
-    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(session_id)}
 
     for notice in game_service.consume_reward_notices(session_id):
         player_name = (
@@ -487,6 +514,7 @@ async def _send_reward_prompts(
 async def _submit_action(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
     action: ActionRequest,
     state: FSMContext,
@@ -496,19 +524,33 @@ async def _submit_action(
     try:
         batch = game_service.submit_player_action(session_id, action)
     except ValueError as exc:
-        await _restore_skill_prompt(callback, game_service, session_id, state)
+        await _restore_skill_prompt(
+            callback,
+            game_service,
+            lobby_service,
+            session_id,
+            state,
+        )
         await callback.answer(str(exc), show_alert=True)
         return
-    players = {p.entity_id: p for p in game_service.get_session_players(session_id)}
+    players = {p.entity_id: p for p in lobby_service.get_session_players(session_id)}
 
     await _render_batch_and_prompt(
-        callback, game_service, session_id, batch, players, state, db_pool,
+        callback,
+        game_service,
+        lobby_service,
+        session_id,
+        batch,
+        players,
+        state,
+        db_pool,
     )
 
 
 async def _render_batch_and_prompt(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
     batch,
     players: dict,
@@ -533,7 +575,7 @@ async def _render_batch_and_prompt(
         if loot is not None and loot.awards:
             player_names = {
                 player.entity_id: player.display_name
-                for player in game_service.get_session_players(session_id)
+                for player in lobby_service.get_session_players(session_id)
             }
             for text in render_loot_resolution(loot, player_names):
                 await callback.message.answer(text)
@@ -547,7 +589,12 @@ async def _render_batch_and_prompt(
                 render_exploration_choices(options, (), players),
                 reply_markup=location_keyboard(options),
             )
-            await _send_reward_prompts(callback, game_service, session_id)
+            await _send_reward_prompts(
+                callback,
+                game_service,
+                lobby_service,
+                session_id,
+            )
             await state.set_state(GameStates.exploring)
         elif phase == SessionPhase.ENDED:
             stats = game_service.get_run_stats(session_id)
@@ -557,15 +604,15 @@ async def _render_batch_and_prompt(
             if victory:
                 await start_victory_save_flow(
                     callback.message,
-                    game_service,
+                    lobby_service,
                     session_id,
                 )
                 await state.set_state(GameStates.save_decision)
             else:
-                game_service.remove_session(session_id)
+                lobby_service.close_session(session_id)
                 await state.set_state(GameStates.run_ended)
         else:
-            game_service.remove_session(session_id)
+            lobby_service.close_session(session_id)
     else:
         # Prompt next player
         whose_turn = batch.whose_turn
@@ -576,6 +623,7 @@ async def _render_batch_and_prompt(
             await _show_skill_prompt(
                 callback,
                 game_service,
+                lobby_service,
                 session_id,
                 state,
                 page=0,
@@ -611,6 +659,7 @@ async def _clear_pending_combat_selection(state: FSMContext) -> None:
 async def _restore_skill_prompt(
     callback: CallbackQuery,
     game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
     state: FSMContext,
 ) -> None:
@@ -621,11 +670,15 @@ async def _restore_skill_prompt(
 
     if previous_state != GameStates.combat_target.state:
         return
-    if not game_service.has_session(session_id) or not game_service.is_in_combat(session_id):
+    if (
+        not lobby_service.has_active_session(session_id)
+        or not game_service.is_in_combat(session_id)
+    ):
         return
     await _show_skill_prompt(
         callback,
         game_service,
+        lobby_service,
         session_id,
         state,
         page=page,

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from game_service import GameService
+from lobby_service import ActiveSessionProvider
 
 
 @dataclass
@@ -47,14 +47,14 @@ def clear_save_flow(session_id: str) -> None:
 
 
 def start_save_flow(
-    game_service: GameService,
+    sessions: ActiveSessionProvider,
     session_id: str,
 ) -> SessionSaveFlow:
     existing = _SAVE_FLOWS.get(session_id)
     if existing is not None:
         return existing
 
-    session = game_service._get_session(session_id)
+    session = sessions.get_active_session(session_id)
     origins = session.save_origins or {}
     choices: dict[str, PendingSaveChoice] = {}
     for entity_id, info in session.players.items():

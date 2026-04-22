@@ -2,18 +2,18 @@ import asyncpg
 
 from db.queries.users_namespace import UserCharactersData
 from game.core.enums import SessionEndReason
-from game_service import GameService
+from lobby_service import LobbyService
 
 
 async def persist_victory_progress(
-    game_service: GameService,
+    lobby_service: LobbyService,
     session_id: str,
     db_pool: asyncpg.Pool,
 ) -> None:
-    if not game_service.has_session(session_id):
+    if not lobby_service.has_active_session(session_id):
         return
 
-    session = game_service._get_session(session_id)
+    session = lobby_service.get_active_session(session_id)
     if (
         session.state is None
         or session.state.end_reason != SessionEndReason.MAX_DEPTH
