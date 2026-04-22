@@ -8,10 +8,15 @@ from game.core.enums import (
     ActionType,
     CombatPhase,
     EntityType,
+    EventType,
     LocationType,
+    OutcomeAction,
+    OutcomeTarget,
     SessionEndReason,
     SessionPhase,
 )
+from game.events.models import ChoiceDef, EventDef, EventStageDef, OutcomeDef
+import game.session.node_manager as node_manager_module
 from game.session.factories import build_player
 from game.session.session_manager import SessionManager
 from game.world.models import GenerationConfig
@@ -115,8 +120,8 @@ def _run_combat_to_end(mgr, state):
             action = ActionRequest(
                 actor_id=current_id,
                 action_type=ActionType.ACTION,
-                skill_id="slash",
-                target_id=target,
+                skill_id=entity.skills[0],
+                target_ids=((0, target),) if target is not None else (),
             )
             state = mgr.submit_combat_action(state, action)
         else:
@@ -129,8 +134,8 @@ def _run_combat_to_end(mgr, state):
             action = ActionRequest(
                 actor_id=current_id,
                 action_type=ActionType.ACTION,
-                skill_id="slash",
-                target_id=target,
+                skill_id=entity.skills[0],
+                target_ids=((0, target),) if target is not None else (),
             )
             state = mgr.submit_combat_action(state, action)
     return state
@@ -255,6 +260,98 @@ def test_full_event_loop():
     assert state.event is None
     assert state.run_stats.events_completed == 1
     assert state.run_stats.rooms_explored == 1
+
+
+def _multistage_event_def() -> EventDef:
+    return EventDef(
+        event_id="multi_stage_test",
+        name="Multi Stage Test",
+        event_type=EventType.MULTIPLAYER,
+        initial_stage_id="start",
+        stages={
+            "start": EventStageDef(
+                stage_id="start",
+                title="Start",
+                description="First stage.",
+                choices=(
+                    ChoiceDef(
+                        index=0,
+                        label="Continue",
+                        description="Move to the next stage.",
+                        outcomes=(
+                            OutcomeDef(
+                                action=OutcomeAction.GIVE_XP,
+                                target=OutcomeTarget.ALL,
+                                value=3,
+                            ),
+                        ),
+                        next_stage="finish",
+                    ),
+                ),
+            ),
+            "finish": EventStageDef(
+                stage_id="finish",
+                title="Finish",
+                description="Final stage.",
+                choices=(
+                    ChoiceDef(
+                        index=0,
+                        label="Done",
+                        description="End the event.",
+                        outcomes=(),
+                    ),
+                ),
+            ),
+        },
+    )
+
+
+def test_multistage_event_advances_without_completing_until_terminal(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        node_manager_module,
+        "load_event",
+        lambda event_id: _multistage_event_def(),
+    )
+
+    mgr = SessionManager(seed=42)
+    player = make_warrior("p1")
+    state = mgr.start_run("test-session", [player])
+    event_option = LocationOption(
+        location_id="event_1",
+        name="Multi",
+        location_type=LocationType.EVENT,
+        tags=(),
+        event_id="multi_stage_test",
+    )
+    state = replace(
+        state,
+        exploration=replace(
+            state.exploration,
+            current_options=(event_option,),
+            votes=(),
+        ),
+    )
+
+    state = mgr.submit_location_vote(state, "p1", 0)
+    state = mgr.resolve_location_choice(state)
+    state = mgr.submit_event_vote(state, "p1", 0)
+    state = mgr.resolve_event(state)
+
+    assert state.phase == SessionPhase.IN_EVENT
+    assert state.event is not None
+    assert state.event.current_stage_id == "finish"
+    assert state.event.votes == ()
+    assert state.run_stats.events_completed == 0
+    assert state.players[0].xp == 3
+
+    state = mgr.submit_event_vote(state, "p1", 0)
+    state = mgr.resolve_event(state)
+
+    assert state.phase in (SessionPhase.EXPLORING, SessionPhase.ENDED)
+    assert state.event is None
+    assert state.run_stats.events_completed == 1
 
 
 # ---------------------------------------------------------------------------

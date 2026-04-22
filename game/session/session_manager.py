@@ -235,6 +235,16 @@ class SessionManager:
 
         state, combat_enemy_ids, room_difficulty = self._node.resolve_event(state)
 
+        if state.event is not None:
+            if not self._check_party_alive(state.players):
+                return replace(
+                    state,
+                    phase=SessionPhase.ENDED,
+                    event=None,
+                    end_reason=SessionEndReason.PARTY_WIPED,
+                )
+            return state
+
         # Chain into combat if START_COMBAT outcome triggered
         if combat_enemy_ids:
             if not self._check_party_alive(state.players):

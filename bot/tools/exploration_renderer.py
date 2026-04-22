@@ -73,13 +73,14 @@ def render_event(
 ) -> str:
     """Show event description and choices."""
     event_def = event_state.event_def
+    stage = event_state.current_stage
     lines = [
-        f"\U0001f4dc {event_def.name}\n",
-        event_def.description,
+        f"\U0001f4dc {event_def.name} - {stage.title}\n",
+        stage.description,
         "",
     ]
 
-    for choice in event_def.choices:
+    for choice in stage.choices:
         vote_count = sum(
             1 for v in event_state.votes if v.choice_index == choice.index
         )

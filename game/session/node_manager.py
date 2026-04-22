@@ -30,6 +30,7 @@ from game.core.dice import SeededRNG
 from game.core.enums import (
     CombatPhase,
     EntityType,
+    EventPhase,
     LevelRewardType,
     OutcomeAction,
     SessionPhase,
@@ -342,14 +343,21 @@ class NodeManager:
         state = replace(
             state,
             event=event_state,
+        )
+
+        # Apply only the newly resolved stage's outcomes.
+        state = self._apply_event_outcomes(state, resolution.outcomes)
+
+        if event_state.phase == EventPhase.PRESENTING:
+            return state, (), room_difficulty
+
+        state = replace(
+            state,
             run_stats=replace(
                 state.run_stats,
                 events_completed=state.run_stats.events_completed + 1,
             ),
         )
-
-        # Apply outcomes to players
-        state = self._apply_event_outcomes(state, resolution.outcomes)
 
         # Collect START_COMBAT enemy groups
         combat_enemy_ids: list[str] = []

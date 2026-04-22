@@ -25,6 +25,7 @@ from game.core.enums import (
     ActionType,
     CombatPhase,
     EntityType,
+    EventPhase,
     LocationType,
     OutcomeAction,
 )
@@ -277,35 +278,38 @@ def run_event(player: PlayerCharacter, location: LocationOption, seed: int):
 
     print(f"\n{'=' * 50}")
     print(f"  EVENT: {event_def.name}")
-    print(f"  {event_def.description}")
     print(f"{'=' * 50}")
 
     event_state = start_event("console", event_def, [player.entity_id], seed)
 
-    print("\n  Choices:")
-    for choice in event_def.choices:
-        print(f"    [{choice.index + 1}] {choice.label}")
-        print(f"        {choice.description}")
+    while event_state.phase == EventPhase.PRESENTING:
+        stage = event_state.current_stage
+        print(f"\n  {stage.title}")
+        print(f"  {stage.description}")
+        print("\n  Choices:")
+        for choice in stage.choices:
+            print(f"    [{choice.index + 1}] {choice.label}")
+            print(f"        {choice.description}")
 
-    while True:
-        try:
-            raw = input(f"  Pick choice [1-{len(event_def.choices)}]: ").strip()
-            choice_idx = int(raw) - 1 if raw else 0
-            if 0 <= choice_idx < len(event_def.choices):
-                break
-            print("  Invalid choice.")
-        except ValueError:
-            print("  Invalid choice.")
+        while True:
+            try:
+                raw = input(f"  Pick choice [1-{len(stage.choices)}]: ").strip()
+                choice_idx = int(raw) - 1 if raw else 0
+                if 0 <= choice_idx < len(stage.choices):
+                    break
+                print("  Invalid choice.")
+            except ValueError:
+                print("  Invalid choice.")
 
-    event_state = submit_vote(event_state, player.entity_id, choice_idx)
-    event_state, resolution = resolve_event(event_state, [player])
+        event_state = submit_vote(event_state, player.entity_id, choice_idx)
+        event_state, resolution = resolve_event(event_state, [player])
 
-    print(f"\n  You chose: {resolution.winning_choice_label}")
-    if resolution.outcomes:
-        for outcome in resolution.outcomes:
-            _print_outcome(outcome)
-    else:
-        print("  Nothing happens.")
+        print(f"\n  You chose: {resolution.winning_choice_label}")
+        if resolution.outcomes:
+            for outcome in resolution.outcomes:
+                _print_outcome(outcome)
+        else:
+            print("  Nothing happens.")
 
 
 def _print_outcome(outcome):

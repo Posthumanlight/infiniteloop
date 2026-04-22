@@ -31,7 +31,18 @@ class ChoiceDef:
     index: int
     label: str
     description: str
-    outcomes: tuple[OutcomeDef, ...]
+    outcomes: tuple[OutcomeDef, ...] = ()
+    next_stage: str | None = None
+
+
+@dataclass(frozen=True)
+class EventStageDef:
+    """One screen/stage within an event."""
+
+    stage_id: str
+    title: str
+    description: str
+    choices: tuple[ChoiceDef, ...]
 
 
 @dataclass(frozen=True)
@@ -49,9 +60,9 @@ class EventDef:
 
     event_id: str
     name: str
-    description: str
     event_type: EventType
-    choices: tuple[ChoiceDef, ...]
+    stages: dict[str, EventStageDef]
+    initial_stage_id: str = "start"
     min_depth: int = 0
     max_depth: int = 999
     weight: int = 10
@@ -83,14 +94,19 @@ class OutcomeResult:
 
 
 @dataclass(frozen=True)
-class EventResolution:
-    """The result of resolving an event after voting."""
+class EventStageResolution:
+    """The result of resolving a single event stage after voting."""
 
+    stage_id: str
     winning_choice_index: int
     winning_choice_label: str
     was_tie: bool
     vote_counts: dict[int, int]
     outcomes: tuple[OutcomeResult, ...]
+    next_stage: str | None = None
+
+
+EventResolution = EventStageResolution
 
 
 @dataclass(frozen=True)
@@ -102,7 +118,13 @@ class EventState:
     event_def: EventDef
     phase: EventPhase
     player_ids: tuple[str, ...]
+    current_stage_id: str
     votes: tuple[Vote, ...] = ()
-    resolution: EventResolution | None = None
+    history: tuple[EventStageResolution, ...] = ()
+    resolution: EventStageResolution | None = None
     rng_state: tuple | None = None
     room_difficulty: "RoomDifficultyModifier | None" = None
+
+    @property
+    def current_stage(self) -> EventStageDef:
+        return self.event_def.stages[self.current_stage_id]

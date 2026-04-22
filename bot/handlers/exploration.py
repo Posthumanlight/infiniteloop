@@ -122,7 +122,7 @@ async def cb_event_vote(
         event_state = game_service.get_event_state(sid)
         await callback.message.edit_text(
             render_event(event_state, players),
-            reply_markup=event_choice_keyboard(event_state.event_def.choices),
+            reply_markup=event_choice_keyboard(event_state.current_stage.choices),
         )
         return
 
@@ -266,7 +266,7 @@ async def _handle_phase_transition(
             event_state = game_service.get_event_state(session_id)
             await callback.message.answer(
                 render_event(event_state, players),
-                reply_markup=event_choice_keyboard(event_state.event_def.choices),
+                reply_markup=event_choice_keyboard(event_state.current_stage.choices),
             )
             await state.set_state(GameStates.event_voting)
 

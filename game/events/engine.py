@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from game.character.player_character import PlayerCharacter
 from game.core.dice import SeededRNG
 from game.core.enums import EventPhase, EventType
-from game.events.models import EventDef, EventResolution, EventState, Vote
+from game.events.models import EventDef, EventStageDef, EventResolution, EventState, Vote
 from game.events.outcomes import resolve_outcomes
 
 if TYPE_CHECKING:
@@ -30,6 +30,11 @@ def start_event(
         )
     if not player_ids:
         raise ValueError("At least one player is required")
+    if event_def.initial_stage_id not in event_def.stages:
+        raise ValueError(
+            f"Initial stage '{event_def.initial_stage_id}' not found "
+            f"for event '{event_def.event_id}'"
+        )
 
     rng = SeededRNG(seed)
     return EventState(
@@ -38,9 +43,21 @@ def start_event(
         event_def=event_def,
         phase=EventPhase.PRESENTING,
         player_ids=tuple(player_ids),
+        current_stage_id=event_def.initial_stage_id,
         rng_state=rng.get_state(),
         room_difficulty=room_difficulty,
     )
+
+
+def get_current_stage(state: EventState) -> EventStageDef:
+    """Return the currently presented stage for an event state."""
+    try:
+        return state.event_def.stages[state.current_stage_id]
+    except KeyError as exc:
+        raise ValueError(
+            f"Current stage '{state.current_stage_id}' not found "
+            f"for event '{state.event_def.event_id}'"
+        ) from exc
 
 
 def submit_vote(
@@ -55,10 +72,11 @@ def submit_vote(
         raise ValueError(f"Player {player_id} is not part of this event")
     if any(v.player_id == player_id for v in state.votes):
         raise ValueError(f"Player {player_id} has already voted")
-    if choice_index < 0 or choice_index >= len(state.event_def.choices):
+    stage = get_current_stage(state)
+    if choice_index < 0 or choice_index >= len(stage.choices):
         raise ValueError(
             f"Invalid choice index {choice_index}, "
-            f"event has {len(state.event_def.choices)} choices"
+            f"stage has {len(stage.choices)} choices"
         )
 
     vote = Vote(player_id=player_id, choice_index=choice_index)
@@ -80,13 +98,60 @@ def resolve_event(
 
     rng = SeededRNG(0)
     rng.set_state(state.rng_state)
+    stage = get_current_stage(state)
 
-    # Tally votes
+    winner_index, was_tie, vote_counts = _resolve_winning_choice(state, rng)
+    winning_choice = stage.choices[winner_index]
+
+    # Resolve outcomes
+    outcomes = resolve_outcomes(winning_choice, players, rng)
+
+    resolution = EventResolution(
+        stage_id=stage.stage_id,
+        winning_choice_index=winner_index,
+        winning_choice_label=winning_choice.label,
+        was_tie=was_tie,
+        vote_counts=vote_counts,
+        outcomes=outcomes,
+        next_stage=winning_choice.next_stage,
+    )
+
+    if winning_choice.next_stage is not None:
+        if winning_choice.next_stage not in state.event_def.stages:
+            raise ValueError(
+                f"Unknown next_stage '{winning_choice.next_stage}' "
+                f"for event '{state.event_def.event_id}'"
+            )
+        return replace(
+            state,
+            current_stage_id=winning_choice.next_stage,
+            votes=(),
+            history=state.history + (resolution,),
+            resolution=None,
+            rng_state=rng.get_state(),
+            phase=EventPhase.PRESENTING,
+        ), resolution
+
+    new_state = replace(
+        state,
+        votes=(),
+        phase=EventPhase.RESOLVED,
+        resolution=resolution,
+        history=state.history + (resolution,),
+        rng_state=rng.get_state(),
+    )
+    return new_state, resolution
+
+
+def _resolve_winning_choice(
+    state: EventState,
+    rng: SeededRNG,
+) -> tuple[int, bool, dict[int, int]]:
+    """Tally current-stage votes and choose a winner."""
     vote_counts: dict[int, int] = dict(
         Counter(v.choice_index for v in state.votes)
     )
 
-    # Find winner(s)
     max_count = max(vote_counts.values())
     tied = [idx for idx, count in vote_counts.items() if count == max_count]
 
@@ -96,26 +161,7 @@ def resolve_event(
     else:
         winner_index = tied[0]
 
-    winning_choice = state.event_def.choices[winner_index]
-
-    # Resolve outcomes
-    outcomes = resolve_outcomes(winning_choice, players, rng)
-
-    resolution = EventResolution(
-        winning_choice_index=winner_index,
-        winning_choice_label=winning_choice.label,
-        was_tie=was_tie,
-        vote_counts=vote_counts,
-        outcomes=outcomes,
-    )
-
-    new_state = replace(
-        state,
-        phase=EventPhase.RESOLVED,
-        resolution=resolution,
-        rng_state=rng.get_state(),
-    )
-    return new_state, resolution
+    return winner_index, was_tie, vote_counts
 
 
 def select_event(

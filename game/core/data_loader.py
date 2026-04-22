@@ -33,6 +33,7 @@ from game.events.models import (
     ChoiceDef,
     EventDef,
     EventRequirements,
+    EventStageDef,
     OutcomeDef,
 )
 
@@ -874,12 +875,105 @@ def _parse_outcome(raw: dict[str, Any]) -> OutcomeDef:
 
 def _parse_choice(index: int, raw: dict[str, Any]) -> ChoiceDef:
     outcomes = tuple(_parse_outcome(o) for o in raw.get("outcomes", []))
+    next_stage = raw.get("next_stage")
     return ChoiceDef(
         index=index,
         label=raw["label"],
         description=raw["description"],
         outcomes=outcomes,
+        next_stage=next_stage,
     )
+
+
+def _parse_event_stages(event_id: str, raw: dict[str, Any]) -> dict[str, EventStageDef]:
+    if "choices" in raw:
+        raise ValueError(
+            f"Event {event_id}: top-level choices are no longer supported; "
+            "move choices under stages.<stage_id>.choices"
+        )
+
+    raw_stages = raw.get("stages")
+    if not isinstance(raw_stages, dict) or not raw_stages:
+        raise ValueError(f"Event {event_id}: stages must be a non-empty table")
+
+    stages: dict[str, EventStageDef] = {}
+    for stage_id, stage_raw in raw_stages.items():
+        if not isinstance(stage_raw, dict):
+            raise ValueError(f"Event {event_id}: stage {stage_id} must be a table")
+
+        raw_choices = stage_raw.get("choices", [])
+        if not raw_choices:
+            raise ValueError(
+                f"Event {event_id}: stage {stage_id} must define at least one choice"
+            )
+
+        stages[stage_id] = EventStageDef(
+            stage_id=stage_id,
+            title=stage_raw["title"],
+            description=stage_raw["description"],
+            choices=tuple(
+                _parse_choice(i, c) for i, c in enumerate(raw_choices)
+            ),
+        )
+
+    return stages
+
+
+def _validate_event_stages(
+    event_id: str,
+    stages: dict[str, EventStageDef],
+    initial_stage_id: str,
+) -> None:
+    if initial_stage_id not in stages:
+        raise ValueError(
+            f"Event {event_id}: initial_stage_id '{initial_stage_id}' "
+            "does not exist"
+        )
+
+    for stage in stages.values():
+        for choice in stage.choices:
+            if choice.next_stage is not None and choice.next_stage not in stages:
+                raise ValueError(
+                    f"Event {event_id}: choice {choice.index} in stage "
+                    f"{stage.stage_id} points to unknown next_stage "
+                    f"'{choice.next_stage}'"
+                )
+            if choice.next_stage is not None and any(
+                outcome.action == OutcomeAction.START_COMBAT
+                for outcome in choice.outcomes
+            ):
+                raise ValueError(
+                    f"Event {event_id}: choice {choice.index} in stage "
+                    f"{stage.stage_id} cannot combine next_stage and start_combat"
+                )
+
+    _validate_event_stage_graph_is_acyclic(event_id, stages)
+
+
+def _validate_event_stage_graph_is_acyclic(
+    event_id: str,
+    stages: dict[str, EventStageDef],
+) -> None:
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(stage_id: str) -> None:
+        if stage_id in visited:
+            return
+        if stage_id in visiting:
+            raise ValueError(
+                f"Event {event_id}: stage graph contains a cycle at '{stage_id}'"
+            )
+
+        visiting.add(stage_id)
+        for choice in stages[stage_id].choices:
+            if choice.next_stage is not None:
+                visit(choice.next_stage)
+        visiting.remove(stage_id)
+        visited.add(stage_id)
+
+    for stage_id in stages:
+        visit(stage_id)
 
 
 def _parse_requirements(raw: dict[str, Any]) -> EventRequirements:
@@ -894,16 +988,16 @@ def load_events() -> dict[str, EventDef]:
     raw = _load_toml("events.toml")["events"]
     result: dict[str, EventDef] = {}
     for eid, edata in raw.items():
-        choices = tuple(
-            _parse_choice(i, c) for i, c in enumerate(edata.get("choices", []))
-        )
+        stages = _parse_event_stages(eid, edata)
+        initial_stage_id = edata.get("initial_stage_id", "start")
+        _validate_event_stages(eid, stages, initial_stage_id)
         requirements = _parse_requirements(edata.get("requirements", {}))
         result[eid] = EventDef(
             event_id=eid,
             name=edata["name"],
-            description=edata["description"],
             event_type=EventType(edata["event_type"]),
-            choices=choices,
+            stages=stages,
+            initial_stage_id=initial_stage_id,
             min_depth=edata.get("min_depth", 0),
             max_depth=edata.get("max_depth", 999),
             weight=edata.get("weight", 10),
