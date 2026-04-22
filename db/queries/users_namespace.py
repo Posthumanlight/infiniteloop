@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import asyncpg
 
 from db.core.crud_operations import safe_get_db_data, safe_execute, SupabaseOperation
+from game.character.flags import CharacterFlag
 from game.character.inventory import EquipmentLoadout, Inventory
 from game.combat.skill_modifiers import ModifierInstance
 from game.core.enums import ItemEffect, ItemType
@@ -233,6 +234,58 @@ class UserCharactersData(UserData):
         return json.dumps(payload)
 
     @staticmethod
+    def _parse_flags(raw_flags) -> dict[str, CharacterFlag]:
+        if raw_flags is None:
+            return {}
+        if isinstance(raw_flags, str):
+            try:
+                decoded = json.loads(raw_flags)
+            except json.JSONDecodeError:
+                return {}
+        elif isinstance(raw_flags, dict):
+            decoded = raw_flags
+        else:
+            return {}
+
+        result: dict[str, CharacterFlag] = {}
+        for key, raw in decoded.items():
+            if isinstance(raw, dict) and "flag_value" in raw:
+                name = str(raw.get("flag_name") or key)
+                persistence = bool(
+                    raw.get("flag_persistence", raw.get("flag_persistance", True)),
+                )
+                value = raw.get("flag_value")
+            else:
+                name = str(key)
+                value = raw
+                persistence = True
+
+            try:
+                flag = CharacterFlag(
+                    flag_name=name,
+                    flag_value=value,
+                    flag_persistence=persistence,
+                )
+            except ValueError:
+                continue
+            if flag.flag_persistence:
+                result[flag.flag_name] = flag
+        return result
+
+    @staticmethod
+    def _serialize_flags(flags: dict[str, CharacterFlag]) -> str:
+        payload = {
+            name: {
+                "flag_name": flag.flag_name,
+                "flag_value": flag.flag_value,
+                "flag_persistence": flag.flag_persistence,
+            }
+            for name, flag in flags.items()
+            if flag.flag_persistence
+        }
+        return json.dumps(payload)
+
+    @staticmethod
     def _parse_generated_effects(raw_effects) -> tuple[GeneratedItemEffect, ...]:
         if raw_effects is None:
             return ()
@@ -417,7 +470,8 @@ class UserCharactersData(UserData):
                 gcd.level AS level,
                 gcd.xp AS xp,
                 gcd.skills AS skills,
-                gcd.modifiers AS modifiers
+                gcd.modifiers AS modifiers,
+                gcd.character_flags AS character_flags
             FROM public.game_characters gc
             JOIN public.game_characters_data gcd
               ON gc.character_id = gcd.character_id
@@ -465,6 +519,7 @@ class UserCharactersData(UserData):
             skills=self._parse_skills(row["skills"]),
             skill_modifiers=self._parse_modifiers(row["modifiers"]),
             inventory=self._build_inventory_from_rows(inventory_rows),
+            flags=self._parse_flags(row["character_flags"]),
         )
 
     async def create_saved_character(
@@ -477,14 +532,23 @@ class UserCharactersData(UserData):
         xp: int = 0,
         skill_modifiers: tuple[ModifierInstance, ...] = (),
         inventory: Inventory | None = None,
+        flags: dict[str, CharacterFlag] | None = None,
     ) -> CharacterRecord:
         inventory = inventory or Inventory()
         skills_json = json.dumps(list(skills))
         modifiers_json = self._serialize_modifiers(skill_modifiers)
+        flags_json = self._serialize_flags(flags or {})
 
         sql_insert_data = """
-            INSERT INTO public.game_characters_data (class, level, xp, skills, modifiers)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO public.game_characters_data (
+                class,
+                level,
+                xp,
+                skills,
+                modifiers,
+                character_flags
+            )
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
             RETURNING character_id
         """
         sql_insert_character = """
@@ -517,6 +581,7 @@ class UserCharactersData(UserData):
                         xp,
                         skills_json,
                         modifiers_json,
+                        flags_json,
                     )
                     if row is None:
                         raise RuntimeError("Failed to create character data row")
@@ -558,6 +623,7 @@ class UserCharactersData(UserData):
             skills=tuple(skills),
             skill_modifiers=tuple(skill_modifiers),
             inventory=inventory,
+            flags=self._parse_flags(flags_json),
         )
 
     async def character_name_exists(
@@ -595,15 +661,22 @@ class UserCharactersData(UserData):
         skills: tuple[str, ...],
         skill_modifiers: tuple[ModifierInstance, ...],
         inventory: Inventory | None = None,
+        flags: dict[str, CharacterFlag] | None = None,
     ) -> None:
         skills_json = json.dumps(list(skills))
         modifiers_json = self._serialize_modifiers(skill_modifiers)
+        flags_json = (
+            self._serialize_flags(flags)
+            if flags is not None
+            else None
+        )
         sql_update_data = """
             UPDATE public.game_characters_data
             SET level = $2,
                 xp = $3,
                 skills = $4,
-                modifiers = $5
+                modifiers = $5,
+                character_flags = COALESCE($6::jsonb, character_flags)
             WHERE character_id = $1
         """
         sql_update_meta = """
@@ -639,6 +712,7 @@ class UserCharactersData(UserData):
                         int(xp),
                         skills_json,
                         modifiers_json,
+                        flags_json,
                     )
                     await conn.execute(
                         sql_update_meta,

@@ -513,6 +513,7 @@ class LobbyService(ActiveSessionProvider):
             skills=player.skills,
             skill_modifiers=player.skill_modifiers,
             inventory=player.inventory,
+            flags=player.flags,
         )
 
     def _target_for_lobby_player(

@@ -566,6 +566,7 @@ async def msg_save_name(
             xp=player.xp,
             skill_modifiers=player.skill_modifiers,
             inventory=player.inventory,
+            flags=player.flags,
         )
     else:
         if choice.source_character_id is None:
@@ -588,6 +589,7 @@ async def msg_save_name(
             skills=player.skills,
             skill_modifiers=player.skill_modifiers,
             inventory=player.inventory,
+            flags=player.flags,
         )
 
     choice.source_character_name = character_name

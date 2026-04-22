@@ -122,4 +122,5 @@ def build_player_from_saved(
         inventory=record.inventory,
         level=record.level,
         xp=record.xp,
+        flags=dict(record.flags),
     )

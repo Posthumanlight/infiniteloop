@@ -37,4 +37,5 @@ async def persist_victory_progress(
             xp=player.xp,
             skills=player.skills,
             skill_modifiers=player.skill_modifiers,
+            flags=player.flags,
         )

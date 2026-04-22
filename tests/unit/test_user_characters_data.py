@@ -1,6 +1,8 @@
 import asyncio
+import json
 
 from db.queries.users_namespace import UserCharactersData, UserCurrenciesDB
+from game.character.flags import CharacterFlag
 from game.combat.skill_modifiers import ModifierInstance
 from game.core.enums import ItemEffect, ItemType
 from game.items.items import GeneratedItemEffect, ItemInstance
@@ -35,6 +37,21 @@ class _FakeCurrencyConn:
         return self.row
 
 
+class _FakeCharacterConn:
+    def __init__(self, row, inventory_rows=()):
+        self.row = row
+        self.inventory_rows = tuple(inventory_rows)
+        self.calls = []
+
+    async def fetchrow(self, sql, *args):
+        self.calls.append(("fetchrow", sql, args))
+        return self.row
+
+    async def fetch(self, sql, *args):
+        self.calls.append(("fetch", sql, args))
+        return list(self.inventory_rows)
+
+
 def test_parse_modifiers_accepts_json_string_with_stacks():
     parsed = UserCharactersData._parse_modifiers(
         '[{"modifier_id": "slash_power", "stack_count": 2}, '
@@ -66,6 +83,90 @@ def test_serialize_modifiers_round_trips_with_parse():
         ("slash_power", 3),
         ("battle_hardened", 1),
     ]
+
+
+def test_parse_flags_accepts_current_legacy_and_simple_shapes():
+    parsed = UserCharactersData._parse_flags({
+        "event_choice": {
+            "flag_name": " event_choice ",
+            "flag_value": {"choice": 2},
+            "flag_persistence": True,
+        },
+        "legacy_choice": {
+            "flag_value": True,
+            "flag_persistance": True,
+        },
+        "transient_choice": {
+            "flag_value": "temporary",
+            "flag_persistence": False,
+        },
+        "old_shape": 7,
+    })
+
+    assert parsed == {
+        "event_choice": CharacterFlag(
+            flag_name="event_choice",
+            flag_value={"choice": 2},
+            flag_persistence=True,
+        ),
+        "legacy_choice": CharacterFlag(
+            flag_name="legacy_choice",
+            flag_value=True,
+            flag_persistence=True,
+        ),
+        "old_shape": CharacterFlag(
+            flag_name="old_shape",
+            flag_value=7,
+            flag_persistence=True,
+        ),
+    }
+
+
+def test_serialize_flags_keeps_only_persistent_flags():
+    serialized = UserCharactersData._serialize_flags({
+        "keep": CharacterFlag("keep", ["a", {"b": 2}], True),
+        "drop": CharacterFlag("drop", "temporary", False),
+    })
+
+    decoded = json.loads(serialized)
+
+    assert decoded == {
+        "keep": {
+            "flag_name": "keep",
+            "flag_value": ["a", {"b": 2}],
+            "flag_persistence": True,
+        },
+    }
+
+
+def test_get_character_restores_flags():
+    conn = _FakeCharacterConn({
+        "tg_id": 1001,
+        "character_id": 42,
+        "character_name": "Flagbearer",
+        "class_id": "warrior",
+        "level": 4,
+        "xp": 300,
+        "skills": ["slash"],
+        "modifiers": [],
+        "character_flags": {
+            "met_shrine": {
+                "flag_name": "met_shrine",
+                "flag_value": True,
+                "flag_persistence": True,
+            },
+        },
+    })
+
+    record = asyncio.run(UserCharactersData(_FakePool(conn)).get_character(42))
+
+    assert record.flags == {
+        "met_shrine": CharacterFlag(
+            flag_name="met_shrine",
+            flag_value=True,
+            flag_persistence=True,
+        ),
+    }
 
 
 def test_generated_effects_round_trip():

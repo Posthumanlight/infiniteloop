@@ -1,6 +1,7 @@
 import pytest
 
 from game.combat.skill_modifiers import ModifierInstance
+from game.character.flags import CharacterFlag
 from game.core.data_loader import load_classes, load_progression
 from game.core.data_loader import clear_cache
 from game.core.enums import EntityType
@@ -92,6 +93,13 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
             ModifierInstance("battle_hardened", 1),
         ),
         inventory=inventory,
+        flags={
+            "event_choice": CharacterFlag(
+                "event_choice",
+                {"event": 313, "option": 2},
+                True,
+            ),
+        },
     )
 
     player = build_player_from_saved(record, progression, base_stats)
@@ -106,3 +114,5 @@ def test_build_player_from_saved_restores_progression_and_modifiers():
     ]
     assert "s1" in player.inventory.items
     assert player.inventory.equipment.weapon_id == "s1"
+    assert player.flags == record.flags
+    assert player.flags is not record.flags
