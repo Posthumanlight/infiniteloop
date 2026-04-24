@@ -31,7 +31,7 @@ rarity = "common"
 unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [
-    {type = "modify_stat", stat = "crit_chance", expr = "0.08 + quality*0.01"}
+    {type = "modify_stat", stat = "crit_damage", expr = "0.08 + quality*0.01"}
 ]
 
 [items.giant_snake_skull]
@@ -42,6 +42,6 @@ unique = true
 item_sets = ["wrath_of_beasts"]
 effects = [
 { type = "modify_stat", stat = "crit_chance", expr = "0.02 + quality*0.003" },
-{type = "modify_stat", stat = "crit_chance", expr = "0.04 + quality*0.005"}
+{type = "modify_stat", stat = "crit_damage", expr = "0.04 + quality*0.005"}
 ]
 

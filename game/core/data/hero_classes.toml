@@ -42,7 +42,7 @@
 #]
 
 [hero_classes.gladiator]
-name = "gladiator"
+name = "Gladiator"
 description = "A fierce warrior, who have big pp"
 
 [hero_classes.gladiator.major_stats]

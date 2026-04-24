@@ -160,7 +160,7 @@ combat_type = "elite"
 tags = ["forest", "wild"]
 [enemies.titanoboa.major_stats]
 attack = 12
-hp = 60
+hp = 80
 speed = 5
 crit_chance = 0.0
 crit_dmg = 1.3

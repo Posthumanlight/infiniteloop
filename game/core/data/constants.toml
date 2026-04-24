@@ -25,10 +25,10 @@ per_extra_player = 1.1
 max_scalar = 999.99
 
 [world_difficulty.stat_weights]
-hp = 2
-attack = 1.25
+hp = 3
+attack = 1.5
 speed = 0.05
-resistance = 0.50
+resistance = 1
 mastery = 0.35
 
 [loot]
@@ -43,6 +43,6 @@ currency_name = "Fortuna Motes"
 [item_dissolve.rarity_values]
 common = 1
 uncommon = 3
-rare = 8
-epic = 20
-legendary = 50
+rare = 5
+epic = 25
+legendary = 100
