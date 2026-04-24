@@ -168,7 +168,7 @@ cooldown = 10
 level_eligibility = [3, 99]
 class_tags = ["warrior"]
 hits = [
-  {target_type = "all_allies", damage_type = "slashing", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "fortify", chance = 1.0}]}
+  {target_type = "all_allies", damage_type = "slashing", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "rally_effect", chance = 1.0}]}
 ]
   
 #mage

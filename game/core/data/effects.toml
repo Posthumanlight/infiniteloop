@@ -79,15 +79,6 @@ actions = [
   { type = "skip_turn" },
 ]
 
-[effects.fortify]
-name = "Fortify"
-trigger = "on_ap"
-duration = 1
-stackable = false
-actions = [
-  { type = "damage_taken_mult", expr = "0.75" },
-]
-
 #enemies
 #titanoboa
 [effects.titanoboa_poison]
