@@ -48,28 +48,42 @@ outcomes = [
     { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
 ]
 
-[events.spilled_wine]
-name = "Spilled Wine"
+[events.wine_ferstival]
+name = "Wine Festival"
 event_type = "multiplayer"
 initial_stage_id = "start"
 min_depth = 2
 max_depth = 100
 weight = 5
 
-[events.spilled_wine.stages.start]
-title = "Spilled wine"
-description = "You find on the road before you a pile of broken and empty bottles of wine with the red puddle under them"
+[events.wine_ferstival.stages.start]
+title = "Wine Festival"
+description = "While traveling, you find a meadow with dozens of stalls bursting with wine. Nearby merchant calls you, offering you a free sample."
 
-[[events.spilled_wine.stages.start.choices]]
-label = "Scavenge it for some booze."
-description = "Something should be still be full!"
+[[events.wine_ferstival.stages.start.choices]]
+label = "Give me some of that red!"
+description = "Red wine is the best."
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["crocodile", "crocodile"]},
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
 ]
 
-[[events.spilled_wine.stages.start.choices]]
-label = "Investigate the road."
-description = "Wine does not just drop out of the sky."
+[[events.wine_ferstival.stages.start.choices]]
+label = "White is superior choice!"
+description = "Ah, a sophisticated one."
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+]
+
+[[events.wine_ferstival.stages.start.choices]]
+label = "Both. Both is good"
+description = "That`s greedy!"
+outcomes = [
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+]
+
+[[events.wine_ferstival.stages.start.choices]]
+label = "Do you have beer by any chance?"
+description = "???"
 outcomes = [
     { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
 ]

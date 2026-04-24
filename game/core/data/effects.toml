@@ -51,6 +51,15 @@ actions = [
   {type = "grant_energy", expr = "target.energy * 0.25 + 25"},
 ]
 
+[effects.restoration_effect]
+name = "Restoration Effect"
+trigger = "on_apply"
+duration = 1
+stackable = false
+actions = [
+  {type = "heal", expr = "attacker.mastery + (10*(1+attacker.mastery*0.005))", scales_with_stacks = false}
+]
+
 #generics
 
 [effects.stun]
@@ -111,3 +120,4 @@ stackable = false
 actions = [
   { type = "stat_modify", stat = "attack", expr = "target.attack * 0.35", scales_with_stacks = false },
 ]
+
