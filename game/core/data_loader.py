@@ -786,7 +786,8 @@ class EnemyData:
     major_stats: dict[str, float]
     minor_stats: dict[str, float]
     skills: tuple[str, ...]
-    xp_reward: int
+    base_xp_reward: int
+    xp_formula: str | None
     combat_type: EnemyCombatType
     tags: tuple[str, ...] = ()
     passives: tuple[str, ...] = ()
@@ -794,20 +795,24 @@ class EnemyData:
 
 def load_enemies() -> dict[str, EnemyData]:
     raw = _load_toml("enemies.toml")["enemies"]
-    return {
-        eid: EnemyData(
+    enemies: dict[str, EnemyData] = {}
+    for eid, edata in raw.items():
+        base_xp_reward = edata.get("base_xp_reward", edata.get("xp_reward"))
+        if base_xp_reward is None:
+            raise ValueError(f"Enemy '{eid}' is missing base_xp_reward")
+        enemies[eid] = EnemyData(
             enemy_id=eid,
             name=edata["name"],
             major_stats=dict(edata["major_stats"]),
             minor_stats=dict(edata.get("minor_stats", {})),
             skills=tuple(edata["skills"]),
-            xp_reward=edata["xp_reward"],
+            base_xp_reward=int(base_xp_reward),
+            xp_formula=edata.get("xp_formula"),
             combat_type=EnemyCombatType(edata["combat_type"]),
             tags=tuple(edata.get("tags", [])),
             passives=tuple(edata.get("passives", [])),
         )
-        for eid, edata in raw.items()
-    }
+    return enemies
 
 
 def load_enemy(enemy_id: str) -> EnemyData:

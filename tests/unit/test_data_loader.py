@@ -174,6 +174,51 @@ def test_load_enemy_goblin():
     assert "generic_enemy_attack" in e.skills
     assert e.major_stats["attack"] == 3
     assert e.major_stats["hp"] == 40
+    assert e.base_xp_reward == 15
+    assert e.xp_formula is None
+
+
+def test_load_enemy_accepts_legacy_xp_reward(monkeypatch):
+    def fake_load_toml(filename: str):
+        assert filename == "enemies.toml"
+        return {
+            "enemies": {
+                "legacy_enemy": {
+                    "name": "Legacy Enemy",
+                    "major_stats": {},
+                    "skills": [],
+                    "xp_reward": 7,
+                    "combat_type": "normal",
+                },
+            },
+        }
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    enemy = data_loader.load_enemies()["legacy_enemy"]
+
+    assert enemy.base_xp_reward == 7
+    assert enemy.xp_formula is None
+
+
+def test_load_enemy_requires_base_xp_reward(monkeypatch):
+    def fake_load_toml(filename: str):
+        assert filename == "enemies.toml"
+        return {
+            "enemies": {
+                "broken_enemy": {
+                    "name": "Broken Enemy",
+                    "major_stats": {},
+                    "skills": [],
+                    "combat_type": "normal",
+                },
+            },
+        }
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="missing base_xp_reward"):
+        data_loader.load_enemies()
 
 
 def test_load_constants():

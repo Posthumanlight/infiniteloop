@@ -3,7 +3,7 @@
 name = "Goblin"
 skills = ["generic_enemy_attack"]
 passives = []
-xp_reward = 15
+base_xp_reward = 15
 combat_type = "normal"
 tags = ["forest", "cave"]
 [enemies.goblin.major_stats]
@@ -21,7 +21,7 @@ mastery = 2
 name = "Bayayamshiks"
 skills = ["generic_enemy_attack"]
 passives = []
-xp_reward = 100
+base_xp_reward = 100
 combat_type = "boss"
 tags = ["forest", "cave"]
 [enemies.goblin_boss.major_stats]
@@ -39,7 +39,7 @@ mastery = 2
 name = "Goblin Shaman"
 skills = ["generic_enemy_attack"]
 passives = []
-xp_reward = 20
+base_xp_reward = 20
 combat_type = "normal"
 tags = ["forest", "cave"]
 [enemies.goblin_shaman.major_stats]
@@ -57,7 +57,7 @@ mastery = 4
 name = "Bandit"
 skills = ["generic_enemy_attack"]
 passives = []
-xp_reward = 16
+base_xp_reward = 16
 combat_type = "normal"
 tags = ["forest", "road", "ruins"]
 [enemies.bandit.major_stats]
@@ -76,7 +76,7 @@ mastery = 3
 name = "Skeleton"
 skills = ["generic_enemy_attack"]
 passives = []
-xp_reward = 18
+base_xp_reward = 18
 combat_type = "normal"
 tags = ["undead", "cave", "ruins"]
 [enemies.skeleton.major_stats]
@@ -95,7 +95,7 @@ slashing_def_pct = 0.1
 name = "Draugr"
 skills = ["draugr_chilling_wind", "generic_enemy_attack"]
 passives = []
-xp_reward = 75
+base_xp_reward = 75
 combat_type = "elite"
 tags = ["undead", "cave", "ruins"]
 [enemies.draugr.major_stats]
@@ -118,7 +118,7 @@ ice_def_pct = 0.25
 name = "Wolf"
 skills = ["generic_enemy_attack"]
 passives = []
-xp_reward = 12
+base_xp_reward = 12
 combat_type = "normal"
 tags = ["forest", "wild"]
 [enemies.wolf.major_stats]
@@ -136,7 +136,7 @@ mastery = 1
 name = "Crocodile"
 skills = ["crocodile_death_roll", "generic_enemy_attack"]
 passives = []
-xp_reward = 40
+base_xp_reward = 40
 combat_type = "elite"
 tags = ["forest", "wild"]
 [enemies.crocodile.major_stats]
@@ -155,7 +155,7 @@ slashing_def_pct = 0.15
 name = "Titanoboa"
 skills = ["titanoboa_poison", "generic_enemy_attack"]
 passives = []
-xp_reward = 40
+base_xp_reward = 40
 combat_type = "elite"
 tags = ["forest", "wild"]
 [enemies.titanoboa.major_stats]
@@ -177,7 +177,7 @@ mastery = 1
 name = "Fire Imp"
 skills = ["generic_enemy_attack"]
 passives = []
-xp_reward = 20
+base_xp_reward = 20
 combat_type = "normal"
 tags = ["fire", "cave"]
 [enemies.fire_imp.major_stats]
@@ -196,7 +196,7 @@ fire_dmg_pct = 0.15
 name = "Warlock"
 skills = ["generic_enemy_attack"]
 passives = ["warlock_demonic_augmentation"]
-xp_reward = 33
+base_xp_reward = 33
 combat_type = "normal"
 tags = ["fire", "cave"]
 [enemies.warlock.major_stats]
@@ -217,7 +217,7 @@ fire_def_pct = 0.15
 name = "Begamak, Sin of Gluttony"
 skills = ["boss_begamak_hellfire_breath", "boss_begamak_devour", "generic_enemy_attack"]
 passives = []
-xp_reward = 125
+base_xp_reward = 125
 combat_type = "boss"
 tags = ["forest", "cave"]
 [enemies.boss_begamak.major_stats]

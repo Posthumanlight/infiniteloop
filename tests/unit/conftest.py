@@ -44,6 +44,7 @@ def make_goblin(entity_id: str = "e1") -> Enemy:
         current_hp=40,
         current_energy=50,
         skills=("slash",),
+        base_xp_reward=15,
     )
 
 

@@ -20,6 +20,15 @@ actions = [
   { type = "block_skill", skill_id = "slash" },
 ]
 
+[effects.rally_effect]
+name = "Rally"
+duration = 3
+stackable = false
+actions = 
+[
+  { type = "stat_modify", stat = "hp", expr = "attacker.hp * 0.2 + attacker.attack * 0.2", scales_with_stacks = false},
+]
+
 #mage
 [effects.empowered_arcane]
 name = "Empowered Arcane"
@@ -73,7 +82,7 @@ actions = [
 
 [effects.fortify]
 name = "Fortify"
-trigger = "on_damage_calc"
+trigger = "on_ap"
 duration = 1
 stackable = false
 actions = [

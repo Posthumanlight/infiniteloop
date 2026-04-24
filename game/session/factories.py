@@ -44,7 +44,8 @@ def build_enemy(
         current_hp=major.hp,
         current_energy=major.energy,
         skills=data.skills,
-        xp_reward=data.xp_reward,
+        base_xp_reward=data.base_xp_reward,
+        xp_formula=data.xp_formula,
         passive_skills=data.passives,
     )
 

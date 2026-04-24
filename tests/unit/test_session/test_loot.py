@@ -2,21 +2,23 @@ from dataclasses import replace
 
 import pytest
 
-from game.core.data_loader import clear_cache
+from game.core.data_loader import ProgressionConfig, clear_cache
 from game.core.dice import SeededRNG
-from game.core.enums import CombatPhase
+from game.core.enums import CombatPhase, SessionPhase
 from game.core.game_models import LootResolutionSnapshot, PlayerInfo
 from game.session.factories import build_enemy
 from game.session.node_manager import (
+    NodeManager,
     resolve_and_award_combat_loot,
     resolve_loot_item_quality,
     roll_public_item_contest,
 )
+from game.session.models import ActiveSession, SessionState
 from game.session.session_manager import SessionManager
 from game.world.difficulty import RoomDifficultyModifier
-from game_service import GameService, _ActiveSession
+from game_service import GameService
 
-from tests.unit.conftest import make_warrior
+from tests.unit.conftest import make_combat_state, make_goblin, make_warrior
 
 
 @pytest.fixture(autouse=True)
@@ -126,6 +128,57 @@ def test_finalize_combat_stores_pending_loot_and_awards_inventory():
     assert len(finalized.players[0].inventory.items) == 1
 
 
+def test_finalize_combat_awards_formula_xp_split_across_party():
+    difficulty = RoomDifficultyModifier(
+        scalar=2.4,
+        average_level=5.0,
+        party_size=3,
+        power=9,
+    )
+    players = [
+        make_warrior("p1"),
+        make_warrior("p2"),
+        make_warrior("p3"),
+    ]
+    enemy = replace(
+        make_goblin("e1"),
+        current_hp=0,
+        base_xp_reward=33,
+    )
+    combat = replace(
+        make_combat_state(
+            players=players,
+            enemies=[enemy],
+            turn_order=("p1", "p2", "p3", "e1"),
+        ),
+        phase=CombatPhase.ENDED,
+        room_difficulty=difficulty,
+    )
+    state = SessionState(
+        session_id="test-session",
+        players=tuple(players),
+        phase=SessionPhase.IN_COMBAT,
+        combat=combat,
+    )
+    mgr = NodeManager(
+        rng=SeededRNG(42),
+        progression=ProgressionConfig(
+            xp_thresholds=(0, 100),
+            level_scaling={},
+        ),
+        base_stats={"warrior": players[0].major_stats},
+        restoration_formula="0",
+    )
+
+    finalized = mgr.finalize_combat(state)
+
+    assert tuple(player.xp for player in finalized.players) == (26, 26, 26)
+    assert tuple(player.level for player in finalized.players) == (2, 2, 2)
+    assert set(finalized.pending_rewards) == {"p1", "p2", "p3"}
+    assert finalized.run_stats.enemies_defeated == 1
+    assert finalized.run_stats.total_xp_gained == 78
+
+
 def test_consume_pending_loot_clears_session_snapshot():
     service = GameService()
     manager = SessionManager(seed=7)
@@ -139,7 +192,7 @@ def test_consume_pending_loot_clears_session_snapshot():
         display_name="Tester",
         class_id="warrior",
     )
-    service._sessions["test-session"] = _ActiveSession(
+    service._sessions["test-session"] = ActiveSession(
         session_id="test-session",
         players={"p1": player_info},
         manager=manager,

@@ -31,6 +31,8 @@ def test_build_enemy_from_toml():
     assert enemy.current_hp == enemy.major_stats.hp
     assert enemy.current_energy == enemy.major_stats.energy
     assert "generic_enemy_attack" in enemy.skills
+    assert enemy.base_xp_reward == 15
+    assert enemy.xp_formula is None
 
 
 def test_build_enemy_unique_ids():

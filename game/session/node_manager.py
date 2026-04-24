@@ -52,6 +52,7 @@ from game.events.models import OutcomeResult
 from game.items.equipment_effects import get_effective_player_major_stat
 from game.items.item_generator import generate_item_from_blueprint_id
 from game.session.factories import build_enemies
+from game.session.experience_rewards import build_combat_xp_award
 from game.session.models import (
     CompletedCombat,
     PendingReward,
@@ -661,20 +662,53 @@ class NodeManager:
         )
         return replace(state, players=tuple(updated), run_stats=new_stats)
 
+    def _apply_player_xp(
+        self,
+        player: PlayerCharacter,
+        xp_gained: int,
+        crossed_levels: dict[str, list[int]],
+    ) -> PlayerCharacter:
+        if xp_gained <= 0:
+            return player
+
+        base = self._base_stats.get(player.player_class)
+        if base is None:
+            return replace(player, xp=player.xp + xp_gained)
+
+        updated, crossed = apply_xp(
+            player,
+            xp_gained,
+            self._progression,
+            base,
+        )
+        if crossed:
+            crossed_levels[updated.entity_id] = (
+                crossed_levels.get(updated.entity_id, []) + crossed
+            )
+        return updated
+
     def _apply_combat_results(self, state: SessionState) -> SessionState:
         """Merge HP/energy/effects from combat entities back to session players."""
         combat_state = state.combat
         updated_players: list[PlayerCharacter] = []
         crossed_levels: dict[str, list[int]] = {}
-        enemies_defeated = 0
+        defeated_enemies: list[Enemy] = []
         total_damage_dealt = 0
         total_damage_taken = 0
-        total_xp = 0
 
         for entity in combat_state.entities.values():
-            if entity.entity_type == EntityType.ENEMY and entity.current_hp <= 0:
-                enemies_defeated += 1
-                total_xp += getattr(entity, "xp_reward", 0)
+            if (
+                isinstance(entity, Enemy)
+                and entity.entity_type == EntityType.ENEMY
+                and entity.current_hp <= 0
+            ):
+                defeated_enemies.append(entity)
+
+        xp_award = build_combat_xp_award(
+            defeated_enemies,
+            state.players,
+            combat_state.room_difficulty,
+        )
 
         for action_result in combat_state.action_log:
             actor = combat_state.entities.get(action_result.actor_id)
@@ -699,25 +733,22 @@ class NodeManager:
             else:
                 updated = player
 
-            if total_xp > 0:
-                base = self._base_stats.get(updated.player_class)
-                if base is not None:
-                    updated, crossed = apply_xp(
-                        updated, total_xp, self._progression, base,
-                    )
-                    if crossed:
-                        crossed_levels[updated.entity_id] = (
-                            crossed_levels.get(updated.entity_id, []) + crossed
-                        )
+            updated = self._apply_player_xp(
+                updated,
+                xp_award.per_player.get(updated.entity_id, 0),
+                crossed_levels,
+            )
 
             updated_players.append(updated)
 
         new_stats = replace(
             state.run_stats,
-            enemies_defeated=state.run_stats.enemies_defeated + enemies_defeated,
+            enemies_defeated=state.run_stats.enemies_defeated + len(defeated_enemies),
             total_damage_dealt=state.run_stats.total_damage_dealt + total_damage_dealt,
             total_damage_taken=state.run_stats.total_damage_taken + total_damage_taken,
-            total_xp_gained=state.run_stats.total_xp_gained + total_xp,
+            total_xp_gained=(
+                state.run_stats.total_xp_gained + xp_award.total_awarded_xp
+            ),
         )
         state = replace(state, players=tuple(updated_players), run_stats=new_stats)
         return self._enqueue_level_rewards(state, crossed_levels)
@@ -770,17 +801,11 @@ class NodeManager:
 
                 case OutcomeAction.GIVE_XP:
                     total_xp += outcome.amount
-                    base = self._base_stats.get(player.player_class)
-                    if base is not None:
-                        player, crossed = apply_xp(
-                            player, outcome.amount, self._progression, base,
-                        )
-                        if crossed:
-                            crossed_levels[player.entity_id] = (
-                                crossed_levels.get(player.entity_id, []) + crossed
-                            )
-                    else:
-                        player = replace(player, xp=player.xp + outcome.amount)
+                    player = self._apply_player_xp(
+                        player,
+                        outcome.amount,
+                        crossed_levels,
+                    )
 
                 case OutcomeAction.APPLY_EFFECT:
                     if outcome.effect_id is not None:

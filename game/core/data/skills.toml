@@ -159,7 +159,18 @@ hits = [
   {target_type = "all_enemies", damage_type = "slashing", formula = "attacker.attack*1+base_power", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}, {effect = "bleed", chance = 1.0}]}
 ]
 
-
+[skills.rally]
+name = "Rally"
+energy_cost = 0
+action_type = "action"
+summary = "You give all more HP"
+cooldown = 10
+level_eligibility = [3, 99]
+class_tags = ["warrior"]
+hits = [
+  {target_type = "all_allies", damage_type = "slashing", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "fortify", chance = 1.0}]}
+]
+  
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"
@@ -338,6 +349,8 @@ energy_cost = 30
 action_type = "action"
 level_eligibility = [3, 99]
 class_tags = ["summoner]
+summary = "You heal single ally"
 hits = [
   {target_type = "single_ally", damage_type "ice", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "restoration_effect", chance = 1.0}]}
 ]
+

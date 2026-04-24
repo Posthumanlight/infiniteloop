@@ -95,6 +95,8 @@ def make_enemy_from_data(enemy_id: str, index: int) -> Enemy:
         current_hp=int(edata.major_stats["hp"]),
         current_energy=int(edata.major_stats["energy"]),
         skills=edata.skills,
+        base_xp_reward=edata.base_xp_reward,
+        xp_formula=edata.xp_formula,
     )
 
 

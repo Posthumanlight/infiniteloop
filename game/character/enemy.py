@@ -6,5 +6,6 @@ from game.character.base_entity import BaseEntity
 class Enemy(BaseEntity):
     enemy_template_id: str = ""
     skills: tuple[str, ...] = ()
-    xp_reward: int = 0
+    base_xp_reward: int = 0
+    xp_formula: str | None = None
     # passive_skills inherited from BaseEntity
