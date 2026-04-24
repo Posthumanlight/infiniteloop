@@ -239,6 +239,12 @@ class HeroUpgradeEvaluator:
         return checks
 
 
+class HeroUpgradeVisibilityPolicy:
+    def is_visible(self, player: PlayerCharacter, hero: HeroClassData) -> bool:
+        class_ids = hero.requirements.class_ids
+        return not class_ids or player.player_class in class_ids
+
+
 class HeroUpgradeApplier:
     def apply(self, ctx: HeroUpgradeContext) -> PlayerCharacter:
         preview = HeroUpgradeEvaluator().preview(ctx)
@@ -375,20 +381,30 @@ class HeroUpgradeService:
         progression: ProgressionConfig | None = None,
         evaluator: HeroUpgradeEvaluator | None = None,
         applier: HeroUpgradeApplier | None = None,
+        visibility: HeroUpgradeVisibilityPolicy | None = None,
     ) -> None:
         self._class_catalog = class_catalog or load_class_catalog()
         self._progression = progression or load_progression()
         self._base_stats = build_major_stats_map(self._class_catalog)
         self._evaluator = evaluator or HeroUpgradeEvaluator()
         self._applier = applier or HeroUpgradeApplier()
+        self._visibility = visibility or HeroUpgradeVisibilityPolicy()
 
     def list_previews(
         self,
         record: CharacterRecord,
     ) -> tuple[HeroUpgradePreview, ...]:
+        player = build_player_from_saved(
+            record,
+            self._progression,
+            self._base_stats,
+        )
         return tuple(
-            self.preview(record, hero_class_id)
-            for hero_class_id in sorted(self._class_catalog.hero_classes)
+            self._evaluator.preview(
+                self._build_context_for_player(record, player, hero_class_id),
+            )
+            for hero_class_id, hero in sorted(self._class_catalog.hero_classes.items())
+            if self._visibility.is_visible(player, hero)
         )
 
     def preview(
@@ -410,15 +426,23 @@ class HeroUpgradeService:
         record: CharacterRecord,
         hero_class_id: str,
     ) -> HeroUpgradeContext:
-        try:
-            hero = self._class_catalog.hero_classes[hero_class_id]
-        except KeyError as exc:
-            raise ValueError(f"Unknown hero class: {hero_class_id}") from exc
         player = build_player_from_saved(
             record,
             self._progression,
             self._base_stats,
         )
+        return self._build_context_for_player(record, player, hero_class_id)
+
+    def _build_context_for_player(
+        self,
+        record: CharacterRecord,
+        player: PlayerCharacter,
+        hero_class_id: str,
+    ) -> HeroUpgradeContext:
+        try:
+            hero = self._class_catalog.hero_classes[hero_class_id]
+        except KeyError as exc:
+            raise ValueError(f"Unknown hero class: {hero_class_id}") from exc
         return HeroUpgradeContext(
             record=record,
             player=player,

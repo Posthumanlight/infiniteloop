@@ -2,12 +2,19 @@ import pytest
 
 from game.character.hero_upgrades import (
     HeroUpgradeService,
+    HeroUpgradeVisibilityPolicy,
     select_unequipped_items_by_blueprint,
 )
 from game.character.inventory import Inventory
 from game.combat.skill_modifiers import ModifierInstance
 from game.core.data_loader import (
+    CharacterClassCatalog,
+    ClassData,
+    HeroClassData,
     HeroItemRequirement,
+    HeroUpgradeRequirements,
+    LevelScalingConfig,
+    ProgressionConfig,
     clear_cache,
     load_character_class,
     load_classes,
@@ -38,6 +45,104 @@ def _eligible_summoner_record() -> CharacterRecord:
         skill_modifiers=(ModifierInstance("familiar_training", 1),),
         inventory=Inventory(),
     )
+
+
+def _record(
+    *,
+    class_id: str,
+    level: int = 10,
+    skills: tuple[str, ...] = (),
+) -> CharacterRecord:
+    return CharacterRecord(
+        character_id=43,
+        tg_id=1002,
+        character_name="Test",
+        class_id=class_id,
+        level=level,
+        xp=0,
+        skills=skills,
+        passive_skills=(),
+        skill_modifiers=(),
+        inventory=Inventory(),
+    )
+
+
+def _class_data(class_id: str) -> ClassData:
+    return ClassData(
+        class_id=class_id,
+        name=class_id.title(),
+        description="Test class",
+        major_stats={
+            "attack": 10,
+            "hp": 100,
+            "speed": 10,
+            "crit_chance": 0.1,
+            "crit_dmg": 1.25,
+            "resistance": 10,
+            "energy": 100,
+            "mastery": 5,
+        },
+        minor_stats={},
+        starting_skills=(),
+    )
+
+
+def _hero(
+    class_id: str,
+    *,
+    required_classes: tuple[str, ...],
+    required_skills: tuple[str, ...] = (),
+) -> HeroClassData:
+    return HeroClassData(
+        class_id=class_id,
+        name=class_id.title(),
+        description="Test hero class",
+        major_stats={
+            "attack": 20,
+            "hp": 120,
+            "speed": 12,
+            "crit_chance": 0.1,
+            "crit_dmg": 1.25,
+            "resistance": 12,
+            "energy": 100,
+            "mastery": 8,
+        },
+        minor_stats={},
+        level_scaling={},
+        requirements=HeroUpgradeRequirements(
+            class_ids=required_classes,
+            skills=required_skills,
+        ),
+    )
+
+
+def _visibility_service() -> HeroUpgradeService:
+    catalog = CharacterClassCatalog(
+        base_classes={
+            "warrior": _class_data("warrior"),
+            "mage": _class_data("mage"),
+        },
+        hero_classes={
+            "archmage": _hero("archmage", required_classes=("mage",)),
+            "gladiator": _hero(
+                "gladiator",
+                required_classes=("warrior",),
+                required_skills=("deep_wounds",),
+            ),
+            "wanderer": _hero("wanderer", required_classes=()),
+        },
+    )
+    progression = ProgressionConfig(
+        xp_thresholds=(0, 100, 250, 500),
+        level_scaling={
+            "warrior": LevelScalingConfig("warrior", {}),
+            "mage": LevelScalingConfig("mage", {}),
+            "archmage": LevelScalingConfig("archmage", {}),
+            "gladiator": LevelScalingConfig("gladiator", {}),
+            "wanderer": LevelScalingConfig("wanderer", {}),
+        },
+    )
+    return HeroUpgradeService(class_catalog=catalog, progression=progression)
 
 
 def test_hero_class_loader_keeps_base_selection_separate():
@@ -98,6 +203,48 @@ def test_hero_upgrade_rejects_unmet_requirements():
 
     with pytest.raises(ValueError, match="requirements"):
         HeroUpgradeService().apply(record, "flamecaller")
+
+
+def test_hero_upgrade_visibility_policy_uses_required_classes_only():
+    policy = HeroUpgradeVisibilityPolicy()
+    service = _visibility_service()
+    warrior = service._build_context(_record(class_id="warrior"), "gladiator").player
+    mage = service._build_context(_record(class_id="mage"), "gladiator").player
+    gladiator = service._class_catalog.hero_classes["gladiator"]
+    wanderer = service._class_catalog.hero_classes["wanderer"]
+
+    assert policy.is_visible(warrior, gladiator) is True
+    assert policy.is_visible(mage, gladiator) is False
+    assert policy.is_visible(mage, wanderer) is True
+
+
+def test_hero_upgrade_list_hides_only_class_blocked_heroes():
+    service = _visibility_service()
+
+    previews = service.list_previews(_record(class_id="warrior"))
+
+    assert tuple(preview.hero_class_id for preview in previews) == (
+        "gladiator",
+        "wanderer",
+    )
+    gladiator = next(preview for preview in previews if preview.hero_class_id == "gladiator")
+    assert gladiator.eligible is False
+    assert any(check.code == "skill:deep_wounds" for check in gladiator.checks)
+
+
+def test_hero_upgrade_direct_preview_and_apply_still_validate_all_requirements():
+    service = _visibility_service()
+    mage_record = _record(class_id="mage")
+    preview = service.preview(mage_record, "gladiator")
+
+    assert preview.eligible is False
+    assert any(
+        check.code == "class_ids" and check.met is False
+        for check in preview.checks
+    )
+
+    with pytest.raises(ValueError, match="requirements"):
+        service.apply(mage_record, "gladiator")
 
 
 def test_item_cost_selection_uses_unequipped_lowest_quality_then_id():
