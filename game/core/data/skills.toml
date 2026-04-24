@@ -354,3 +354,11 @@ hits = [
   {target_type = "single_ally", damage_type = "ice", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "restoration_effect", chance = 1.0}]}
 ]
 
+[skills.onslaught]
+name = "Onslaught"
+energy_cost = 0
+action_type = "action"
+summary = "u damage do"
+hits = [
+  {target_type = "single_enemy", damage_type = "slashing", formula = "attacker.attack*3.5 + base_power", base_power = 1, variance = 0.0}
+]

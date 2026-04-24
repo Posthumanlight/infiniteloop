@@ -198,13 +198,23 @@ def _exec_cast_skill(
 ) -> tuple[CombatState, list[HitResult]]:
     if passive.cast_skill_id is None or rng is None or constants is None:
         return state, []
-    from game.combat.action_resolver import can_cast_skill, cast_skill_now
+    from game.combat.action_resolver import (
+        can_cast_skill,
+        cast_skill_now,
+        options_for_passive_cast_policy,
+    )
 
     skill = load_skill(passive.cast_skill_id)
     target_refs = _build_default_target_refs_for_skill(state, entity_id, skill)
     if target_refs is None:
         return state, []
-    if not can_cast_skill(state, entity_id, passive.cast_skill_id):
+    options = options_for_passive_cast_policy(passive.cast_policy)
+    if not can_cast_skill(
+        state,
+        entity_id,
+        passive.cast_skill_id,
+        options=options,
+    ):
         return state, []
     state, result = cast_skill_now(
         state,
@@ -213,6 +223,7 @@ def _exec_cast_skill(
         target_refs,
         rng,
         constants,
+        options=options,
     )
     return state, list(result.hits)
 
@@ -273,7 +284,7 @@ def _iter_matching_passives(entity, trigger: TriggerType) -> Iterable[PassiveSki
             yield passive
 
 
-def _can_fire_passive(
+def can_fire_passive(
     state: CombatState,
     entity_id: str,
     passive: PassiveSkillData,
@@ -323,7 +334,7 @@ def _build_passive_context(
     }
 
 
-def _record_passive_fire(
+def record_passive_fire(
     state: CombatState,
     entity_id: str,
     passive: PassiveSkillData,
@@ -375,6 +386,9 @@ def check_passives(
     allow_dead: bool = False,
 ) -> tuple[CombatState, list[HitResult]]:
     """Check and fire all matching passives for an entity at a trigger point."""
+    if event.trigger == TriggerType.ON_TRACKED_EVENT:
+        return state, []
+
     entity = state.entities.get(entity_id)
     if entity is None:
         return state, []
@@ -383,7 +397,7 @@ def check_passives(
 
     results: list[HitResult] = []
     for passive in _iter_matching_passives(entity, event.trigger):
-        if not _can_fire_passive(state, entity_id, passive):
+        if not can_fire_passive(state, entity_id, passive):
             continue
 
         ctx = _build_passive_context(state, entity_id, event)
@@ -398,7 +412,7 @@ def check_passives(
         if passive.consume_effect_id and passive.action != PassiveAction.CONSUME_EFFECT:
             state = reset_effect_stacks(state, entity_id, passive.consume_effect_id)
 
-        state = _record_passive_fire(state, entity_id, passive)
+        state = record_passive_fire(state, entity_id, passive)
 
     return state, results
 

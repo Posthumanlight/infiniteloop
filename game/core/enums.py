@@ -38,6 +38,7 @@ class TriggerType(Enum):
     ON_DEATH = "on_death"
     ON_KILL = "on_kill"
     ON_ALLY_DEATH = "on_ally_death"
+    ON_TRACKED_EVENT = "on_tracked_event"
 
 
 class EffectActionType(Enum):

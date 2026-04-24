@@ -40,6 +40,27 @@ expr = "0"
 usage_limit = "unlimited"
 class_tags = ["summoner"]
 
+[passives.onslaught]
+name = "Onslaught"
+trigger = "on_tracked_event"
+action = "cast_skill"
+cast_skill_id = "onslaught"
+cast_policy = "free"
+expr = "0"
+usage_limit = "unlimited"
+level_eligibility = [3, 99]
+class_tags = ["summoner"]
+
+[passives.onslaught.tracker]
+event = "hit"
+source = "summons"
+target = "enemy"
+group_by = "target"
+threshold = 4
+only_damaging = true
+reset = "matched"
+cast_target = "tracked_target"
+
 
 #enemies
 [passives.warlock_demonic_augmentation]

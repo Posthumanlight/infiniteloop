@@ -14,6 +14,11 @@ from game.combat.summons import (
     spawn_skill_summons,
 )
 from game.combat.targeting import resolve_targets
+from game.combat.trackers import (
+    TrackedCombatEvent,
+    TrackerEventType,
+    process_tracked_event,
+)
 from game.core.data_loader import SkillData
 from game.core.dice import SeededRNG
 from game.core.enums import ModifierPhase, TriggerType
@@ -138,6 +143,21 @@ def _resolve_skill_core(
                     },
                 ),
             )
+
+            state, tracker_hits = process_tracked_event(
+                state,
+                TrackedCombatEvent(
+                    event_type=TrackerEventType.HIT,
+                    source_id=actor_id,
+                    target_id=target_id,
+                    damage_amount=dmg_result.amount,
+                    damage_type=hit.damage_type,
+                    skill_id=skill.skill_id,
+                ),
+                rng,
+                constants,
+            )
+            all_hits.extend(tracker_hits)
 
             if new_hp <= 0:
                 state, death_results = resolve_death_event(

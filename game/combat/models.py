@@ -139,6 +139,7 @@ class CombatState:
     action_log: tuple[ActionResult, ...] = ()
     passive_trackers: dict[str, PassiveTracker] = field(default_factory=dict)
     cooldowns: dict[str, dict[str, int]] = field(default_factory=dict)
+    tracker_counts: dict[tuple[str, str, str], int] = field(default_factory=dict)
     initiative_scores: dict[str, tuple[int, int]] = field(default_factory=dict)
     next_summon_order: int = 1
     rng_state: tuple | None = None

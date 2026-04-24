@@ -37,6 +37,16 @@ from game.events.models import (
     OutcomeDef,
 )
 from game.character.flags import CharacterFlag, JsonValue
+from game.combat.trackers import (
+    TrackerAction,
+    TrackerCastPolicy,
+    TrackerCastTarget,
+    TrackerDefinition,
+    TrackerEventType,
+    TrackerGroupBy,
+    TrackerRelation,
+    TrackerResetPolicy,
+)
 
 if TYPE_CHECKING:
     from game.world.difficulty import RoomDifficultyModifier
@@ -1328,8 +1338,10 @@ class PassiveSkillData:
     max_uses: int | None = None
     effect_id: str | None = None
     cast_skill_id: str | None = None
+    cast_policy: TrackerCastPolicy = TrackerCastPolicy.NORMAL
     consume_effect_id: str | None = None
     target_type: TargetType = TargetType.SELF
+    tracker: TrackerDefinition | None = None
     cooldown: int = 0
     level_eligibility: tuple[int, int] | None = None
     class_tags: tuple[str, ...] = ()
@@ -1355,23 +1367,89 @@ def _parse_passive_triggers(raw: str | list[str]) -> tuple[TriggerType, ...]:
     raise ValueError("Passive trigger must be a trigger string or non-empty list")
 
 
+def _parse_passive_tracker(
+    passive_id: str,
+    raw: dict[str, Any] | None,
+    *,
+    action: PassiveAction,
+    cast_skill_id: str | None,
+    effect_id: str | None,
+    cast_policy: TrackerCastPolicy,
+) -> TrackerDefinition | None:
+    if raw is None:
+        return None
+
+    try:
+        threshold = int(raw.get("threshold", 1))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Passive {passive_id}: tracker threshold must be an integer",
+        ) from exc
+    if threshold < 1:
+        raise ValueError(
+            f"Passive {passive_id}: tracker threshold must be >= 1",
+        )
+
+    try:
+        tracker_action = TrackerAction(
+            action=action,
+            cast_skill_id=cast_skill_id,
+            effect_id=effect_id,
+            cast_policy=cast_policy,
+            cast_target=TrackerCastTarget(raw.get("cast_target", "default")),
+        )
+        return TrackerDefinition(
+            tracker_id=passive_id,
+            event=TrackerEventType(raw["event"]),
+            source=TrackerRelation(raw.get("source", "all")),
+            target=TrackerRelation(raw.get("target", "all")),
+            group_by=TrackerGroupBy(raw.get("group_by", "none")),
+            threshold=threshold,
+            only_damaging=bool(raw.get("only_damaging", True)),
+            reset=TrackerResetPolicy(raw.get("reset", "matched")),
+            action=tracker_action,
+        )
+    except KeyError as exc:
+        raise ValueError(
+            f"Passive {passive_id}: tracker is missing required field {exc.args[0]}",
+        ) from exc
+    except ValueError as exc:
+        raise ValueError(
+            f"Passive {passive_id}: invalid tracker configuration",
+        ) from exc
+
+
 def load_passives() -> dict[str, PassiveSkillData]:
     raw = _load_toml("passives.toml").get("passives", {})
     result: dict[str, PassiveSkillData] = {}
     for pid, pdata in raw.items():
+        action = PassiveAction(pdata["action"])
+        cast_policy = TrackerCastPolicy(pdata.get("cast_policy", "normal"))
+        cast_skill_id = pdata.get("cast_skill_id")
+        effect_id = pdata.get("effect_id")
+        tracker = _parse_passive_tracker(
+            pid,
+            pdata.get("tracker"),
+            action=action,
+            cast_skill_id=cast_skill_id,
+            effect_id=effect_id,
+            cast_policy=cast_policy,
+        )
         result[pid] = PassiveSkillData(
             skill_id=pid,
             name=pdata["name"],
             triggers=_parse_passive_triggers(pdata["trigger"]),
             condition=pdata.get("condition", ""),
-            action=PassiveAction(pdata["action"]),
+            action=action,
             expr=pdata.get("expr", "0"),
             usage_limit=UsageLimit(pdata["usage_limit"]),
             max_uses=pdata.get("max_uses"),
-            effect_id=pdata.get("effect_id"),
-            cast_skill_id=pdata.get("cast_skill_id"),
+            effect_id=effect_id,
+            cast_skill_id=cast_skill_id,
+            cast_policy=cast_policy,
             consume_effect_id=pdata.get("consume_effect_id"),
             target_type=TargetType(pdata.get("target_type", "self")),
+            tracker=tracker,
             cooldown=pdata.get("cooldown", 0),
             level_eligibility=_parse_level_eligibility(
                 "Passive",

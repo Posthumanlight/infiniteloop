@@ -20,6 +20,14 @@ from game.core.data_loader import (
     load_summon_constants,
 )
 import game.core.data_loader as data_loader
+from game.combat.trackers import (
+    TrackerCastPolicy,
+    TrackerCastTarget,
+    TrackerEventType,
+    TrackerGroupBy,
+    TrackerRelation,
+    TrackerResetPolicy,
+)
 from game.core.enums import (
     ActionType,
     DamageType,
@@ -272,6 +280,104 @@ def test_load_passive_offer_metadata():
     assert passive.level_eligibility == (6, 99)
     assert passive.class_tags == ("mage",)
     assert passive.cast_skill_id == "arcane_rupture"
+
+
+def test_load_passive_onslaught_tracker_metadata():
+    passive = load_passive("onslaught")
+
+    assert passive.triggers == (TriggerType.ON_TRACKED_EVENT,)
+    assert passive.cast_skill_id == "onslaught"
+    assert passive.cast_policy == TrackerCastPolicy.FREE
+    assert passive.level_eligibility == (3, 99)
+
+    tracker = passive.tracker
+    assert tracker is not None
+    assert tracker.tracker_id == "onslaught"
+    assert tracker.event == TrackerEventType.HIT
+    assert tracker.source == TrackerRelation.SUMMONS
+    assert tracker.target == TrackerRelation.ENEMY
+    assert tracker.group_by == TrackerGroupBy.TARGET
+    assert tracker.threshold == 4
+    assert tracker.only_damaging is True
+    assert tracker.reset == TrackerResetPolicy.MATCHED
+    assert tracker.action.cast_skill_id == "onslaught"
+    assert tracker.action.cast_policy == TrackerCastPolicy.FREE
+    assert tracker.action.cast_target == TrackerCastTarget.TRACKED_TARGET
+
+
+def _fake_passives_payload(
+    *,
+    tracker_overrides: dict | None = None,
+    passive_overrides: dict | None = None,
+) -> dict:
+    tracker = {
+        "event": "hit",
+        "source": "summons",
+        "target": "enemy",
+        "group_by": "target",
+        "threshold": 4,
+        "only_damaging": True,
+        "reset": "matched",
+        "cast_target": "tracked_target",
+        **(tracker_overrides or {}),
+    }
+    passive = {
+        "name": "Bad Tracker",
+        "trigger": "on_tracked_event",
+        "action": "cast_skill",
+        "cast_skill_id": "slash",
+        "expr": "0",
+        "usage_limit": "unlimited",
+        "tracker": tracker,
+        **(passive_overrides or {}),
+    }
+    return {"passives": {"bad_tracker": passive}}
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("event", "bad_event"),
+        ("source", "bad_source"),
+        ("target", "bad_target"),
+        ("group_by", "bad_group"),
+        ("reset", "bad_reset"),
+        ("cast_target", "bad_target_policy"),
+    ),
+)
+def test_passive_tracker_rejects_invalid_enum_fields(monkeypatch, field, value):
+    def fake_load_toml(filename: str):
+        assert filename == "passives.toml"
+        return _fake_passives_payload(tracker_overrides={field: value})
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="invalid tracker configuration"):
+        data_loader.load_passives()
+
+
+def test_passive_tracker_rejects_invalid_cast_policy(monkeypatch):
+    def fake_load_toml(filename: str):
+        assert filename == "passives.toml"
+        return _fake_passives_payload(
+            passive_overrides={"cast_policy": "bad_cast_policy"},
+        )
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="bad_cast_policy"):
+        data_loader.load_passives()
+
+
+def test_passive_tracker_rejects_threshold_below_one(monkeypatch):
+    def fake_load_toml(filename: str):
+        assert filename == "passives.toml"
+        return _fake_passives_payload(tracker_overrides={"threshold": 0})
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="threshold must be >= 1"):
+        data_loader.load_passives()
 
 
 def test_load_item_blueprint_long_sword():

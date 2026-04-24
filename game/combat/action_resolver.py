@@ -17,6 +17,7 @@ from game.core.enums import ActionType, TriggerType
 
 @dataclass(frozen=True)
 class SkillCastOptions:
+    enforce_access: bool = True
     enforce_energy: bool = True
     spend_energy: bool = True
     enforce_cooldown: bool = True
@@ -26,6 +27,13 @@ class SkillCastOptions:
 
 NORMAL_CAST_OPTIONS = SkillCastOptions()
 FREE_CAST_OPTIONS = SkillCastOptions(
+    enforce_energy=False,
+    spend_energy=False,
+    enforce_cooldown=False,
+    apply_cooldown=False,
+)
+PROC_FREE_CAST_OPTIONS = SkillCastOptions(
+    enforce_access=False,
     enforce_energy=False,
     spend_energy=False,
     enforce_cooldown=False,
@@ -41,9 +49,10 @@ def can_cast_skill(
     options: SkillCastOptions = NORMAL_CAST_OPTIONS,
 ) -> bool:
     actor = state.entities[actor_id]
-    access = get_effective_skill_access(actor, state)
-    if skill_id not in access.available_set:
-        return False
+    if options.enforce_access:
+        access = get_effective_skill_access(actor, state)
+        if skill_id not in access.available_set:
+            return False
 
     skill = load_skill(skill_id)
     if options.enforce_cooldown and is_on_cooldown(state, actor_id, skill_id):
@@ -59,6 +68,12 @@ def options_for_command_policy(policy) -> SkillCastOptions:
     return NORMAL_CAST_OPTIONS
 
 
+def options_for_passive_cast_policy(policy) -> SkillCastOptions:
+    if getattr(policy, "value", policy) == "free":
+        return PROC_FREE_CAST_OPTIONS
+    return NORMAL_CAST_OPTIONS
+
+
 def cast_skill_now(
     state: CombatState,
     actor_id: str,
@@ -70,14 +85,15 @@ def cast_skill_now(
     options: SkillCastOptions = NORMAL_CAST_OPTIONS,
 ) -> tuple[CombatState, TriggeredActionResult]:
     actor = state.entities[actor_id]
-    access = get_effective_skill_access(actor, state)
 
-    if skill_id not in access.available_set:
-        if skill_id in access.blocked_set:
-            raise ValueError(
-                f"Skill '{skill_id}' is blocked by an active effect",
-            )
-        raise ValueError(f"Skill '{skill_id}' is not available to this actor")
+    if options.enforce_access:
+        access = get_effective_skill_access(actor, state)
+        if skill_id not in access.available_set:
+            if skill_id in access.blocked_set:
+                raise ValueError(
+                    f"Skill '{skill_id}' is blocked by an active effect",
+                )
+            raise ValueError(f"Skill '{skill_id}' is not available to this actor")
 
     skill = load_skill(skill_id)
 
