@@ -71,6 +71,7 @@ energy = 55
 mastery = 3
 [enemies.bandit.minor_stats]
 
+
 #undead
 [enemies.skeleton]
 name = "Skeleton"
