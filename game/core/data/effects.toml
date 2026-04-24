@@ -24,8 +24,7 @@ actions = [
 name = "Rally"
 duration = 3
 stackable = false
-actions = 
-[
+actions = [
   { type = "stat_modify", stat = "hp", expr = "attacker.hp * 0.2 + attacker.attack * 0.2", scales_with_stacks = false},
 ]
 
