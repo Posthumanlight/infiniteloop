@@ -351,6 +351,6 @@ level_eligibility = [3, 99]
 class_tags = ["summoner]
 summary = "You heal single ally"
 hits = [
-  {target_type = "single_ally", damage_type "ice", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "restoration_effect", chance = 1.0}]}
+  {target_type = "single_ally", damage_type = "ice", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "restoration_effect", chance = 1.0}]}
 ]
 
