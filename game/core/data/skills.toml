@@ -170,7 +170,16 @@ class_tags = ["warrior"]
 hits = [
   {target_type = "all_allies", damage_type = "slashing", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "rally_effect", chance = 1.0}]}
 ]
-  
+
+[skills.glorious_end]
+name = "Glorius End"
+energy_cost = 0
+action_type = "action"
+summary = "you apply bleed when kill someone"
+hits = [
+  {target_type = "all_enemies", damage_type = "slashing", formula = "base_power", base_power=0, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]} 
+]
+
 #mage
 [skills.arcane_bolt]
 name = "Arcane Bolt"

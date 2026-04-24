@@ -230,3 +230,21 @@ resistance = 100
 energy = 50
 mastery = 20
 [enemies.boss_begamak.minor_stats]
+
+#eldritch
+[enemies.underdweller]
+name = "Underdweller"
+skills = ["generic_enemy_attack"]
+passives = ["underdweller_inversion"]
+base_xp_reward = 24
+combat_type = "normal"
+tags = ["eldritch", "dungeon"]
+[enemies.underdweller.major_stats]
+attack = 12
+hp = 25
+speed = 16
+crit_chance = 0.0
+crit_dmg = 1.5
+resistance = 2
+energy = 70
+mastery = 6

@@ -40,3 +40,43 @@
 #flags = [
 #  { flag_name = "upgraded_to_flamecaller", flag_value = true, flag_persistence = true },
 #]
+
+[hero_classes.gladiator]
+name = "gladiator"
+description = "A fierce warrior, who have big pp"
+
+[hero_classes.gladiator.major_stats]
+attack = 12
+hp = 125
+speed = 10
+crit_chance = 0.10
+crit_dmg = 1.25
+resistance = 40
+energy = 100
+mastery = 5
+
+[hero_classes.gladiator.minor_stats]
+slashing_dmg_pct = 0.2
+piercing_dmg_pct = 0.2
+
+[hero_classes.gladiator.level_scaling]
+attack = 5
+hp = 25
+speed = 1
+resistance = 3
+mastery = 5
+
+[hero_classes.gladiator.requirements]
+min_level = 10
+class_ids = ["warrior"]
+skills = ["deep_wounds", "blood_bath"]
+
+[hero_classes.gladiator.gains]
+passive_skills = ["glorious_end"]
+modifiers = [
+{ modifier_id = "butcher", stacks = 2 },
+{ modifier_id = "exsanguinate", stacks = 2 },
+]
+flags = [
+  { flag_name = "upgraded_to_gladiator", flag_value = true, flag_persistence = true },
+]

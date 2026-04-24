@@ -8,6 +8,17 @@ expr = "5"
 usage_limit = "unlimited"
 class_tags = ["warrior"]
 
+#gladiator
+[passives.glorious_end]
+name = ['Glorius End']
+trigger = "on_kill"
+action = "cast_skill"
+cast_skill_id = "glorious_end"
+expr = "0"
+usage_limit = "unlimited"
+class_tags = ["gladiator"]
+
+
 #mage
 [passives.arcane_prowess]
 name = "Arcane Prowess"
@@ -68,5 +79,13 @@ name = "Demonic Augmentation"
 trigger = "on_round_start"
 action = "apply_effect"
 effect_id = "warlock_demonic_augmentation"
+expr = "1"
+usage_limit = "unlimited"
+
+[passives.underdweller_inversion]
+name = "Underdweller Inversion"
+trigger = "on_hit"
+action = "apply_effect"
+effect_id = "underdweller_inversion"
 expr = "1"
 usage_limit = "unlimited"
