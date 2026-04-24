@@ -22,6 +22,7 @@ actions = [
 
 [effects.rally_effect]
 name = "Rally"
+trigger = on_apply
 duration = 3
 stackable = false
 actions = [
