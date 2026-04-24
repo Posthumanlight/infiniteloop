@@ -10,7 +10,7 @@ class_tags = ["warrior"]
 
 #gladiator
 [passives.glorious_end]
-name = "Glorius End"
+name = "Glorious End"
 trigger = "on_kill"
 action = "cast_skill"
 cast_skill_id = "glorious_end"
