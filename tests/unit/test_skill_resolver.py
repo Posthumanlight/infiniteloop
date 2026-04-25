@@ -7,6 +7,11 @@ import game.combat.passives as combat_passives
 import game.combat.skill_modifiers as combat_skill_modifiers
 from game.combat.action_resolver import resolve_action
 from game.combat.effects import apply_effect, expire_effects
+from game.combat.effect_targeting import (
+    EffectTargetRelation,
+    EffectTargetSelect,
+    EffectTargetSpec,
+)
 from game.combat.passives import PassiveEvent, check_passives
 from game.combat.models import ActionRequest
 from game.combat.skill_modifiers import (
@@ -39,7 +44,7 @@ def test_slash_deals_damage():
     rng = SeededRNG(42)
 
     initial_hp = state.entities["e1"].current_hp
-    state, hits = resolve_skill(state, "p1", skill, {0: "e1"}, rng, CONSTANTS)
+    state, hits, _ = resolve_skill(state, "p1", skill, {0: "e1"}, rng, CONSTANTS)
 
     assert len(hits) == 1
     assert hits[0].target_id == "e1"
@@ -51,10 +56,10 @@ def test_slash_deterministic():
     skill = load_skill("slash")
 
     state1 = make_combat_state()
-    _, hits1 = resolve_skill(state1, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
+    _, hits1, _ = resolve_skill(state1, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
 
     state2 = make_combat_state()
-    _, hits2 = resolve_skill(state2, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
+    _, hits2, _ = resolve_skill(state2, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
 
     assert hits1[0].damage.amount == hits2[0].damage.amount
 
@@ -68,7 +73,7 @@ def test_skill_skips_dead_target():
     skill = load_skill("slash")
     rng = SeededRNG(42)
 
-    state, _ = resolve_skill(state, "p1", skill, {0: "e1"}, rng, CONSTANTS)
+    state, _, _ = resolve_skill(state, "p1", skill, {0: "e1"}, rng, CONSTANTS)
     assert state.entities["e1"].current_hp == 0
 
 
@@ -83,7 +88,7 @@ def test_arcane_prowess_applies_empowered_arcane_on_hit():
     skill = load_skill("arcane_bolt")
     rng = SeededRNG(42)
 
-    state, _ = resolve_skill(state, "p1", skill, {0: "e1"}, rng, CONSTANTS)
+    state, _, _ = resolve_skill(state, "p1", skill, {0: "e1"}, rng, CONSTANTS)
 
     empowered = [
         eff for eff in state.entities["p1"].active_effects
@@ -160,13 +165,13 @@ def test_enlightenment_buff_increases_spell_damage_restores_energy_and_expires()
     enlightenment = load_skill("enlightenment")
     annihilation = load_skill("annihilation")
 
-    state, buff_hits = resolve_skill(state, "p1", enlightenment, {}, SeededRNG(1), CONSTANTS)
+    state, buff_hits, _ = resolve_skill(state, "p1", enlightenment, {}, SeededRNG(1), CONSTANTS)
 
     assert buff_hits == []
     assert state.entities["p1"].current_energy == 130
     assert any(eff.effect_id == "enlightenment" for eff in state.entities["p1"].active_effects)
 
-    _, baseline_hits = resolve_skill(
+    _, baseline_hits, _ = resolve_skill(
         baseline_state,
         "p1",
         annihilation,
@@ -174,7 +179,7 @@ def test_enlightenment_buff_increases_spell_damage_restores_energy_and_expires()
         SeededRNG(42),
         CONSTANTS,
     )
-    state, buffed_hits = resolve_skill(
+    state, buffed_hits, _ = resolve_skill(
         state,
         "p1",
         annihilation,
@@ -195,7 +200,7 @@ def test_enlightenment_buff_increases_spell_damage_restores_energy_and_expires()
         enemies=[make_goblin("e1")],
         turn_order=("p1", "e1"),
     )
-    _, expired_hits = resolve_skill(
+    _, expired_hits, _ = resolve_skill(
         expired_state,
         "p1",
         annihilation,
@@ -261,7 +266,7 @@ def test_modifier_context_sees_effective_major_stats(monkeypatch):
     state = apply_effect(state, "p1", "enlightenment", "p1")
 
     slash = load_skill("slash")
-    state, hits = resolve_skill(state, "p1", slash, {0: "e1"}, SeededRNG(42), CONSTANTS)
+    state, hits, _ = resolve_skill(state, "p1", slash, {0: "e1"}, SeededRNG(42), CONSTANTS)
 
     heal_hits = [hit for hit in hits if hit.heal_amount > 0]
     assert heal_hits[0].heal_amount == 25
@@ -277,7 +282,7 @@ def test_butcher_adds_extra_bleed_stack_to_deep_wounds():
     state = make_combat_state(players=[warrior])
     skill = load_skill("deep_wounds")
 
-    state, hits = resolve_skill(state, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
+    state, hits, _ = resolve_skill(state, "p1", skill, {0: "e1"}, SeededRNG(42), CONSTANTS)
 
     bleed = [
         effect
@@ -286,7 +291,7 @@ def test_butcher_adds_extra_bleed_stack_to_deep_wounds():
     ]
     assert len(bleed) == 1
     assert bleed[0].stack_count == 2
-    assert any(hit.effects_applied == ("bleed",) for hit in hits)
+    assert any(hit.effects_applied == ("bleed", "bleed") for hit in hits)
 
 
 def test_cruelty_respects_modifier_proc_chance():
@@ -299,6 +304,12 @@ def test_cruelty_respects_modifier_proc_chance():
         stack_count=1,
         effect_id="bleed",
         chance=0.25,
+        targets=(
+            EffectTargetSpec(
+                EffectTargetRelation.HIT_TARGET,
+                EffectTargetSelect.SINGLE,
+            ),
+        ),
     )
 
     state_proc, proc_hits = apply_post_hit_modifiers(

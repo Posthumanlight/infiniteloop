@@ -3,15 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from game.combat.effects import (
-    apply_effect,
-    build_effective_expr_context,
-    get_effective_major_stat,
+from game.combat.effects import build_effective_expr_context, get_effective_major_stat
+from game.combat.effect_targeting import (
+    EffectApplicationTargetContext,
+    EffectTargetSpec,
+    apply_effect_to_targets,
+    resolve_effect_targets,
 )
 from game.combat.models import CombatState, HitResult
 from game.core.data_loader import SkillData, load_modifier
 from game.core.dice import SeededRNG
-from game.core.enums import ModifierPhase
+from game.core.enums import DamageType, ModifierPhase
 from game.core.formula_eval import evaluate_expr
 
 if TYPE_CHECKING:
@@ -50,6 +52,7 @@ class ResolvedModifier:
     damage_type_filter: str | None = None
     effect_id: str | None = None
     chance: float = 1.0
+    targets: tuple[EffectTargetSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,7 @@ def collect_modifiers(
             damage_type_filter=mod_data.damage_type_filter,
             effect_id=mod_data.effect_id,
             chance=mod_data.chance,
+            targets=mod_data.targets,
         ))
     return tuple(result)
 
@@ -178,6 +182,8 @@ def apply_post_hit_modifiers(
     damage_dealt: int,
     modifiers: tuple[ResolvedModifier, ...],
     rng: SeededRNG,
+    *,
+    damage_type: DamageType | None = None,
 ) -> tuple[CombatState, list[HitResult]]:
     """Apply post-hit modifiers. Extensible via match on action."""
     post_mods = [m for m in modifiers if m.phase == ModifierPhase.POST_HIT]
@@ -209,13 +215,27 @@ def apply_post_hit_modifiers(
                 if rng.random_float() >= mod.chance:
                     continue
                 applications = max(0, int(value))
-                for _ in range(applications):
-                    state = apply_effect(state, target_id, mod.effect_id, actor_id)
-                if applications > 0:
-                    results.append(HitResult(
-                        target_id=target_id,
-                        effects_applied=tuple(mod.effect_id for _ in range(applications)),
-                    ))
+                target_context = EffectApplicationTargetContext(
+                    source_id=actor_id,
+                    hit_target_id=target_id,
+                    damage_dealt=damage_dealt,
+                    damage_type=damage_type,
+                )
+                target_ids = resolve_effect_targets(state, target_context, mod.targets)
+                state, effect_results = apply_effect_to_targets(
+                    state,
+                    effect_id=mod.effect_id,
+                    source_id=actor_id,
+                    target_ids=target_ids,
+                    applications=applications,
+                )
+                results.extend(
+                    HitResult(
+                        target_id=effect_result.target_id,
+                        effects_applied=effect_result.effects_applied,
+                    )
+                    for effect_result in effect_results
+                )
             case _:
                 pass  # other post-hit actions can be added here
 

@@ -11,6 +11,11 @@ from game.combat.effects import (
     get_effective_major_stat,
     reset_effect_stacks,
 )
+from game.combat.effect_targeting import (
+    EffectApplicationTargetContext,
+    apply_effect_to_targets,
+    resolve_effect_targets,
+)
 from game.combat.models import CombatState, DamageResult, HitResult
 from game.combat.skill_targeting import ActionTargetRef, iter_target_requirements
 from game.combat.targeting import get_allies, get_enemies
@@ -117,9 +122,39 @@ def _exec_apply_effect(
     rng: SeededRNG | None = None,
     constants: dict | None = None,
 ) -> tuple[CombatState, list[HitResult]]:
-    if passive.effect_id is not None:
+    if passive.effect_id is None:
+        return state, []
+
+    if not passive.targets:
         state = apply_effect(state, entity_id, passive.effect_id, entity_id)
-    return state, []
+        return state, []
+
+    hit_target_id = ctx.get("hit_target_id")
+    if not isinstance(hit_target_id, str):
+        return state, []
+
+    raw_damage_type = ctx.get("_raw_damage_type")
+    damage_type = raw_damage_type if isinstance(raw_damage_type, DamageType) else None
+    target_context = EffectApplicationTargetContext(
+        source_id=entity_id,
+        hit_target_id=hit_target_id,
+        damage_dealt=int(ctx.get("damage_dealt", 0)),
+        damage_type=damage_type,
+    )
+    target_ids = resolve_effect_targets(state, target_context, passive.targets)
+    state, applications = apply_effect_to_targets(
+        state,
+        effect_id=passive.effect_id,
+        source_id=entity_id,
+        target_ids=target_ids,
+    )
+    return state, [
+        HitResult(
+            target_id=application.target_id,
+            effects_applied=application.effects_applied,
+        )
+        for application in applications
+    ]
 
 
 def _exec_damage(
@@ -314,6 +349,7 @@ def _build_passive_context(
     for key, value in dict(event.payload).items():
         if key == 'damage_type':
             event_scalars[key] = _normalize_damage_type(value)
+            event_subjects['_raw_damage_type'] = value
         elif isinstance(value, (int, float)):
             event_scalars[key] = value
         elif value is None:

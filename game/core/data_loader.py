@@ -37,16 +37,6 @@ from game.events.models import (
     OutcomeDef,
 )
 from game.character.flags import CharacterFlag, JsonValue
-from game.combat.trackers import (
-    TrackerAction,
-    TrackerCastPolicy,
-    TrackerCastTarget,
-    TrackerDefinition,
-    TrackerEventType,
-    TrackerGroupBy,
-    TrackerRelation,
-    TrackerResetPolicy,
-)
 
 if TYPE_CHECKING:
     from game.world.difficulty import RoomDifficultyModifier
@@ -151,6 +141,7 @@ def load_effect(effect_id: str) -> EffectDef:
 class OnHitEffectData:
     effect_id: str
     chance: float
+    targets: tuple[Any, ...]
 
 
 @dataclass(frozen=True)
@@ -293,12 +284,19 @@ def _validate_skill_summary_template(
     return summary
 
 
-def _parse_hit(hit_raw: dict[str, Any]) -> SkillHitData:
+def _parse_hit(skill_id: str, hit_index: int, hit_raw: dict[str, Any]) -> SkillHitData:
+    from game.combat.effect_targeting import parse_effect_target_specs
+
     on_hits: list[OnHitEffectData] = []
-    for ohe in hit_raw.get("on_hit_effects", []):
+    for on_hit_index, ohe in enumerate(hit_raw.get("on_hit_effects", [])):
+        effect_id = ohe["effect"]
         on_hits.append(OnHitEffectData(
-            effect_id=ohe["effect"],
+            effect_id=effect_id,
             chance=ohe["chance"],
+            targets=parse_effect_target_specs(
+                ohe.get("targets"),
+                f"Skill {skill_id} hit {hit_index} on_hit_effect {on_hit_index}",
+            ),
         ))
     dmg_type = None
     if "damage_type" in hit_raw:
@@ -378,7 +376,10 @@ def load_skills() -> dict[str, SkillData]:
     available_skill_ids = set(raw)
     available_summon_ids = set(load_summons())
     for sid, sdata in raw.items():
-        hits = tuple(_parse_hit(h) for h in sdata.get("hits", []))
+        hits = tuple(
+            _parse_hit(sid, index, h)
+            for index, h in enumerate(sdata.get("hits", []))
+        )
 
         self_effects: list[SelfEffectData] = []
         for se in sdata.get("self_effects", []):
@@ -1338,10 +1339,11 @@ class PassiveSkillData:
     max_uses: int | None = None
     effect_id: str | None = None
     cast_skill_id: str | None = None
-    cast_policy: TrackerCastPolicy = TrackerCastPolicy.NORMAL
+    cast_policy: Any = "normal"
     consume_effect_id: str | None = None
     target_type: TargetType = TargetType.SELF
-    tracker: TrackerDefinition | None = None
+    targets: tuple[Any, ...] = ()
+    tracker: Any | None = None
     cooldown: int = 0
     level_eligibility: tuple[int, int] | None = None
     class_tags: tuple[str, ...] = ()
@@ -1374,8 +1376,18 @@ def _parse_passive_tracker(
     action: PassiveAction,
     cast_skill_id: str | None,
     effect_id: str | None,
-    cast_policy: TrackerCastPolicy,
-) -> TrackerDefinition | None:
+    cast_policy: Any,
+) -> Any | None:
+    from game.combat.trackers import (
+        TrackerAction,
+        TrackerCastTarget,
+        TrackerDefinition,
+        TrackerEventType,
+        TrackerGroupBy,
+        TrackerRelation,
+        TrackerResetPolicy,
+    )
+
     if raw is None:
         return None
 
@@ -1420,13 +1432,23 @@ def _parse_passive_tracker(
 
 
 def load_passives() -> dict[str, PassiveSkillData]:
+    from game.combat.effect_targeting import parse_effect_target_specs
+    from game.combat.trackers import TrackerCastPolicy
+
     raw = _load_toml("passives.toml").get("passives", {})
     result: dict[str, PassiveSkillData] = {}
     for pid, pdata in raw.items():
         action = PassiveAction(pdata["action"])
+        triggers = _parse_passive_triggers(pdata["trigger"])
         cast_policy = TrackerCastPolicy(pdata.get("cast_policy", "normal"))
         cast_skill_id = pdata.get("cast_skill_id")
         effect_id = pdata.get("effect_id")
+        targets: tuple[Any, ...] = ()
+        if action == PassiveAction.APPLY_EFFECT and TriggerType.ON_HIT in triggers:
+            targets = parse_effect_target_specs(
+                pdata.get("targets"),
+                f"Passive {pid}",
+            )
         tracker = _parse_passive_tracker(
             pid,
             pdata.get("tracker"),
@@ -1438,7 +1460,7 @@ def load_passives() -> dict[str, PassiveSkillData]:
         result[pid] = PassiveSkillData(
             skill_id=pid,
             name=pdata["name"],
-            triggers=_parse_passive_triggers(pdata["trigger"]),
+            triggers=triggers,
             condition=pdata.get("condition", ""),
             action=action,
             expr=pdata.get("expr", "0"),
@@ -1449,6 +1471,7 @@ def load_passives() -> dict[str, PassiveSkillData]:
             cast_policy=cast_policy,
             consume_effect_id=pdata.get("consume_effect_id"),
             target_type=TargetType(pdata.get("target_type", "self")),
+            targets=targets,
             tracker=tracker,
             cooldown=pdata.get("cooldown", 0),
             level_eligibility=_parse_level_eligibility(
@@ -1504,9 +1527,12 @@ class SkillModifierData:
     granted_skill_id: str | None = None
     granted_passive_id: str | None = None
     chance: float = 1.0
+    targets: tuple[Any, ...] = ()
 
 
 def load_modifiers() -> dict[str, SkillModifierData]:
+    from game.combat.effect_targeting import parse_effect_target_specs
+
     raw = _load_toml("modifiers.toml").get("modifiers", {})
     result: dict[str, SkillModifierData] = {}
     for mid, mdata in raw.items():
@@ -1515,14 +1541,22 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             raise ValueError(
                 f"Modifier {mid}: chance must be between 0.0 and 1.0, got {chance}",
             )
+        phase = ModifierPhase(mdata["phase"])
+        action = mdata["action"]
+        targets: tuple[Any, ...] = ()
+        if phase == ModifierPhase.POST_HIT and action == "apply_effect":
+            targets = parse_effect_target_specs(
+                mdata.get("targets"),
+                f"Modifier {mid}",
+            )
 
         result[mid] = SkillModifierData(
             modifier_id=mid,
             name=mdata["name"],
-            phase=ModifierPhase(mdata["phase"]),
+            phase=phase,
             stackable=mdata.get("stackable", False),
             expr=mdata.get("expr", "0"),
-            action=mdata["action"],
+            action=action,
             max_stacks=mdata.get("max_stacks"),
             skill_filter=mdata.get("skill_filter"),
             class_tags=tuple(mdata.get("class_tags", [])),
@@ -1534,6 +1568,7 @@ def load_modifiers() -> dict[str, SkillModifierData]:
             granted_skill_id=mdata.get("granted_skill_id"),
             granted_passive_id=mdata.get("granted_passive_id"),
             chance=chance,
+            targets=targets,
         )
 
         if result[mid].action == "summon_stat_bonus" and result[mid].summon_stat is None:

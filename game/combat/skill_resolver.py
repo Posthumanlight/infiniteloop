@@ -6,6 +6,11 @@ from game.combat.effects import (
     apply_effect,
     get_damage_multiplier,
 )
+from game.combat.effect_targeting import (
+    EffectApplicationTargetContext,
+    apply_effect_to_targets,
+    resolve_effect_targets,
+)
 from game.combat.models import CombatState, HitResult, SummonSpawnResult
 from game.combat.passives import PassiveEvent, check_passives
 from game.combat.skill_modifiers import apply_post_hit_modifiers, collect_modifiers
@@ -30,6 +35,10 @@ def _live_target_entity(state: CombatState, target_id: str):
     if target is None or target.current_hp <= 0:
         return None
     return target
+
+
+def _is_effect_only_hit(hit: HitResult) -> bool:
+    return hit.damage is None and hit.heal_amount == 0 and bool(hit.effects_applied)
 
 
 def _resolve_skill_core(
@@ -101,25 +110,57 @@ def _resolve_skill_core(
 
             # Post-hit modifiers (vampirism, etc.)
             state, post_results = apply_post_hit_modifiers(
-                state, actor_id, target_id, dmg_result.amount, modifiers, rng,
+                state,
+                actor_id,
+                target_id,
+                dmg_result.amount,
+                modifiers,
+                rng,
+                damage_type=hit.damage_type,
             )
-            all_hits.extend(post_results)
 
             effects_applied: list[str] = []
+            extra_effect_hits: list[HitResult] = []
+            for post_result in post_results:
+                if (
+                    post_result.target_id == target_id
+                    and _is_effect_only_hit(post_result)
+                ):
+                    effects_applied.extend(post_result.effects_applied)
+                else:
+                    extra_effect_hits.append(post_result)
+
             for on_hit in hit.on_hit_effects:
                 if rng.random_float() < on_hit.chance:
-                    state = apply_effect(state, target_id, on_hit.effect_id, actor_id)
-                    effects_applied.append(on_hit.effect_id)
-
-            all_hits.append(HitResult(
-                target_id=target_id,
-                damage=dmg_result,
-                effects_applied=tuple(effects_applied),
-                skill_id=skill.skill_id,
-            ))
+                    target_context = EffectApplicationTargetContext(
+                        source_id=actor_id,
+                        hit_target_id=target_id,
+                        damage_dealt=dmg_result.amount,
+                        damage_type=hit.damage_type,
+                    )
+                    effect_targets = resolve_effect_targets(
+                        state,
+                        target_context,
+                        on_hit.targets,
+                    )
+                    state, applications = apply_effect_to_targets(
+                        state,
+                        effect_id=on_hit.effect_id,
+                        source_id=actor_id,
+                        target_ids=effect_targets,
+                    )
+                    for application in applications:
+                        if application.target_id == target_id:
+                            effects_applied.extend(application.effects_applied)
+                        else:
+                            extra_effect_hits.append(HitResult(
+                                target_id=application.target_id,
+                                effects_applied=application.effects_applied,
+                                skill_id=skill.skill_id,
+                            ))
 
             # Passive triggers: ON_HIT
-            state, _ = check_passives(
+            state, passive_hits = check_passives(
                 state,
                 actor_id,
                 PassiveEvent(
@@ -127,12 +168,21 @@ def _resolve_skill_core(
                     payload={
                         "damage_type": hit.damage_type,
                         "damage_dealt": dmg_result.amount,
+                        "hit_target_id": target_id,
                     },
                 ),
             )
+            for passive_hit in passive_hits:
+                if (
+                    passive_hit.target_id == target_id
+                    and _is_effect_only_hit(passive_hit)
+                ):
+                    effects_applied.extend(passive_hit.effects_applied)
+                else:
+                    extra_effect_hits.append(passive_hit)
 
             # Passive triggers: ON_TAKE_DAMAGE
-            state, _ = check_passives(
+            state, passive_take_hits = check_passives(
                 state,
                 target_id,
                 PassiveEvent(
@@ -143,6 +193,22 @@ def _resolve_skill_core(
                     },
                 ),
             )
+            for passive_hit in passive_take_hits:
+                if (
+                    passive_hit.target_id == target_id
+                    and _is_effect_only_hit(passive_hit)
+                ):
+                    effects_applied.extend(passive_hit.effects_applied)
+                else:
+                    extra_effect_hits.append(passive_hit)
+
+            all_hits.append(HitResult(
+                target_id=target_id,
+                damage=dmg_result,
+                effects_applied=tuple(effects_applied),
+                skill_id=skill.skill_id,
+            ))
+            all_hits.extend(extra_effect_hits)
 
             state, tracker_hits = process_tracked_event(
                 state,

@@ -28,6 +28,10 @@ from game.combat.trackers import (
     TrackerRelation,
     TrackerResetPolicy,
 )
+from game.combat.effect_targeting import (
+    EffectTargetRelation,
+    EffectTargetSelect,
+)
 from game.core.enums import (
     ActionType,
     DamageType,
@@ -303,6 +307,102 @@ def test_load_passive_onslaught_tracker_metadata():
     assert tracker.action.cast_skill_id == "onslaught"
     assert tracker.action.cast_policy == TrackerCastPolicy.FREE
     assert tracker.action.cast_target == TrackerCastTarget.TRACKED_TARGET
+
+
+def test_load_on_hit_target_specs_for_skill_passive_and_modifier():
+    skill = load_skill("deep_wounds")
+    passive = load_passive("arcane_prowess")
+    modifier = load_modifier("butcher")
+
+    skill_target = skill.hits[0].on_hit_effects[0].targets[0]
+    assert skill_target.relation == EffectTargetRelation.HIT_TARGET
+    assert skill_target.select == EffectTargetSelect.SINGLE
+
+    passive_target = passive.targets[0]
+    assert passive_target.relation == EffectTargetRelation.SELF
+    assert passive_target.select == EffectTargetSelect.SINGLE
+
+    modifier_target = modifier.targets[0]
+    assert modifier_target.relation == EffectTargetRelation.HIT_TARGET
+    assert modifier_target.select == EffectTargetSelect.SINGLE
+
+
+def test_skill_on_hit_effect_rejects_missing_targets(monkeypatch):
+    original_load_toml = data_loader._load_toml
+
+    def fake_load_toml(filename: str):
+        if filename != "skills.toml":
+            return original_load_toml(filename)
+        return {
+            "skills": {
+                "bad_skill": {
+                    "name": "Bad Skill",
+                    "energy_cost": 0,
+                    "action_type": "action",
+                    "summary": "bad",
+                    "hits": [
+                        {
+                            "target_type": "single_enemy",
+                            "damage_type": "slashing",
+                            "formula": "0",
+                            "base_power": 0,
+                            "on_hit_effects": [
+                                {"effect": "bleed", "chance": 1.0},
+                            ],
+                        },
+                    ],
+                },
+            },
+        }
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="targets must be a non-empty list"):
+        data_loader.load_skills()
+
+
+def test_on_hit_apply_effect_passive_rejects_missing_targets(monkeypatch):
+    def fake_load_toml(filename: str):
+        assert filename == "passives.toml"
+        return {
+            "passives": {
+                "bad_passive": {
+                    "name": "Bad Passive",
+                    "trigger": "on_hit",
+                    "action": "apply_effect",
+                    "effect_id": "bleed",
+                    "expr": "1",
+                    "usage_limit": "unlimited",
+                },
+            },
+        }
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="targets must be a non-empty list"):
+        data_loader.load_passives()
+
+
+def test_post_hit_apply_effect_modifier_rejects_missing_targets(monkeypatch):
+    def fake_load_toml(filename: str):
+        assert filename == "modifiers.toml"
+        return {
+            "modifiers": {
+                "bad_modifier": {
+                    "name": "Bad Modifier",
+                    "phase": "post_hit",
+                    "stackable": False,
+                    "expr": "1",
+                    "action": "apply_effect",
+                    "effect_id": "bleed",
+                },
+            },
+        }
+
+    monkeypatch.setattr(data_loader, "_load_toml", fake_load_toml)
+
+    with pytest.raises(ValueError, match="targets must be a non-empty list"):
+        data_loader.load_modifiers()
 
 
 def _fake_passives_payload(

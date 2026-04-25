@@ -28,7 +28,7 @@ action_type = "action"
 cooldown = 6
 summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
-  {target_type = "single_enemy", damage_type = "piercing", formula = "attacker.attack*2", base_power = 10, variance = 0.25, on_hit_effects = [{effect = "stun", chance = 1.0}]}
+  {target_type = "single_enemy", damage_type = "piercing", formula = "attacker.attack*2", base_power = 10, variance = 0.25, on_hit_effects = [{effect = "stun", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 #titanoboa
@@ -39,7 +39,7 @@ action_type = "action"
 cooldown = 2
 summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
-  {target_type = "all_enemies", damage_type = "piercing", formula = "attacker.attack*0.5", base_power = 1, variance = 0.5, on_hit_effects = [{effect = "titanoboa_poison", chance = 1.0}]}
+  {target_type = "all_enemies", damage_type = "piercing", formula = "attacker.attack*0.5", base_power = 1, variance = 0.5, on_hit_effects = [{effect = "titanoboa_poison", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 #goblin_shaman
@@ -50,7 +50,7 @@ action_type = "action"
 cooldown = 3
 summary = "goblin heal allies"
 hits = [
-   { target_type = "all_allies", damage_type = "arcane", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{ effect = "goblin_shaman_healing_rain_effect", chance = 1.0 }] },
+   { target_type = "all_allies", damage_type = "arcane", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{ effect = "goblin_shaman_healing_rain_effect", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }] }] },
 ]
 
 #boss_begamak
@@ -62,7 +62,7 @@ cooldown = 1
 summary = "begamak deal damage und heals"
 hits = [
 {target_type = "single_enemy", damage_type = "piercing", formula = "attacker.attack*1+attacker.current_hp*0.05", base_power = 10, variance = 0.25},
-{ target_type = "self", damage_type = "arcane", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{ effect = "boss_begamak_devour_effect", chance = 1.0 }] }
+{ target_type = "self", damage_type = "arcane", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{ effect = "boss_begamak_devour_effect", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }] }] }
 ]
 
 [skills.boss_begamak_hellfire_breath]
@@ -107,7 +107,7 @@ level_eligibility = [3, 99]
 class_tags = ["warrior"]
 summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
-  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun", chance = 1.0}]}
+  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 1", base_power = 15, variance = 0.0, on_hit_effects = [{effect = "stun", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 [skills.deep_wounds]
@@ -119,7 +119,7 @@ level_eligibility = [3, 99]
 class_tags = ["warrior"]
 summary = "Hits a [target_type] for [damage_non_crit] / [damage_crit] [damage_type] damage."
 hits = [
-  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 0.5", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]}
+  {target_type = "single_enemy", damage_type = "piercing", formula = "base_power + attacker.attack * 0.5", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 [skills.berserker]
@@ -156,7 +156,7 @@ class_tags = ["warrior"]
 summary = "Damages yourself for a 25% percent of current HP and hits all enemies for some damage and applies 2 stacks of Bleed to them."
 hits = [
   {target_type = "self", damage_type = "piercing", formula = "attacker.current_hp * 0.25+base_power", base_power = 1, variance = 0.0},
-  {target_type = "all_enemies", damage_type = "slashing", formula = "attacker.attack*1+base_power", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}, {effect = "bleed", chance = 1.0}]}
+  {target_type = "all_enemies", damage_type = "slashing", formula = "attacker.attack*1+base_power", base_power = 1, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}, {effect = "bleed", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 [skills.rally]
@@ -168,7 +168,7 @@ cooldown = 10
 level_eligibility = [3, 99]
 class_tags = ["warrior"]
 hits = [
-  {target_type = "all_allies", damage_type = "slashing", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "rally_effect", chance = 1.0}]}
+  {target_type = "all_allies", damage_type = "slashing", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "rally_effect", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 [skills.glorious_end]
@@ -177,7 +177,7 @@ energy_cost = 0
 action_type = "action"
 summary = "you apply bleed when kill someone"
 hits = [
-  {target_type = "all_enemies", damage_type = "slashing", formula = "base_power", base_power=0, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0}]} 
+  {target_type = "all_enemies", damage_type = "slashing", formula = "base_power", base_power=0, variance = 0.0, on_hit_effects = [{effect = "bleed", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 #mage
@@ -360,7 +360,7 @@ level_eligibility = [3, 99]
 class_tags = ["summoner"]
 summary = "You heal single ally"
 hits = [
-  {target_type = "single_ally", damage_type = "ice", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "restoration_effect", chance = 1.0}]}
+  {target_type = "single_ally", damage_type = "ice", formula = "0", base_power = 0, variance = 0.0, on_hit_effects = [{effect = "restoration_effect", chance = 1.0, targets = [{ relation = "hit_target", select = "single" }]}]}
 ]
 
 [skills.onslaught]

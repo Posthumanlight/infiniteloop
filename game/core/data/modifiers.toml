@@ -45,6 +45,7 @@ class_tags = ["warrior"]
 expr = "1"
 action = "apply_effect"
 effect_id = "bleed"
+targets = [{ relation = "hit_target", select = "single" }]
 
 [modifiers.cruelty]
 name = "Cruelty"
@@ -56,6 +57,7 @@ expr = "1"
 action = "apply_effect"
 effect_id = "bleed"
 chance = 0.5
+targets = [{ relation = "hit_target", select = "single" }]
 
 [modifiers.exsanguinate]
 name = "Exsanguinate"
