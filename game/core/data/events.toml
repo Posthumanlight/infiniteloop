@@ -87,3 +87,28 @@ description = "???"
 outcomes = [
     { action = "start_combat", target = "all", enemy_group = ["goblin_boss"], combat_location_id = "forest_trail"},
 ]
+
+[events.seal-series-1st_seal]
+name = "The First Seal"
+event_type = "multiplayer"
+initial_stage_id = "start"
+min_depth = 2
+max_depth = 100
+weight = 5
+
+[events.seal-series-1st_seal.start]
+name = "The Bottomless Void"
+description = "This layer of Loop seems drastically different from others. The chamber consist of the narrow marble ring, that surrounded by a pitch-black expanse.
+In the middle of ring, dangling above bottomless void on enormous chains, sleeps an titanic humanoid entity."
+
+[[events.seal-series-1st_seal.start.choices]]
+label = "Walk closer to the edge"
+description = "Curiosity is a virtue."
+
+[[events.seal-series-1st_seal.start.choices]]
+label = "Carefully maneuver to the exit"
+description = "Let the titans sleep."
+
+[[events.seal-series-1st_seal.start.choices]]
+label = "Look closer to the chains"
+description = "The metalwork is exquisite."
