@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from game.character.player_character import PlayerCharacter
 from game.combat.models import ActionResult, CombatState
+from game.core.data_loader import CombatLocation
 from game.core.game_models import LootResolutionSnapshot
 from game.core.enums import LevelRewardType, SessionEndReason, SessionPhase
 from game.events.models import EventState
@@ -70,6 +71,7 @@ class CompletedCombat:
     final_round_number: int
     action_log: tuple[ActionResult, ...]
     entities: dict[str, object]
+    location: CombatLocation
 
 
 @dataclass(frozen=True)

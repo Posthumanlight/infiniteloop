@@ -4,6 +4,7 @@ from game.core.data_loader import clear_cache
 from game.core.enums import CombatPhase
 from game.session.models import CompletedCombat
 from game.session.session_manager import SessionManager
+from game.world.combat_locations import fallback_combat_location
 
 from tests.unit.conftest import make_warrior
 
@@ -29,6 +30,7 @@ def test_finalize_combat_stores_completed_combat_snapshot():
     assert finalized.last_combat is not None
     assert finalized.last_combat.combat_id == combat.combat_id
     assert finalized.last_combat.entities["p1"].current_hp == 0
+    assert finalized.last_combat.location == combat.location
 
 
 def test_enter_combat_clears_stale_completed_combat():
@@ -42,6 +44,7 @@ def test_enter_combat_clears_stale_completed_combat():
             final_round_number=1,
             action_log=(),
             entities={},
+            location=fallback_combat_location("Old Combat"),
         ),
     )
 

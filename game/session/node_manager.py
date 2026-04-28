@@ -256,6 +256,7 @@ class NodeManager:
             final_round_number=combat_state.round_number,
             action_log=combat_state.action_log,
             entities=dict(combat_state.entities),
+            location=combat_state.location,
         )
 
         state = self._apply_combat_results(state)
