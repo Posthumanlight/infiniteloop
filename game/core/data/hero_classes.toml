@@ -80,3 +80,4 @@ modifiers = [
 flags = [
   { flag_name = "upgraded_to_gladiator", flag_value = true, flag_persistence = true },
 ]
+

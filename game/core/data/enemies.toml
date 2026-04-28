@@ -71,6 +71,24 @@ energy = 55
 mastery = 3
 [enemies.bandit.minor_stats]
 
+[enemies.cannibal]
+name = "Cannibal"
+skills = ["generic_enemy_attack"]
+passives = []
+base_xp_reward = 22
+combat_type = "normal"
+tags = ["forest", "cave"]
+[enemies.cannibal.major_stats]
+attack = 8
+hp = 45
+speed = 11
+crit_chance = 0.00
+crit_dmg = 1.2
+resistance = 4
+energy = 55
+mastery = 3
+[enemies.cannibal.minor_stats]
+
 
 #undead
 [enemies.skeleton]
@@ -241,6 +259,26 @@ base_xp_reward = 24
 combat_type = "normal"
 tags = ["eldritch", "dungeon"]
 [enemies.underdweller.major_stats]
+attack = 12
+hp = 25
+speed = 16
+crit_chance = 0.0
+crit_dmg = 1.5
+resistance = 2
+energy = 70
+mastery = 6
+
+
+
+#underground
+[enemies.morloc]
+name = "Morloc"
+skills = ["generic_enemy_attack"]
+passives = []
+base_xp_reward = 23
+combat_type = "normal"
+tags = ["dungeon", "cave", "underground]
+[enemies.morloc.major_stats]
 attack = 12
 hp = 25
 speed = 16

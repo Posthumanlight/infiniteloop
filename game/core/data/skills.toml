@@ -75,6 +75,14 @@ hits = [
   {target_type = "all_enemies", damage_type="fire", formula = "attacker.attack*1+attacker.current_hp*0.07", base_power = 10, variance = 0.25}
 ]
 
+[skills.cannibal_hunger_frenzy]
+name = "Hunger Frenzy"
+action_type = "action"
+cooldown = 5 
+summary = " buff_buff"
+self_effects = [
+  { effect = "berserker" },
+]
 
 #PLAYERS
 #warrior

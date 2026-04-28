@@ -32,3 +32,17 @@ item_id = "giant_snake_skull"
 min_quantity = 1
 max_quantity = 1
 drop_rate = 1.0
+
+[[drops]]
+enemy_id = "fire_imp"
+item_id = "burned_bone"
+min_quantity = 1
+max_quantity = 1
+drop_rate = 0.05
+
+[[drops]]
+enemy_id = "warlock"
+item_id = "burned_bone"
+min_quantity = 1
+max_quantity = 1
+drop_rate = 0.05

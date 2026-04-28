@@ -45,3 +45,13 @@ effects = [
 {type = "modify_stat", stat = "crit_damage", expr = "0.04 + quality*0.005"}
 ]
 
+[items.burned_bone]
+name = "burned_bone"
+item_type = "relic"
+rarity = "common"
+unique = true
+effects = [
+    {type = "modify_stat", stat = "fire_dmg_pct", expr = "0.1 + quality*0.003}
+]
+
+[items.]

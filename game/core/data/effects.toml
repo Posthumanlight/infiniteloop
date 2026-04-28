@@ -130,3 +130,14 @@ stackable = false
 actions = [
   { type = "stat_modify", stat = "hp", expr = "-target.hp * 0.2", scales_with_stacks = false }
 ]
+
+#cannibal
+[effect.cannibal_hunger_frenzy]
+name = "Hunger Frenzy"
+trigger = "on_apply"
+duration = 5
+stackable = false
+actions = [
+  { type = "damage_taken_mult", expr = "2" },
+  { type = "damage_dealt_mult", expr = "2" },
+]
