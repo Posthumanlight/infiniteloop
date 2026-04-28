@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from game.core.data_loader import CombatLocation
 from game.combat.skill_targeting import ActionTargetRef, TargetOwnerKind
 from game.core.enums import ActionType, CombatPhase, DamageType
 
@@ -136,6 +137,7 @@ class CombatState:
     current_turn_index: int
     entities: dict[str, object]  # str -> BaseEntity (avoid circular import)
     phase: CombatPhase
+    location: CombatLocation
     action_log: tuple[ActionResult, ...] = ()
     passive_trackers: dict[str, PassiveTracker] = field(default_factory=dict)
     cooldowns: dict[str, dict[str, int]] = field(default_factory=dict)

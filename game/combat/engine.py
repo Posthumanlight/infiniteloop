@@ -16,9 +16,10 @@ from game.combat.turn_manager import (
     start_turn,
 )
 from game.combat.cooldowns import get_remaining_cooldown
-from game.core.data_loader import SkillData, load_constants, load_skill
+from game.core.data_loader import CombatLocation, SkillData, load_constants, load_skill
 from game.core.dice import SeededRNG
 from game.core.enums import ActionType, CombatPhase, TriggerType
+from game.world.combat_locations import fallback_combat_location
 from game.world.difficulty import RoomDifficultyModifier
 
 
@@ -27,10 +28,12 @@ def start_combat(
     players: list[PlayerCharacter],
     enemies: list[Enemy],
     seed: int,
+    location: CombatLocation | None = None,
     room_difficulty: RoomDifficultyModifier | None = None,
 ) -> CombatState:
     rng = SeededRNG(seed)
     constants = load_constants()
+    combat_location = location or fallback_combat_location("Combat")
 
     entities: dict[str, BaseEntity] = {}
     for p in players:
@@ -38,7 +41,12 @@ def start_combat(
     for e in enemies:
         entities[e.entity_id] = e
 
-    turn_order = build_turn_order(entities, rng, constants["initiative_dice"])
+    turn_order = build_turn_order(
+        entities,
+        rng,
+        constants["initiative_dice"],
+        combat_location,
+    )
 
     state = CombatState(
         combat_id=uuid.uuid4().hex,
@@ -48,6 +56,7 @@ def start_combat(
         current_turn_index=0,
         entities=entities,
         phase=CombatPhase.ACTING,
+        location=combat_location,
         rng_state=rng.get_state(),
         room_difficulty=room_difficulty,
     )

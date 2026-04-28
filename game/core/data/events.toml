@@ -14,7 +14,7 @@ description = "A crumbling altar radiates dark energy. Bones are scattered at it
 label = "Desecrate the shrine"
 description = "Destroy the source of evil."
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["fire_imp", "fire_imp", "fire_imp", "fire_imp", "fire_imp"]},
+    { action = "start_combat", target = "all", enemy_group = ["fire_imp", "fire_imp", "fire_imp", "fire_imp", "fire_imp"], combat_location_id = "burning_cavern"},
 ]
 
 [[events.cursed_shrine.stages.start.choices]]
@@ -38,14 +38,14 @@ description = "The stream of water blocks your path forward. While searching for
 label = "It`s crocodiles!"
 description = "It`s goddamn crocodiles!"
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["crocodile", "crocodile"]},
+    { action = "start_combat", target = "all", enemy_group = ["crocodile", "crocodile"], combat_location_id = "forest_trail"},
 ]
 
 [[events.river_with_surprise.stages.start.choices]]
 label = "It`s goblins!"
 description = "It`s goddamn goblins!"
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"], combat_location_id = "forest_trail"},
 ]
 
 [events.wine_ferstival]
@@ -64,26 +64,26 @@ description = "While traveling, you find a meadow with dozens of stalls bursting
 label = "Give me some of that red!"
 description = "Red wine is the best."
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"], combat_location_id = "forest_trail"},
 ]
 
 [[events.wine_ferstival.stages.start.choices]]
 label = "White is superior choice!"
 description = "Ah, a sophisticated one."
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"], combat_location_id = "forest_trail"},
 ]
 
 [[events.wine_ferstival.stages.start.choices]]
 label = "Both. Both is good"
 description = "That`s greedy!"
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"], combat_location_id = "forest_trail"},
 ]
 
 [[events.wine_ferstival.stages.start.choices]]
 label = "Do you have beer by any chance?"
 description = "???"
 outcomes = [
-    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"]},
+    { action = "start_combat", target = "all", enemy_group = ["goblin_boss"], combat_location_id = "forest_trail"},
 ]

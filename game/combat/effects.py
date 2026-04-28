@@ -5,9 +5,15 @@ from game.character.base_entity import BaseEntity
 from game.character.player_character import PlayerCharacter
 from game.combat.death import resolve_death_event
 from game.combat.models import CombatState, DamageResult, HitResult
-from game.core.data_loader import load_constants, load_effect, load_modifier
+from game.core.data_loader import load_constants, load_effect, load_location_status, load_modifier
 from game.core.dice import SeededRNG
-from game.core.enums import DamageType, EffectActionType, TriggerType
+from game.core.enums import (
+    DamageType,
+    EffectActionType,
+    EntityType,
+    LocationStatusAffects,
+    TriggerType,
+)
 from game.core.formula_eval import ExprContext, evaluate_expr
 from game.items.equipment_effects import (
     apply_equipped_stat_modifiers,
@@ -602,6 +608,32 @@ def get_effective_skill_access(
 # Effective stat helpers (on-demand, for STAT_MODIFY effects)
 # ---------------------------------------------------------------------------
 
+def _location_status_affects_entity(
+    affects: LocationStatusAffects,
+    entity: BaseEntity,
+) -> bool:
+    if affects == LocationStatusAffects.ALL:
+        return True
+    if affects == LocationStatusAffects.PLAYERS:
+        return entity.entity_type in {EntityType.PLAYER, EntityType.ALLY}
+    if affects == LocationStatusAffects.ENEMIES:
+        return entity.entity_type == EntityType.ENEMY
+    return False
+
+
+def location_stat_modifier_for_entity(
+    state: CombatState,
+    entity: BaseEntity,
+    stat_name: str,
+) -> float:
+    total = 0.0
+    for status_id in state.location.status_ids:
+        status = load_location_status(status_id)
+        if not _location_status_affects_entity(status.affects, entity):
+            continue
+        total += float(status.stat_modifiers.get(stat_name, 0.0))
+    return total
+
 def get_effective_major_stat(
     state: CombatState,
     entity_id: str,
@@ -643,6 +675,7 @@ def get_effective_major_stat(
             stack_mult = inst.stack_count if action.scales_with_stacks else 1
             base_value += modifier * stack_mult
 
+    base_value += location_stat_modifier_for_entity(state, entity, stat_name)
     return base_value
 
 
@@ -690,4 +723,5 @@ def get_effective_minor_stat(
             stack_mult = inst.stack_count if action.scales_with_stacks else 1
             base_value += modifier * stack_mult
 
+    base_value += location_stat_modifier_for_entity(state, entity, stat_key)
     return base_value

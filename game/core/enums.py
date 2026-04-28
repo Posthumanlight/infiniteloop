@@ -122,6 +122,12 @@ class CombatLocationType(Enum):
     SOLO_BOSS = "solo_boss"
     BOSS_GROUP = "boss_group"
 
+
+class LocationStatusAffects(Enum):
+    PLAYERS = "players"
+    ENEMIES = "enemies"
+    ALL = "all"
+
 #session
 class ExplorationPhase(Enum):
     CHOOSING = "choosing"

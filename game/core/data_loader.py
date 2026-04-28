@@ -13,6 +13,7 @@ from game.core.enums import (
     EffectActionType,
     EventType,
     LocationType,
+    LocationStatusAffects,
     ModifierPhase,
     OutcomeAction,
     OutcomeTarget,
@@ -1172,6 +1173,9 @@ def load_item_blueprint(blueprint_id: str) -> ItemBlueprint:
 
 def _parse_outcome(raw: dict[str, Any]) -> OutcomeDef:
     enemy_group = tuple(raw.get("enemy_group", []))
+    combat_location_id = raw.get("combat_location_id")
+    if combat_location_id is not None and combat_location_id not in load_combat_locations():
+        raise KeyError(f"Unknown combat location: {combat_location_id}")
     return OutcomeDef(
         action=OutcomeAction(raw["action"]),
         target=OutcomeTarget(raw["target"]),
@@ -1180,6 +1184,7 @@ def _parse_outcome(raw: dict[str, Any]) -> OutcomeDef:
         item_id=raw.get("item_id"),
         effect_id=raw.get("effect_id"),
         enemy_group=enemy_group,
+        combat_location_id=combat_location_id,
     )
 
 
@@ -1604,9 +1609,32 @@ class LocationStatusDef:
     status_id: str
     name: str
     description: str
-    affects: str  # "players", "enemies", "all"
+    affects: LocationStatusAffects
     tags: tuple[str, ...]
     stat_modifiers: dict[str, float]  # e.g. {"crit_chance": -0.03}
+
+
+@dataclass(frozen=True)
+class CombatLocationDef:
+    """Reusable data-driven combat location template."""
+
+    location_id: str
+    name: str
+    tags: tuple[str, ...]
+    weight: float
+    combat_types: tuple[CombatLocationType, ...]
+    status_count_weights: dict[int, float]
+    status_weights: dict[str, float]
+
+
+@dataclass(frozen=True)
+class CombatLocation:
+    """Runtime combat location after random statuses are rolled."""
+
+    location_id: str
+    name: str
+    tags: tuple[str, ...]
+    status_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1621,6 +1649,7 @@ class LocationOption:
     enemy_ids: tuple[str, ...] = ()
     status_ids: tuple[str, ...] = ()
     combat_type: CombatLocationType | None = None
+    combat_location_id: str | None = None
     # Event fields (populated when location_type == EVENT)
     event_id: str | None = None
     room_difficulty: "RoomDifficultyModifier | None" = None
@@ -1645,7 +1674,7 @@ def load_location_statuses() -> dict[str, LocationStatusDef]:
             status_id=sid,
             name=sdata["name"],
             description=sdata["description"],
-            affects=sdata["affects"],
+            affects=LocationStatusAffects(sdata["affects"]),
             tags=tuple(sdata.get("tags", [])),
             stat_modifiers=dict(sdata.get("stat_modifiers", {})),
         )
@@ -1658,6 +1687,96 @@ def load_location_status(status_id: str) -> LocationStatusDef:
     if status_id not in statuses:
         raise KeyError(f"Unknown location status: {status_id}")
     return statuses[status_id]
+
+
+# ---------------------------------------------------------------------------
+# Combat location catalog
+# ---------------------------------------------------------------------------
+
+def _parse_positive_weight(raw: object, label: str) -> float:
+    weight = float(raw)
+    if weight <= 0:
+        raise ValueError(f"{label} must have a positive weight")
+    return weight
+
+
+def _parse_int_weight_map(raw: dict[str, Any], label: str) -> dict[int, float]:
+    result: dict[int, float] = {}
+    for key, raw_weight in raw.items():
+        count = int(key)
+        if count < 0:
+            raise ValueError(f"{label}: status count cannot be negative")
+        result[count] = _parse_positive_weight(raw_weight, f"{label} count {count}")
+    if not result:
+        raise ValueError(f"{label}: status_count_weights cannot be empty")
+    return result
+
+
+def _parse_status_weight_map(
+    raw: dict[str, Any],
+    *,
+    location_id: str,
+    known_status_ids: set[str],
+) -> dict[str, float]:
+    result: dict[str, float] = {}
+    for status_id, raw_weight in raw.items():
+        if status_id not in known_status_ids:
+            raise KeyError(
+                f"Combat location {location_id}: unknown status '{status_id}'",
+            )
+        result[status_id] = _parse_positive_weight(
+            raw_weight,
+            f"Combat location {location_id} status {status_id}",
+        )
+    return result
+
+
+def load_combat_locations() -> dict[str, CombatLocationDef]:
+    raw = _load_toml("combat_locations.toml")["locations"]
+    known_status_ids = set(load_location_statuses())
+    result: dict[str, CombatLocationDef] = {}
+
+    for location_id, data in raw.items():
+        tags = tuple(data.get("tags", ()))
+        if not tags:
+            raise ValueError(f"Combat location {location_id}: tags cannot be empty")
+
+        combat_types = tuple(
+            CombatLocationType(value)
+            for value in data.get("combat_types", ())
+        )
+        if not combat_types:
+            raise ValueError(
+                f"Combat location {location_id}: combat_types cannot be empty",
+            )
+
+        result[location_id] = CombatLocationDef(
+            location_id=location_id,
+            name=data["name"],
+            tags=tags,
+            weight=_parse_positive_weight(
+                data.get("weight", 1),
+                f"Combat location {location_id}",
+            ),
+            combat_types=combat_types,
+            status_count_weights=_parse_int_weight_map(
+                data.get("status_count_weights", {0: 1}),
+                f"Combat location {location_id}",
+            ),
+            status_weights=_parse_status_weight_map(
+                data.get("status_weights", {}),
+                location_id=location_id,
+                known_status_ids=known_status_ids,
+            ),
+        )
+    return result
+
+
+def load_combat_location(location_id: str) -> CombatLocationDef:
+    locations = load_combat_locations()
+    if location_id not in locations:
+        raise KeyError(f"Unknown combat location: {location_id}")
+    return locations[location_id]
 
 
 # ---------------------------------------------------------------------------
@@ -1677,6 +1796,7 @@ def _parse_location_option(index: int, raw: dict[str, Any]) -> LocationOption:
         enemy_ids=tuple(raw.get("enemies", [])),
         status_ids=tuple(raw.get("statuses", [])),
         combat_type=combat_type,
+        combat_location_id=raw.get("combat_location_id"),
         event_id=raw.get("event_id"),
     )
 

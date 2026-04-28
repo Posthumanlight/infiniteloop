@@ -14,6 +14,7 @@ from bot.tools.keyboards import (
     save_decision_keyboard,
 )
 from bot.tools.save_flow import (
+    PendingSaveChoice,
     clear_save_flow,
     get_save_flow,
     start_save_flow,
@@ -183,6 +184,69 @@ async def _finalize_save_flow_if_ready(
     clear_save_flow(session_id)
     lobby_service.close_session(session_id)
     await message.answer("All save choices resolved. Session closed.")
+
+
+async def _persist_save_choice(
+    message: Message,
+    game_service: GameService,
+    session_id: str,
+    choice: PendingSaveChoice,
+    character_name: str,
+    chars_db: UserCharactersData,
+) -> bool:
+    session = game_service._get_session(session_id)
+    if session.state is None:
+        await message.answer("Run state is unavailable; save aborted.")
+        choice.awaiting_name = False
+        choice.resolved = True
+        return False
+
+    player = next(
+        (p for p in session.state.players if p.entity_id == choice.entity_id),
+        None,
+    )
+    if player is None:
+        await message.answer("Character state not found; save aborted.")
+        choice.awaiting_name = False
+        choice.resolved = True
+        return False
+
+    if choice.is_transient:
+        await chars_db.create_saved_character(
+            tg_id=choice.tg_user_id,
+            character_name=character_name,
+            class_id=player.player_class,
+            skills=player.skills,
+            level=player.level,
+            xp=player.xp,
+            skill_modifiers=player.skill_modifiers,
+            passive_skills=player.passive_skills,
+            inventory=player.inventory,
+            flags=player.flags,
+        )
+    else:
+        if choice.source_character_id is None:
+            await message.answer("Invalid save target; save aborted.")
+            choice.awaiting_name = False
+            choice.resolved = True
+            return False
+        await chars_db.save_character_progress(
+            character_id=choice.source_character_id,
+            character_name=character_name,
+            class_id=player.player_class,
+            level=player.level,
+            xp=player.xp,
+            skills=player.skills,
+            passive_skills=player.passive_skills,
+            skill_modifiers=player.skill_modifiers,
+            inventory=player.inventory,
+            flags=player.flags,
+        )
+
+    choice.source_character_name = character_name
+    choice.awaiting_name = False
+    choice.resolved = True
+    return True
 
 
 @router.message(Command("run"))
@@ -476,6 +540,29 @@ async def cb_save_decision(
         return
 
     choice.wants_save = True
+    existing_character_name = choice.existing_character_name
+    if existing_character_name is not None:
+        chars_db = UserCharactersData(pool=db_pool)
+        saved = await _persist_save_choice(
+            callback.message,
+            game_service,
+            sid,
+            choice,
+            existing_character_name,
+            chars_db,
+        )
+        await callback.answer("Character saved." if saved else "Save failed.")
+        if saved:
+            await callback.message.answer("Character saved.")
+        await state.set_state(GameStates.run_ended)
+        await _finalize_save_flow_if_ready(
+            callback.message,
+            game_service,
+            lobby_service,
+            sid,
+        )
+        return
+
     choice.awaiting_name = True
     await callback.answer("Send a character name in chat.")
     await callback.message.answer(
@@ -525,80 +612,16 @@ async def msg_save_name(
         await message.answer("That name is already used globally. Send another name:")
         return
 
-    session = game_service._get_session(sid)
-    if session.state is None:
-        await message.answer("Run state is unavailable; save aborted.")
-        choice.awaiting_name = False
-        choice.resolved = True
-        await state.set_state(GameStates.run_ended)
-        await _finalize_save_flow_if_ready(
-            message,
-            game_service,
-            lobby_service,
-            sid,
-        )
-        return
-
-    player = next(
-        (p for p in session.state.players if p.entity_id == choice.entity_id),
-        None,
+    saved = await _persist_save_choice(
+        message,
+        game_service,
+        sid,
+        choice,
+        character_name,
+        chars_db,
     )
-    if player is None:
-        await message.answer("Character state not found; save aborted.")
-        choice.awaiting_name = False
-        choice.resolved = True
-        await state.set_state(GameStates.run_ended)
-        await _finalize_save_flow_if_ready(
-            message,
-            game_service,
-            lobby_service,
-            sid,
-        )
-        return
-
-    if choice.is_transient:
-        await chars_db.create_saved_character(
-            tg_id=choice.tg_user_id,
-            character_name=character_name,
-            class_id=player.player_class,
-            skills=player.skills,
-            level=player.level,
-            xp=player.xp,
-            skill_modifiers=player.skill_modifiers,
-            passive_skills=player.passive_skills,
-            inventory=player.inventory,
-            flags=player.flags,
-        )
-    else:
-        if choice.source_character_id is None:
-            await message.answer("Invalid save target; save aborted.")
-            choice.awaiting_name = False
-            choice.resolved = True
-            await state.set_state(GameStates.run_ended)
-            await _finalize_save_flow_if_ready(
-                message,
-                game_service,
-                lobby_service,
-                sid,
-            )
-            return
-        await chars_db.save_character_progress(
-            character_id=choice.source_character_id,
-            character_name=character_name,
-            class_id=player.player_class,
-            level=player.level,
-            xp=player.xp,
-            skills=player.skills,
-            passive_skills=player.passive_skills,
-            skill_modifiers=player.skill_modifiers,
-            inventory=player.inventory,
-            flags=player.flags,
-        )
-
-    choice.source_character_name = character_name
-    choice.awaiting_name = False
-    choice.resolved = True
-    await message.answer(f"{choice.display_name} saved as '{character_name}'.")
+    if saved:
+        await message.answer(f"{choice.display_name} saved as '{character_name}'.")
     await state.set_state(GameStates.run_ended)
     await _finalize_save_flow_if_ready(
         message,

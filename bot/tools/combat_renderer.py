@@ -41,11 +41,19 @@ def _entity_line(snap: EntitySnapshot) -> str:
     return line
 
 
+def _location_context_lines(snapshot: CombatSnapshot) -> list[str]:
+    lines = [f"Location: {snapshot.location_name}"]
+    if snapshot.location_statuses:
+        names = ", ".join(status.name for status in snapshot.location_statuses)
+        lines.append(f"Statuses: {names}")
+    return lines
+
+
 def render_combat_start(
     snapshot: CombatSnapshot,
     players: dict[str, PlayerInfo],
 ) -> str:
-    lines = ["\u2694\ufe0f Combat begins!\n"]
+    lines = ["\u2694\ufe0f Combat begins!", *_location_context_lines(snapshot), ""]
 
     # Entity status lines — players first, then enemies
     player_snaps = [
@@ -264,7 +272,11 @@ def render_status(
     snapshot: CombatSnapshot,
     players: dict[str, PlayerInfo],
 ) -> str:
-    lines = [f"\u2694\ufe0f Combat \u2014 Round {snapshot.round_number}\n"]
+    lines = [
+        f"\u2694\ufe0f Combat \u2014 Round {snapshot.round_number}",
+        *_location_context_lines(snapshot),
+        "",
+    ]
 
     for eid in snapshot.turn_order:
         snap = snapshot.entities[eid]

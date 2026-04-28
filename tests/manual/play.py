@@ -38,6 +38,7 @@ from game.world.world_run import (
     submit_location_vote,
 )
 from game.world.models import GenerationConfig
+from game.world.combat_locations import combat_location_from_option
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +238,13 @@ def run_combat(player: PlayerCharacter, location: LocationOption, seed: int) -> 
         print(f"  Location effects: {', '.join(location.status_ids)}")
     print(f"{'=' * 50}")
 
-    state = start_combat("console", [player], enemies, seed=seed)
+    state = start_combat(
+        "console",
+        [player],
+        enemies,
+        seed=seed,
+        location=combat_location_from_option(location),
+    )
 
     turn_num = 0
     while state.phase != CombatPhase.ENDED:

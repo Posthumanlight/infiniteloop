@@ -9,6 +9,7 @@ from game.combat.models import CombatState
 from game.core.data_loader import EffectActionDef, EffectDef
 from game.core.dice import SeededRNG
 from game.core.enums import CombatPhase, EffectActionType, TriggerType
+from game.world.combat_locations import fallback_combat_location
 
 from tests.unit.conftest import make_goblin, make_warrior
 
@@ -85,6 +86,7 @@ def test_speed_buff_changes_initiative_roll(monkeypatch):
         current_turn_index=0,
         entities={"p1": warrior},
         phase=CombatPhase.ACTING,
+        location=fallback_combat_location("Test Combat"),
     )
 
     raw_roll = roll_initiative(make_warrior(), SeededRNG(42), 20)

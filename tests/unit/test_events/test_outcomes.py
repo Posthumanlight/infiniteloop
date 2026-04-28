@@ -208,6 +208,7 @@ def test_start_combat_outcome():
         action=OutcomeAction.START_COMBAT,
         target=OutcomeTarget.ALL,
         enemy_group=("water_elemental",),
+        combat_location_id="dark_cave",
     )
     choice = _make_choice([outcome])
     player = make_warrior("p1")
@@ -217,3 +218,4 @@ def test_start_combat_outcome():
     assert len(results) == 1
     assert results[0].action == OutcomeAction.START_COMBAT
     assert results[0].enemy_group == ("water_elemental",)
+    assert results[0].combat_location_id == "dark_cave"

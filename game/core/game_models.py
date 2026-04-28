@@ -62,6 +62,15 @@ class TurnBatch:
 
 
 @dataclass(frozen=True)
+class LocationStatusInfo:
+    """Display-ready combat location status."""
+
+    status_id: str
+    name: str
+    description: str
+
+
+@dataclass(frozen=True)
 class CombatSnapshot:
     """Full combat state for /status or initial render."""
 
@@ -69,6 +78,8 @@ class CombatSnapshot:
     turn_order: tuple[str, ...]
     whose_turn: str
     round_number: int
+    location_name: str
+    location_statuses: tuple[LocationStatusInfo, ...] = ()
 
 
 # ------------------------------------------------------------------

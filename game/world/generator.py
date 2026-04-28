@@ -3,16 +3,19 @@ from dataclasses import replace
 
 from game.character.player_character import PlayerCharacter
 from game.core.data_loader import (
+    CombatLocationDef,
     EnemyData,
     LocationOption,
+    load_combat_locations,
     load_enemies,
     load_events,
     load_location_set,
-    load_location_statuses,
 )
 from game.core.dice import SeededRNG
 from game.core.enums import CombatLocationType, EnemyCombatType, LocationType
+from game.core.selection import matches_tag_filter, weighted_choice
 from game.events.engine import select_event
+from game.world.combat_locations import roll_combat_location_statuses
 from game.world.difficulty import RoomDifficultyModifier, build_room_difficulty
 from game.world.models import GenerationConfig
 
@@ -59,17 +62,18 @@ class WorldGenerator:
             return all_enemies
         return {
             eid: edata for eid, edata in all_enemies.items()
-            if set(edata.tags) & set(tags)
+            if matches_tag_filter(edata.tags, tags)
         }
 
-    def _get_eligible_statuses(self, tags: tuple[str, ...]) -> list[str]:
-        all_statuses = load_location_statuses()
-        if not tags:
-            return list(all_statuses.keys())
-        return [
-            sid for sid, sdata in all_statuses.items()
-            if set(sdata.tags) & set(tags)
-        ]
+    def _get_tag_filtered_combat_locations(
+        self,
+        tags: tuple[str, ...],
+    ) -> tuple[CombatLocationDef, ...]:
+        return tuple(
+            location
+            for location in load_combat_locations().values()
+            if matches_tag_filter(location.tags, tags)
+        )
 
     def _enemy_ids_by_type(
         self,
@@ -103,7 +107,7 @@ class WorldGenerator:
             case CombatLocationType.ELITE:
                 return len(allowed) >= 1
             case CombatLocationType.SWARM:
-                return len(allowed) >= 3
+                return len(normals) >= 1
             case CombatLocationType.SOLO_BOSS:
                 return len(allowed) >= 1
             case CombatLocationType.BOSS_GROUP:
@@ -111,11 +115,19 @@ class WorldGenerator:
 
     def _valid_combat_location_types(
         self,
-        enemies: dict[str, EnemyData],
+        tags: tuple[str, ...],
     ) -> tuple[CombatLocationType, ...]:
+        locations = self._get_tag_filtered_combat_locations(tags)
         return tuple(
             room_type for room_type in CombatLocationType
-            if self._can_build_room_type(room_type, enemies)
+            if any(
+                room_type in location.combat_types
+                and self._can_build_room_type(
+                    room_type,
+                    self._get_tag_filtered_enemies(location.tags),
+                )
+                for location in locations
+            )
         )
 
     def _roll_combat_location_type(
@@ -123,22 +135,42 @@ class WorldGenerator:
         valid_types: tuple[CombatLocationType, ...],
         weights: dict[CombatLocationType, float],
     ) -> CombatLocationType:
-        weighted = [
-            (room_type, weights.get(room_type, 0.0))
-            for room_type in valid_types
-            if weights.get(room_type, 0.0) > 0
-        ]
-        if not weighted:
-            raise ValueError("No valid combat location types with positive weight")
+        return weighted_choice(
+            tuple(
+                (room_type, weights.get(room_type, 0.0))
+                for room_type in valid_types
+            ),
+            self.rng,
+            label="combat location type",
+        )
 
-        total = sum(weight for _, weight in weighted)
-        roll = self.rng.random_float() * total
-        running = 0.0
-        for room_type, weight in weighted:
-            running += weight
-            if roll < running:
-                return room_type
-        return weighted[-1][0]
+    def _eligible_combat_locations(
+        self,
+        room_type: CombatLocationType,
+        tags: tuple[str, ...],
+    ) -> tuple[CombatLocationDef, ...]:
+        return tuple(
+            location for location in self._get_tag_filtered_combat_locations(tags)
+            if room_type in location.combat_types
+            and self._can_build_room_type(
+                room_type,
+                self._get_tag_filtered_enemies(location.tags),
+            )
+        )
+
+    def _roll_combat_location(
+        self,
+        room_type: CombatLocationType,
+        tags: tuple[str, ...],
+    ) -> CombatLocationDef:
+        return weighted_choice(
+            tuple(
+                (location, location.weight)
+                for location in self._eligible_combat_locations(room_type, tags)
+            ),
+            self.rng,
+            label="combat location",
+        )
 
     def _randint_inclusive(self, low: int, high: int) -> int:
         return self.rng.d(high - low + 1) + low - 1
@@ -188,28 +220,25 @@ class WorldGenerator:
 
     def _generate_combat_location(
         self,
-        counter: int,
         tags: tuple[str, ...],
         combat_type_weights: dict[CombatLocationType, float],
     ) -> LocationOption:
-        enemies = self._get_tag_filtered_enemies(tags)
-        valid_types = self._valid_combat_location_types(enemies)
+        valid_types = self._valid_combat_location_types(tags)
         combat_type = self._roll_combat_location_type(valid_types, combat_type_weights)
+        location = self._roll_combat_location(combat_type, tags)
+        enemies = self._get_tag_filtered_enemies(location.tags)
         enemy_ids = self._build_enemy_group(combat_type, enemies)
-        status_pool = self._get_eligible_statuses(tags)
-
-        status_ids: list[str] = []
-        if status_pool and self.rng.random_float() < 0.5:
-            status_ids.append(self._sample_one(status_pool))
+        status_ids = roll_combat_location_statuses(location, self.rng)
 
         return LocationOption(
             location_id=uuid.uuid4().hex,
-            name=f"Combat {counter}",
+            name=location.name,
             location_type=LocationType.COMBAT,
-            tags=tags,
+            tags=location.tags,
             enemy_ids=enemy_ids,
-            status_ids=tuple(status_ids),
+            status_ids=status_ids,
             combat_type=combat_type,
+            combat_location_id=location.location_id,
         )
 
     def _generate_event_location(
@@ -243,16 +272,13 @@ class WorldGenerator:
         count = self.rng.d(config.count_max - config.count_min + 1) + config.count_min - 1
 
         locations: list[LocationOption] = []
-        combat_counter = 0
         event_counter = 0
 
         for _ in range(count):
             is_combat = self.rng.random_float() < config.combat_weight
 
             if is_combat:
-                combat_counter += 1
                 loc = self._generate_combat_location(
-                    combat_counter,
                     config.tags,
                     config.combat_type_weights,
                 )
@@ -263,9 +289,7 @@ class WorldGenerator:
                 )
 
             if loc is None:
-                combat_counter += 1
                 loc = self._generate_combat_location(
-                    combat_counter,
                     config.tags,
                     config.combat_type_weights,
                 )

@@ -40,6 +40,8 @@ def test_resolve_location_choice_preserves_room_difficulty_and_scales_enemies():
     assert state.phase == SessionPhase.IN_COMBAT
     assert state.combat is not None
     assert state.combat.room_difficulty == room.room_difficulty
+    assert state.combat.location.name == "Goblin Ambush"
+    assert state.combat.location.status_ids == ("dim_light",)
 
     goblin_data = load_enemy("goblin")
     enemy_entities = [
@@ -87,6 +89,7 @@ def test_event_triggered_combat_keeps_room_difficulty_none():
     assert state.phase == SessionPhase.IN_COMBAT
     assert state.combat is not None
     assert state.combat.room_difficulty is None
+    assert state.combat.location.name == "Burning Cavern"
 
 
 def test_event_triggered_combat_reuses_event_room_difficulty_and_scales_enemies():
@@ -129,6 +132,7 @@ def test_event_triggered_combat_reuses_event_room_difficulty_and_scales_enemies(
     assert state.phase == SessionPhase.IN_COMBAT
     assert state.combat is not None
     assert state.combat.room_difficulty == difficulty
+    assert state.combat.location.name == "Burning Cavern"
 
     enemy_entities = [
         entity for entity in state.combat.entities.values()

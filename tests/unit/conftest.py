@@ -9,6 +9,7 @@ from game.character.player_character import PlayerCharacter
 from game.character.stats import MajorStats, MinorStats
 from game.combat.models import CombatState
 from game.core.enums import CombatPhase, EntityType
+from game.world.combat_locations import fallback_combat_location
 
 
 def make_warrior(entity_id: str = "p1") -> PlayerCharacter:
@@ -75,4 +76,5 @@ def make_combat_state(
         current_turn_index=0,
         entities=entities,
         phase=CombatPhase.ACTING,
+        location=fallback_combat_location("Test Combat"),
     )

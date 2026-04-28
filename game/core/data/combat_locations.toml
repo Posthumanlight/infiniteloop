@@ -1,0 +1,60 @@
+[locations.dark_cave]
+name = "Dark Cave"
+tags = ["cave", "dark"]
+weight = 10
+combat_types = ["normal", "elite", "swarm", "solo_boss", "boss_group"]
+
+[locations.dark_cave.status_count_weights]
+0 = 6
+1 = 4
+
+[locations.dark_cave.status_weights]
+dim_light = 10
+
+[locations.skeleton_crypt]
+name = "Skeleton Crypt"
+tags = ["cave", "undead", "ruins"]
+weight = 6
+combat_types = ["normal", "elite", "swarm"]
+
+[locations.skeleton_crypt.status_count_weights]
+0 = 7
+1 = 3
+
+[locations.skeleton_crypt.status_weights]
+dim_light = 6
+
+[locations.forest_trail]
+name = "Forest Trail"
+tags = ["forest", "wild", "road"]
+weight = 8
+combat_types = ["normal", "elite", "swarm", "solo_boss", "boss_group"]
+
+[locations.forest_trail.status_count_weights]
+0 = 1
+
+[locations.forest_trail.status_weights]
+
+[locations.burning_cavern]
+name = "Burning Cavern"
+tags = ["cave", "fire"]
+weight = 5
+combat_types = ["normal", "elite", "swarm"]
+
+[locations.burning_cavern.status_count_weights]
+0 = 4
+1 = 6
+
+[locations.burning_cavern.status_weights]
+burning_ground = 10
+
+[locations.eldritch_depths]
+name = "Eldritch Depths"
+tags = ["dungeon", "eldritch"]
+weight = 3
+combat_types = ["normal"]
+
+[locations.eldritch_depths.status_count_weights]
+0 = 1
+
+[locations.eldritch_depths.status_weights]

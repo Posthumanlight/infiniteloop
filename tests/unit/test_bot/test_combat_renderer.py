@@ -1,7 +1,12 @@
 from game.combat.models import ActionRequest, ActionResult, DamageResult, HitResult
 from game.core.enums import ActionType, DamageType, EntityType
-from game.core.game_models import EntitySnapshot, TurnBatch
-from bot.tools.combat_renderer import render_combat_end
+from game.core.game_models import (
+    CombatSnapshot,
+    EntitySnapshot,
+    LocationStatusInfo,
+    TurnBatch,
+)
+from bot.tools.combat_renderer import render_combat_end, render_combat_start, render_status
 
 
 def test_render_combat_end_includes_final_round_recap_and_victory():
@@ -63,3 +68,39 @@ def test_render_combat_end_includes_final_round_recap_and_victory():
     assert "Goblin is defeated" in text
     assert "Victory" in text
     assert "Survivors:" in text
+
+
+def test_render_combat_start_and_status_include_location_context():
+    snapshot = CombatSnapshot(
+        entities={
+            "p1": EntitySnapshot(
+                entity_id="p1",
+                name="Hero",
+                entity_type=EntityType.PLAYER,
+                current_hp=80,
+                max_hp=120,
+                current_energy=40,
+                max_energy=100,
+                is_alive=True,
+            ),
+        },
+        turn_order=("p1",),
+        whose_turn="p1",
+        round_number=1,
+        location_name="Burning Cavern",
+        location_statuses=(
+            LocationStatusInfo(
+                status_id="burning_ground",
+                name="Burning Ground",
+                description="Hot floor.",
+            ),
+        ),
+    )
+
+    start_text = render_combat_start(snapshot, {})
+    status_text = render_status(snapshot, {})
+
+    assert "Location: Burning Cavern" in start_text
+    assert "Statuses: Burning Ground" in start_text
+    assert "Location: Burning Cavern" in status_text
+    assert "Statuses: Burning Ground" in status_text

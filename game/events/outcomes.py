@@ -27,6 +27,7 @@ def resolve_outcomes(
                 item_id=outcome.item_id,
                 effect_id=outcome.effect_id,
                 enemy_group=outcome.enemy_group,
+                combat_location_id=outcome.combat_location_id,
             ))
     return tuple(results)
 

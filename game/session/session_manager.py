@@ -17,6 +17,7 @@ from game.core.enums import (
 from game.session.location_manager import LocationManager
 from game.session.models import PendingRewardQueue, RewardNotice, SessionState
 from game.session.node_manager import NodeManager
+from game.world.combat_locations import combat_location_from_option
 from game.world.models import GenerationConfig
 from game.world.world_run import WorldManager
 
@@ -169,6 +170,7 @@ class SessionManager:
                 return self._node.enter_combat(
                     state,
                     location.enemy_ids,
+                    location=combat_location_from_option(location),
                     room_difficulty=location.room_difficulty,
                 )
             case LocationType.EVENT:
@@ -244,7 +246,12 @@ class SessionManager:
     def resolve_event(self, state: SessionState) -> SessionState:
         self._assert_phase(state, SessionPhase.IN_EVENT)
 
-        state, combat_enemy_ids, room_difficulty = self._node.resolve_event(state)
+        (
+            state,
+            combat_enemy_ids,
+            room_difficulty,
+            combat_location,
+        ) = self._node.resolve_event(state)
 
         if state.event is not None:
             if not self._check_party_alive(state.players):
@@ -267,6 +274,7 @@ class SessionManager:
             return self._node.enter_combat(
                 state,
                 combat_enemy_ids,
+                location=combat_location,
                 room_difficulty=room_difficulty,
             )
 

@@ -14,9 +14,11 @@ from game.combat.engine import (
 )
 from game.combat.models import ActionRequest, CombatState
 from game.core.data_loader import (
+    CombatLocation,
     ProgressionConfig,
     is_passive_offerable,
     is_skill_offerable,
+    load_combat_location,
     load_effect,
     load_enemy_loot,
     load_event,
@@ -60,6 +62,7 @@ from game.session.models import (
     RewardNotice,
     SessionState,
 )
+from game.world.combat_locations import combat_location_from_def, fallback_combat_location
 from game.world.difficulty import RoomDifficultyModifier
 
 
@@ -192,6 +195,7 @@ class NodeManager:
         self,
         state: SessionState,
         enemy_ids: tuple[str, ...],
+        location: CombatLocation | None = None,
         room_difficulty: RoomDifficultyModifier | None = None,
     ) -> SessionState:
         """Build enemies from TOML and start a combat encounter."""
@@ -201,6 +205,7 @@ class NodeManager:
             players=list(state.players),
             enemies=enemies,
             seed=self._next_seed(),
+            location=location or fallback_combat_location("Combat"),
             room_difficulty=room_difficulty,
         )
         return replace(
@@ -331,7 +336,12 @@ class NodeManager:
     def resolve_event(
         self,
         state: SessionState,
-    ) -> tuple[SessionState, tuple[str, ...], RoomDifficultyModifier | None]:
+    ) -> tuple[
+        SessionState,
+        tuple[str, ...],
+        RoomDifficultyModifier | None,
+        CombatLocation | None,
+    ]:
         """Resolve event votes, apply outcomes, and preserve combat difficulty."""
         event = state.event
         if event is None:
@@ -350,7 +360,7 @@ class NodeManager:
         state = self._apply_event_outcomes(state, resolution.outcomes)
 
         if event_state.phase == EventPhase.PRESENTING:
-            return state, (), room_difficulty
+            return state, (), room_difficulty, None
 
         state = replace(
             state,
@@ -362,9 +372,11 @@ class NodeManager:
 
         # Collect START_COMBAT enemy groups
         combat_enemy_ids: list[str] = []
+        combat_location_id: str | None = None
         for outcome in resolution.outcomes:
             if outcome.action == OutcomeAction.START_COMBAT:
                 combat_enemy_ids.extend(outcome.enemy_group)
+                combat_location_id = combat_location_id or outcome.combat_location_id
 
         # Clear event sub-state
         state = replace(state, event=None)
@@ -373,7 +385,20 @@ class NodeManager:
         if not combat_enemy_ids:
             state = self._restore_between_nodes(state, self._restoration_formula)
 
-        return state, tuple(combat_enemy_ids), room_difficulty
+        combat_location = None
+        if combat_enemy_ids:
+            if combat_location_id is not None:
+                combat_location = combat_location_from_def(
+                    load_combat_location(combat_location_id),
+                    self._rng,
+                )
+            else:
+                combat_location = fallback_combat_location(
+                    f"{event.event_def.name} Combat",
+                    location_id=f"event:{event.event_def.event_id}",
+                )
+
+        return state, tuple(combat_enemy_ids), room_difficulty, combat_location
 
     # ------------------------------------------------------------------
     # Level-up rewards (modifier or ability)

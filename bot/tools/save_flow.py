@@ -19,6 +19,13 @@ class PendingSaveChoice:
     def is_transient(self) -> bool:
         return self.source_character_id is None
 
+    @property
+    def existing_character_name(self) -> str | None:
+        if self.source_character_id is None:
+            return None
+        name = (self.source_character_name or "").strip()
+        return name or None
+
 
 @dataclass
 class SessionSaveFlow:

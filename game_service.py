@@ -21,6 +21,7 @@ from game.core.data_loader import (
     load_effect,
     load_item_dissolve_constants,
     load_item_sets,
+    load_location_status,
     load_modifier,
     load_passive,
     load_skill,
@@ -65,6 +66,7 @@ from game.core.game_models import (
     ItemInfo,
     ItemSetBonusInfo,
     ItemSetInfo,
+    LocationStatusInfo,
     LootResolutionSnapshot,
     ModifierInfo,
     PendingRewardInfo,
@@ -1585,11 +1587,23 @@ class GameService:
 
     def _build_combat_snapshot(self, session: ActiveSession) -> CombatSnapshot:
         combat = session.state.combat
+        location_statuses: list[LocationStatusInfo] = []
+        for status_id in combat.location.status_ids:
+            status = load_location_status(status_id)
+            location_statuses.append(
+                LocationStatusInfo(
+                    status_id=status_id,
+                    name=status.name,
+                    description=status.description,
+                ),
+            )
         return CombatSnapshot(
             entities=self._build_entity_map(session),
             turn_order=combat.turn_order,
             whose_turn=combat.turn_order[combat.current_turn_index],
             round_number=combat.round_number,
+            location_name=combat.location.name,
+            location_statuses=tuple(location_statuses),
         )
 
     def _build_entity_map(

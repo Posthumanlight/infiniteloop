@@ -2,13 +2,20 @@ import pytest
 
 from game.core.data_loader import (
     clear_cache,
+    load_combat_location,
+    load_combat_locations,
     load_enemies,
     load_location_set,
     load_location_sets,
     load_location_status,
     load_location_statuses,
 )
-from game.core.enums import CombatLocationType, EnemyCombatType, LocationType
+from game.core.enums import (
+    CombatLocationType,
+    EnemyCombatType,
+    LocationStatusAffects,
+    LocationType,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +39,7 @@ def test_enemies_have_tags():
 def test_enemies_parse_combat_type():
     enemies = load_enemies()
     assert enemies["goblin"].combat_type == EnemyCombatType.NORMAL
-    assert enemies["fire_imp"].combat_type == EnemyCombatType.ELITE
+    assert enemies["fire_imp"].combat_type == EnemyCombatType.NORMAL
     assert enemies["goblin_boss"].combat_type == EnemyCombatType.BOSS
 
 
@@ -55,7 +62,7 @@ def test_load_statuses():
 def test_status_fields():
     status = load_location_status("dim_light")
     assert status.name == "Dim Light"
-    assert status.affects == "all"
+    assert status.affects == LocationStatusAffects.ALL
     assert "dark" in status.tags
     assert "crit_chance" in status.stat_modifiers
 
@@ -63,6 +70,31 @@ def test_status_fields():
 def test_unknown_status_raises():
     with pytest.raises(KeyError, match="Unknown location status"):
         load_location_status("nonexistent")
+
+
+# ---------------------------------------------------------------------------
+# Combat location catalog
+# ---------------------------------------------------------------------------
+
+def test_load_combat_locations():
+    locations = load_combat_locations()
+    assert "dark_cave" in locations
+    assert "burning_cavern" in locations
+
+
+def test_combat_location_fields():
+    location = load_combat_location("dark_cave")
+    assert location.name == "Dark Cave"
+    assert "cave" in location.tags
+    assert location.weight > 0
+    assert CombatLocationType.NORMAL in location.combat_types
+    assert location.status_count_weights[0] > 0
+    assert location.status_weights["dim_light"] > 0
+
+
+def test_unknown_combat_location_raises():
+    with pytest.raises(KeyError, match="Unknown combat location"):
+        load_combat_location("nonexistent")
 
 
 # ---------------------------------------------------------------------------

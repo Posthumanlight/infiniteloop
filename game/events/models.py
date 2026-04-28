@@ -22,6 +22,7 @@ class OutcomeDef:
     item_id: str | None = None
     effect_id: str | None = None
     enemy_group: tuple[str, ...] = ()
+    combat_location_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,7 @@ class OutcomeResult:
     item_id: str | None = None
     effect_id: str | None = None
     enemy_group: tuple[str, ...] = ()
+    combat_location_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -109,6 +109,23 @@ def test_all_combat_weight(players):
     locations = _generate(seed=42, config=config, players=players)
     assert all(loc.location_type == LocationType.COMBAT for loc in locations)
     assert all(loc.combat_type is not None for loc in locations)
+    assert all(loc.combat_location_id is not None for loc in locations)
+    assert all(not loc.name.startswith("Combat ") for loc in locations)
+
+
+def test_random_combat_statuses_come_from_selected_location(players):
+    config = GenerationConfig(
+        tags=("fire",),
+        count_min=1,
+        count_max=1,
+        combat_weight=1.0,
+        combat_type_weights={CombatLocationType.NORMAL: 1.0},
+    )
+
+    location = _generate(seed=1, config=config, players=players)[0]
+
+    assert location.combat_location_id == "burning_cavern"
+    assert location.status_ids == ("burning_ground",)
 
 
 def test_event_locations_have_event_id(players):
@@ -126,7 +143,7 @@ def test_event_locations_have_event_id(players):
 # Combat type rules
 # ---------------------------------------------------------------------------
 
-def test_tag_filtering_fire_only_builds_fire_imp_elites(players):
+def test_tag_filtering_fire_only_builds_fire_enemies(players):
     config = GenerationConfig(
         tags=("fire",),
         count_min=3,
@@ -135,9 +152,10 @@ def test_tag_filtering_fire_only_builds_fire_imp_elites(players):
     )
 
     locations = _generate(seed=42, config=config, players=players)
-    assert all(loc.combat_type == CombatLocationType.ELITE for loc in locations)
+    assert all(loc.combat_type == CombatLocationType.NORMAL for loc in locations)
     for loc in locations:
-        assert loc.enemy_ids == ("fire_imp",)
+        assert loc.combat_location_id == "burning_cavern"
+        assert all(set(load_enemy(eid).tags) & set(loc.tags) for eid in loc.enemy_ids)
 
 
 def test_normal_rooms_only_use_normal_enemies(players):
@@ -203,7 +221,8 @@ def test_solo_boss_rooms_contain_exactly_one_boss(players):
     locations = _generate(seed=11, config=config, players=players)
     for loc in locations:
         assert loc.combat_type == CombatLocationType.SOLO_BOSS
-        assert loc.enemy_ids == ("goblin_boss",)
+        assert len(loc.enemy_ids) == 1
+        assert load_enemy(loc.enemy_ids[0]).combat_type == EnemyCombatType.BOSS
 
 
 def test_boss_group_rooms_use_one_boss_and_normal_adds(players):
@@ -242,4 +261,7 @@ def test_only_valid_room_type_is_rolled_even_if_other_weights_exist(players):
     )
 
     locations = _generate(seed=5, config=config, players=players)
-    assert all(loc.combat_type == CombatLocationType.ELITE for loc in locations)
+    assert all(
+        loc.combat_type in {CombatLocationType.NORMAL, CombatLocationType.SWARM}
+        for loc in locations
+    )

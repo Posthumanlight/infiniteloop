@@ -1,10 +1,15 @@
 from game.combat.models import CombatState, TurnOrder
+from game.core.data_loader import CombatLocation
 from game.core.enums import CombatPhase
 from game.character.base_entity import BaseEntity
 from game.core.dice import SeededRNG
+from game.world.combat_locations import fallback_combat_location
 
 
-def _initiative_state(entities: dict[str, BaseEntity]) -> CombatState:
+def _initiative_state(
+    entities: dict[str, BaseEntity],
+    location: CombatLocation | None = None,
+) -> CombatState:
     return CombatState(
         combat_id="initiative-preview",
         session_id="initiative-preview",
@@ -13,6 +18,7 @@ def _initiative_state(entities: dict[str, BaseEntity]) -> CombatState:
         current_turn_index=0,
         entities=entities,
         phase=CombatPhase.ACTING,
+        location=location or fallback_combat_location("Initiative Preview"),
     )
 
 
@@ -46,8 +52,9 @@ def build_turn_order_with_scores(
     entities: dict[str, BaseEntity],
     rng: SeededRNG,
     dice_size: int,
+    location: CombatLocation | None = None,
 ) -> tuple[TurnOrder, dict[str, tuple[int, int]]]:
-    state = _initiative_state(entities)
+    state = _initiative_state(entities, location)
     rolls: list[tuple[str, int, int]] = []
     for eid, entity in entities.items():
         primary, tiebreak = roll_initiative_pair(entity, rng, dice_size, state)
@@ -65,8 +72,9 @@ def build_turn_order(
     entities: dict[str, BaseEntity],
     rng: SeededRNG,
     dice_size: int,
+    location: CombatLocation | None = None,
 ) -> tuple[str, ...]:
-    order, _ = build_turn_order_with_scores(entities, rng, dice_size)
+    order, _ = build_turn_order_with_scores(entities, rng, dice_size, location)
     return order
 
 
@@ -101,6 +109,7 @@ def insert_into_turn_order(
         current_turn_index=state.current_turn_index,
         entities=state.entities,
         phase=state.phase,
+        location=state.location,
         action_log=state.action_log,
         passive_trackers=state.passive_trackers,
         cooldowns=state.cooldowns,
