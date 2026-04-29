@@ -80,6 +80,7 @@ name = "Hunger Frenzy"
 action_type = "action"
 cooldown = 5 
 summary = " buff_buff"
+energy_cost = 0
 self_effects = [
   { effect = "berserker" },
 ]

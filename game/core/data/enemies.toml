@@ -277,7 +277,7 @@ skills = ["generic_enemy_attack"]
 passives = []
 base_xp_reward = 23
 combat_type = "normal"
-tags = ["dungeon", "cave", "underground]
+tags = ["dungeon", "cave", "underground"]
 [enemies.morloc.major_stats]
 attack = 12
 hp = 25
