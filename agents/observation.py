@@ -26,16 +26,29 @@ from game.core.data_loader import (
     load_constants,
     load_effects,
     load_enemies,
+    load_event_constants,
     load_events,
     load_location_sets,
     load_location_statuses,
+    load_modifiers,
     load_passives,
     load_skills,
     load_summon_constants,
     load_summons,
     load_world_difficulty_constants,
 )
-from game.core.enums import DamageType, EntityType, LocationType, TargetType
+from game.core.enums import (
+    DamageType,
+    EntityType,
+    LevelRewardType,
+    LocationType,
+    OutcomeAction,
+    SessionPhase,
+    TargetType,
+)
+from game.core.game_models import parse_reward_key
+from game.session.models import SessionState
+from game.world.models import GenerationConfig
 
 
 GLOBAL_FEATURES = (
@@ -88,6 +101,12 @@ SKILL_SCALAR_FEATURES = (
 ENTITY_TYPE_IDS = tuple(entity_type.value for entity_type in EntityType)
 TARGET_TYPE_IDS = tuple(target_type.value for target_type in TargetType)
 DAMAGE_TYPE_IDS = tuple(damage_type.value for damage_type in DamageType)
+SESSION_PHASE_IDS = tuple(phase.value for phase in SessionPhase)
+DECISION_TYPE_IDS = ("none", "combat", "location", "event", "reward")
+LOCATION_TYPE_IDS = tuple(location_type.value for location_type in LocationType)
+OUTCOME_ACTION_IDS = tuple(action.value for action in OutcomeAction)
+REWARD_KIND_IDS = ("modifier", "skill", "passive")
+REWARD_TYPE_IDS = tuple(reward_type.value for reward_type in LevelRewardType)
 
 GENERATED_COMBAT_MAX_ENEMIES = 5
 ROUND_NORMALIZER = 100.0
@@ -104,6 +123,44 @@ DURATION_NORMALIZER = 20.0
 STACK_NORMALIZER = 20.0
 COOLDOWN_NORMALIZER = 20.0
 HIT_COUNT_NORMALIZER = 10.0
+RUN_STAT_NORMALIZER = 100.0
+DEPTH_NORMALIZER = 100.0
+CHOICE_INDEX_NORMALIZER = 10.0
+ENEMY_COUNT_NORMALIZER = 10.0
+
+RUN_GLOBAL_SCALAR_FEATURES = (
+    "actor_is_alive",
+    "depth_norm",
+    "max_depth_norm",
+    "rooms_explored_norm",
+    "combats_completed_norm",
+    "events_completed_norm",
+    "enemies_defeated_norm",
+    "total_damage_dealt_norm",
+    "total_damage_taken_norm",
+    "total_healing_norm",
+    "total_xp_gained_norm",
+    "pending_reward",
+)
+
+LOCATION_SCALAR_FEATURES = (
+    "present",
+    "difficulty_modifier_norm",
+    "enemy_count_norm",
+    "is_combat",
+    "is_event",
+)
+
+EVENT_CHOICE_SCALAR_FEATURES = (
+    "present",
+    "choice_index_norm",
+    "starts_combat",
+    "enemy_group_size_norm",
+)
+
+REWARD_SCALAR_FEATURES = (
+    "present",
+)
 
 
 @dataclass(frozen=True)
@@ -124,6 +181,26 @@ class ObservationSpec:
     max_team_slots: int
     max_enemy_slots: int
     max_effect_slots: int
+    vector_size: int
+    slices: dict[str, slice]
+
+
+@dataclass(frozen=True)
+class RunObservationCatalog:
+    combat: ObservationCatalog
+    modifier_ids: tuple[str, ...]
+    event_ids: tuple[str, ...]
+    event_stage_ids: tuple[str, ...]
+    location_tag_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RunObservationSpec:
+    combat: ObservationSpec
+    catalog: RunObservationCatalog
+    max_location_choices: int
+    max_event_choices: int
+    max_reward_choices: int
     vector_size: int
     slices: dict[str, slice]
 
@@ -166,6 +243,31 @@ def build_observation_catalog() -> ObservationCatalog:
     )
 
 
+def build_run_observation_catalog(
+    combat_catalog: ObservationCatalog | None = None,
+) -> RunObservationCatalog:
+    events = load_events()
+    stage_ids = {
+        f"{event_id}:{stage_id}"
+        for event_id, event in events.items()
+        for stage_id in event.stages
+    }
+    location_tags = set()
+    for location in load_combat_locations().values():
+        location_tags.update(location.tags)
+    for location_set in load_location_sets().values():
+        for option in location_set.locations:
+            location_tags.update(option.tags)
+
+    return RunObservationCatalog(
+        combat=combat_catalog or build_observation_catalog(),
+        modifier_ids=tuple(sorted(load_modifiers())),
+        event_ids=tuple(sorted(events)),
+        event_stage_ids=tuple(sorted(stage_ids)),
+        location_tag_ids=tuple(sorted(location_tags)),
+    )
+
+
 def _max_event_enemy_group_size() -> int:
     maximum = 0
     for event in load_events().values():
@@ -198,6 +300,31 @@ def infer_max_enemy_slots() -> int:
         _max_event_enemy_group_size(),
         _max_predetermined_enemy_group_size(),
     )
+
+
+def infer_max_location_choices() -> int:
+    return max(
+        int(load_event_constants().get("max_choices", 4)),
+        int(GenerationConfig().count_max),
+    )
+
+
+def infer_max_event_choices() -> int:
+    maximum = 1
+    for event in load_events().values():
+        for stage in event.stages.values():
+            maximum = max(maximum, len(stage.choices))
+    return maximum
+
+
+def infer_max_reward_choices() -> int:
+    return max(2, int(getattr(load_progression_safe(), "skill_reward_offer_size", 2)))
+
+
+def load_progression_safe():
+    from game.core.data_loader import load_progression
+
+    return load_progression()
 
 
 def entity_block_size(spec: ObservationSpec) -> int:
@@ -283,7 +410,123 @@ def build_observation_spec(
     )
 
 
+def run_global_block_size() -> int:
+    return (
+        len(RUN_GLOBAL_SCALAR_FEATURES)
+        + len(SESSION_PHASE_IDS)
+        + len(DECISION_TYPE_IDS)
+    )
+
+
+def location_option_block_size(spec: RunObservationSpec) -> int:
+    return (
+        len(LOCATION_SCALAR_FEATURES)
+        + len(LOCATION_TYPE_IDS)
+        + len(spec.catalog.location_tag_ids)
+        + len(spec.catalog.combat.location_status_ids)
+    )
+
+
+def event_choice_block_size(spec: RunObservationSpec) -> int:
+    return (
+        len(EVENT_CHOICE_SCALAR_FEATURES)
+        + len(spec.catalog.event_ids)
+        + len(spec.catalog.event_stage_ids)
+        + len(OUTCOME_ACTION_IDS)
+    )
+
+
+def reward_choice_block_size(spec: RunObservationSpec) -> int:
+    return (
+        len(REWARD_SCALAR_FEATURES)
+        + len(REWARD_TYPE_IDS)
+        + len(REWARD_KIND_IDS)
+        + len(spec.catalog.modifier_ids)
+        + len(spec.catalog.combat.skill_ids)
+        + len(spec.catalog.combat.passive_ids)
+    )
+
+
+def build_run_observation_spec(
+    *,
+    combat_spec: ObservationSpec | None = None,
+    catalog: RunObservationCatalog | None = None,
+    max_location_choices: int | None = None,
+    max_event_choices: int | None = None,
+    max_reward_choices: int | None = None,
+) -> RunObservationSpec:
+    combat_spec = combat_spec or build_observation_spec()
+    catalog = catalog or build_run_observation_catalog(combat_spec.catalog)
+    max_location_choices = (
+        infer_max_location_choices()
+        if max_location_choices is None
+        else max_location_choices
+    )
+    max_event_choices = (
+        infer_max_event_choices()
+        if max_event_choices is None
+        else max_event_choices
+    )
+    max_reward_choices = (
+        infer_max_reward_choices()
+        if max_reward_choices is None
+        else max_reward_choices
+    )
+
+    temp = RunObservationSpec(
+        combat=combat_spec,
+        catalog=catalog,
+        max_location_choices=max_location_choices,
+        max_event_choices=max_event_choices,
+        max_reward_choices=max_reward_choices,
+        vector_size=0,
+        slices={},
+    )
+    cursor = 0
+    slices: dict[str, slice] = {}
+    slices["run_global"] = slice(cursor, cursor + run_global_block_size())
+    cursor = slices["run_global"].stop
+    slices["combat"] = slice(cursor, cursor + combat_spec.vector_size)
+    cursor = slices["combat"].stop
+    slices["locations"] = slice(
+        cursor,
+        cursor + location_option_block_size(temp) * max_location_choices,
+    )
+    cursor = slices["locations"].stop
+    slices["events"] = slice(
+        cursor,
+        cursor + event_choice_block_size(temp) * max_event_choices,
+    )
+    cursor = slices["events"].stop
+    slices["rewards"] = slice(
+        cursor,
+        cursor + reward_choice_block_size(temp) * max_reward_choices,
+    )
+    cursor = slices["rewards"].stop
+
+    return RunObservationSpec(
+        combat=combat_spec,
+        catalog=catalog,
+        max_location_choices=max_location_choices,
+        max_event_choices=max_event_choices,
+        max_reward_choices=max_reward_choices,
+        vector_size=cursor,
+        slices=slices,
+    )
+
+
 def build_observation_space(spec: ObservationSpec):
+    if gym is None:
+        raise ModuleNotFoundError("gymnasium is required to build observation spaces")
+    return gym.spaces.Box(
+        low=0.0,
+        high=1.0,
+        shape=(spec.vector_size,),
+        dtype=np.float32,
+    )
+
+
+def build_run_observation_space(spec: RunObservationSpec):
     if gym is None:
         raise ModuleNotFoundError("gymnasium is required to build observation spaces")
     return gym.spaces.Box(
@@ -426,6 +669,179 @@ def _location_features(state: CombatState, spec: ObservationSpec) -> list[float]
         *one_hot(state.location.location_id, catalog.location_ids),
         *multi_hot(state.location.status_ids, catalog.location_status_ids),
     ]
+
+
+def _actor_alive_in_session(state: SessionState, actor_id: str) -> bool:
+    if state.combat is not None and actor_id in state.combat.entities:
+        return state.combat.entities[actor_id].current_hp > 0
+    for player in state.players:
+        if player.entity_id == actor_id:
+            return player.current_hp > 0
+    if state.last_combat is not None and actor_id in state.last_combat.entities:
+        return state.last_combat.entities[actor_id].current_hp > 0
+    return False
+
+
+def _run_decision_type(state: SessionState, actor_id: str) -> str:
+    if _current_reward_offer(state, actor_id):
+        return "reward"
+    if state.phase == SessionPhase.IN_COMBAT and state.combat is not None:
+        current = (
+            state.combat.turn_order[state.combat.current_turn_index]
+            if state.combat.turn_order
+            and state.combat.current_turn_index < len(state.combat.turn_order)
+            else None
+        )
+        return "combat" if current == actor_id else "none"
+    if state.phase == SessionPhase.EXPLORING and state.exploration is not None:
+        if state.exploration.current_options:
+            return "location"
+    if state.phase == SessionPhase.IN_EVENT and state.event is not None:
+        return "event"
+    return "none"
+
+
+def _run_global_features(
+    state: SessionState,
+    actor_id: str,
+    spec: RunObservationSpec,
+) -> list[float]:
+    exploration = state.exploration
+    depth = exploration.depth if exploration is not None else 0
+    decision_type = _run_decision_type(state, actor_id)
+    stats = state.run_stats
+    return [
+        1.0 if _actor_alive_in_session(state, actor_id) else 0.0,
+        normalized(depth, max(1.0, float(state.max_depth or DEPTH_NORMALIZER))),
+        normalized(state.max_depth, DEPTH_NORMALIZER),
+        normalized(stats.rooms_explored, RUN_STAT_NORMALIZER),
+        normalized(stats.combats_completed, RUN_STAT_NORMALIZER),
+        normalized(stats.events_completed, RUN_STAT_NORMALIZER),
+        normalized(stats.enemies_defeated, RUN_STAT_NORMALIZER),
+        normalized(stats.total_damage_dealt, DAMAGE_NORMALIZER * 10.0),
+        normalized(stats.total_damage_taken, DAMAGE_NORMALIZER * 10.0),
+        normalized(stats.total_healing, DAMAGE_NORMALIZER * 10.0),
+        normalized(stats.total_xp_gained, RUN_STAT_NORMALIZER * 10.0),
+        1.0 if _current_reward_offer(state, actor_id) else 0.0,
+        *one_hot(state.phase.value, SESSION_PHASE_IDS),
+        *one_hot(decision_type, DECISION_TYPE_IDS),
+    ]
+
+
+def _location_option_features(option: object, spec: RunObservationSpec) -> list[float]:
+    room_difficulty = getattr(option, "room_difficulty", None)
+    difficulty = 1.0 if room_difficulty is None else float(room_difficulty.scalar)
+    location_type = getattr(option, "location_type", None)
+    location_type_value = getattr(location_type, "value", None)
+    return [
+        1.0,
+        normalize_difficulty(difficulty),
+        normalized(len(getattr(option, "enemy_ids", ())), ENEMY_COUNT_NORMALIZER),
+        1.0 if location_type == LocationType.COMBAT else 0.0,
+        1.0 if location_type == LocationType.EVENT else 0.0,
+        *one_hot(location_type_value, LOCATION_TYPE_IDS),
+        *multi_hot(getattr(option, "tags", ()), spec.catalog.location_tag_ids),
+        *multi_hot(
+            getattr(option, "status_ids", ()),
+            spec.catalog.combat.location_status_ids,
+        ),
+    ]
+
+
+def _location_features_or_zero(
+    option: object | None,
+    spec: RunObservationSpec,
+) -> list[float]:
+    if option is None:
+        return [0.0] * location_option_block_size(spec)
+    return _location_option_features(option, spec)
+
+
+def _event_choice_features(
+    state: SessionState,
+    choice: object,
+    spec: RunObservationSpec,
+) -> list[float]:
+    event = state.event
+    event_id = event.event_def.event_id if event is not None else None
+    stage_id = (
+        f"{event.event_def.event_id}:{event.current_stage_id}"
+        if event is not None
+        else None
+    )
+    outcomes = getattr(choice, "outcomes", ())
+    outcome_actions = [outcome.action.value for outcome in outcomes]
+    starts_combat = any(outcome.action == OutcomeAction.START_COMBAT for outcome in outcomes)
+    enemy_group_size = sum(len(outcome.enemy_group) for outcome in outcomes)
+    return [
+        1.0,
+        normalized(getattr(choice, "index", 0), CHOICE_INDEX_NORMALIZER),
+        1.0 if starts_combat else 0.0,
+        normalized(enemy_group_size, ENEMY_COUNT_NORMALIZER),
+        *one_hot(event_id, spec.catalog.event_ids),
+        *one_hot(stage_id, spec.catalog.event_stage_ids),
+        *multi_hot(outcome_actions, OUTCOME_ACTION_IDS),
+    ]
+
+
+def _event_choice_features_or_zero(
+    state: SessionState,
+    choice: object | None,
+    spec: RunObservationSpec,
+) -> list[float]:
+    if choice is None:
+        return [0.0] * event_choice_block_size(spec)
+    return _event_choice_features(state, choice, spec)
+
+
+def _current_reward_offer(state: SessionState, actor_id: str) -> tuple[str, ...]:
+    queue = state.pending_rewards.get(actor_id)
+    if queue is None:
+        return ()
+    return tuple(queue.current_offer)
+
+
+def _current_reward_type(state: SessionState, actor_id: str) -> LevelRewardType | None:
+    queue = state.pending_rewards.get(actor_id)
+    if queue is None:
+        return None
+    return queue.current_type
+
+
+def _reward_choice_features(
+    state: SessionState,
+    actor_id: str,
+    reward_key: str,
+    spec: RunObservationSpec,
+) -> list[float]:
+    reward_type = _current_reward_type(state, actor_id)
+    reward_kind, reward_id = parse_reward_key(reward_key)
+    return [
+        1.0,
+        *one_hot(
+            reward_type.value if reward_type is not None else None,
+            REWARD_TYPE_IDS,
+        ),
+        *one_hot(reward_kind, REWARD_KIND_IDS),
+        *one_hot(reward_id if reward_kind == "modifier" else None, spec.catalog.modifier_ids),
+        *one_hot(reward_id if reward_kind == "skill" else None, spec.catalog.combat.skill_ids),
+        *one_hot(reward_id if reward_kind == "passive" else None, spec.catalog.combat.passive_ids),
+    ]
+
+
+def _reward_choice_features_or_zero(
+    state: SessionState,
+    actor_id: str,
+    reward_key: str | None,
+    spec: RunObservationSpec,
+) -> list[float]:
+    if reward_key is None:
+        return [0.0] * reward_choice_block_size(spec)
+    return _reward_choice_features(state, actor_id, reward_key, spec)
+
+
+def _pad_values(values: tuple[object, ...], max_slots: int) -> tuple[object | None, ...]:
+    return values[:max_slots] + ((None,) * max(0, max_slots - len(values)))
 
 
 def _entity_features_or_zero(
@@ -578,5 +994,46 @@ def build_observation(
     if obs.shape != (spec.vector_size,):
         raise ValueError(
             f"Observation size mismatch: {obs.shape} != {(spec.vector_size,)}",
+        )
+    return obs
+
+
+def build_run_observation(
+    state: SessionState,
+    actor_id: str,
+    spec: RunObservationSpec,
+) -> np.ndarray:
+    values: list[float] = []
+    values.extend(_run_global_features(state, actor_id, spec))
+
+    if state.combat is not None and actor_id in state.combat.entities:
+        values.extend(build_observation(state.combat, actor_id, spec.combat))
+    else:
+        values.extend([0.0] * spec.combat.vector_size)
+
+    location_options = (
+        tuple(state.exploration.current_options)
+        if state.exploration is not None
+        else ()
+    )
+    for option in _pad_values(location_options, spec.max_location_choices):
+        values.extend(_location_features_or_zero(option, spec))
+
+    event_choices = (
+        tuple(state.event.current_stage.choices)
+        if state.event is not None
+        else ()
+    )
+    for choice in _pad_values(event_choices, spec.max_event_choices):
+        values.extend(_event_choice_features_or_zero(state, choice, spec))
+
+    reward_offer = _current_reward_offer(state, actor_id)
+    for reward_key in _pad_values(reward_offer, spec.max_reward_choices):
+        values.extend(_reward_choice_features_or_zero(state, actor_id, reward_key, spec))
+
+    obs = np.asarray(values, dtype=np.float32)
+    if obs.shape != (spec.vector_size,):
+        raise ValueError(
+            f"Run observation size mismatch: {obs.shape} != {(spec.vector_size,)}",
         )
     return obs
