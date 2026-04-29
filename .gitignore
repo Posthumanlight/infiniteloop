@@ -7,7 +7,7 @@ __pycache__/
 *.py[codz]
 *$py.class
 *.pyc
-
+/agents/runs/
 # C extensions
 *.so
 

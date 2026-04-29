@@ -386,6 +386,10 @@ class InfiniteloopRunEnv(_EnvBase):
 
             state = self._state()
             if state.phase == SessionPhase.EXPLORING:
+                queue = state.pending_rewards.get(self._actor_id)
+                if queue is not None and queue.pending_count > 0 and not queue.current_offer:
+                    game.continue_exploration(session_id)
+                    continue
                 if (
                     state.exploration is None
                     or state.exploration.phase != ExplorationPhase.CHOOSING

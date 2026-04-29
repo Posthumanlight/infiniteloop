@@ -51,7 +51,5 @@ item_type = "relic"
 rarity = "common"
 unique = true
 effects = [
-    {type = "modify_stat", stat = "fire_dmg_pct", expr = "0.1 + quality*0.003}
+    {type = "modify_stat", stat = "fire_dmg_pct", expr = "0.1 + quality*0.003"}
 ]
-
-[items.]

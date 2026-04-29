@@ -24,7 +24,7 @@ from game.combat.skill_targeting import (
     iter_manual_target_requirements,
 )
 from game.core.data_loader import load_skill
-from game.core.enums import SessionPhase, TargetType
+from game.core.enums import ExplorationPhase, SessionPhase, TargetType
 from game.session.models import SessionState
 
 
@@ -232,7 +232,7 @@ def _current_actor_id(state: SessionState) -> str | None:
 
 def _has_pending_reward(state: SessionState, actor_id: str) -> bool:
     queue = state.pending_rewards.get(actor_id)
-    return queue is not None and bool(queue.current_offer)
+    return queue is not None and queue.pending_count > 0
 
 
 def build_run_action_mask(
@@ -243,7 +243,7 @@ def build_run_action_mask(
     mask = np.zeros(spec.action_count, dtype=bool)
 
     queue = state.pending_rewards.get(actor_id)
-    if queue is not None and queue.current_offer:
+    if queue is not None and queue.pending_count > 0:
         for index, _reward_key in enumerate(
             queue.current_offer[:spec.reward_choice_count],
         ):
@@ -265,6 +265,7 @@ def build_run_action_mask(
     if (
         state.phase == SessionPhase.EXPLORING
         and state.exploration is not None
+        and state.exploration.phase == ExplorationPhase.CHOOSING
         and state.exploration.current_options
         and not _has_pending_reward(state, actor_id)
     ):

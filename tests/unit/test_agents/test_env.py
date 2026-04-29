@@ -154,6 +154,16 @@ def _reward_session() -> SessionState:
     )
 
 
+def _unrolled_reward_session() -> SessionState:
+    return _exploring_session(
+        pending_rewards={
+            "1": PendingRewardQueue(
+                entries=(PendingReward(reward_type=LevelRewardType.MODIFIER),),
+            ),
+        },
+    )
+
+
 def test_run_observation_shape_and_decision_type_for_exploration():
     spec = _run_spec()
     obs = build_run_observation(_exploring_session(), "1", spec)
@@ -176,6 +186,29 @@ def test_run_action_mask_prioritizes_rewards_over_location_choices():
     assert mask.sum() == 1
     assert mask[spec.reward_offset]
     assert not mask[spec.location_offset]
+
+
+def test_unrolled_pending_reward_blocks_location_choices():
+    spec = build_run_action_space_spec(_run_spec())
+    mask = build_run_action_mask(_unrolled_reward_session(), "1", spec)
+
+    assert not mask.any()
+
+
+def test_resolved_exploration_options_do_not_enable_location_choices():
+    spec = build_run_action_space_spec(_run_spec())
+    state = _exploring_session(
+        exploration=ExplorationState(
+            session_id="sid",
+            depth=1,
+            phase=ExplorationPhase.RESOLVING,
+            player_ids=("1",),
+            current_options=(_location_option(0),),
+        ),
+    )
+    mask = build_run_action_mask(state, "1", spec)
+
+    assert not mask.any()
 
 
 def test_run_action_mask_and_decode_for_location_and_event():
